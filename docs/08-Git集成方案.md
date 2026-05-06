@@ -1155,7 +1155,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 
 1. **最小权限原则**：Git PAT 仅需 `repo` 和 `pull_requests` 权限
 2. **凭证加密**：数据库存储加密，日志脱敏
-3. **操作审计**：记录所有 Git 操作日志
+3. **操作审计**：所有 Git 操作自动写入 `audit_logs` 表（action=`git.*`），可追溯
 4. **分支保护**：AI 创建的分支带有 `flowcode/` 前缀，不触碰 `main`/`master`
 5. **可回滚**：PR 关闭不合并时，Issue 回到 `reopened` 状态
 6. **SSH 密钥安全**：
