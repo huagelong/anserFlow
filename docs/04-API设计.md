@@ -320,9 +320,16 @@
   "name": "用户登录接口测试",
   "description": "测试 POST /api/v1/auth/login 接口的各种场景：\n1. 正确的用户名和密码返回 JWT token\n2. 错误的密码返回 401\n3. 不存在的用户返回 404\n4. 缺少必填字段返回 400\n5. 并发登录限制",
   "language": "go",
-  "framework": "testing"
+  "framework": "testing",
+  "testScript": {
+    "install": "cd {workspace} && go mod download",
+    "command": "cd {workspace} && go test ./pkg/auth/... -v -race -cover 2>&1",
+    "timeout": 120
+  }
 }
 ```
+
+> **testScript 优先级**：若提供 `testScript`，执行时使用其 `command` 和 `install` 替代 `framework` 的默认映射。未提供时回退到框架映射表（见 07-AI编程工具集成.md § 语言/框架映射表）。
 
 **审核通过后的自动流程**：
 
@@ -377,6 +384,42 @@ TestCase approved
 | Issue 详情页 → 测试 Tab | 该 Issue 下所有 TestCase 列表，每行显示名称 + 状态徽标 (`✅ passed` / `❌ failed` / `⏳ pending`) + 耗时 |
 | TestCase 详情弹窗 | 结果概览卡片 (通过/失败/跳过数 + 覆盖率) + 逐条执行结果 + 原始输出折叠区 |
 | 实时执行 | WebSocket 推送 stdout/stderr，前端实时滚动显示 |
+
+**前端自定义测试脚本编辑器**：
+
+创建/编辑 TestCase 时，提供一个**可折叠的高级脚本编辑器**（默认隐藏，用户点击「自定义脚本」展开）：
+
+```
+┌─ 🔧 自定义测试脚本 (可选) ──────────────────────────┐
+│                                                      │
+│  📋 快速模板:  [Go testing] [Vitest] [Maven]        │
+│               [Playwright] [Cargo] [自定义]          │
+│                                                      │
+│  install:                                            │
+│  ┌──────────────────────────────────────────────────┐│
+│  │ cd {workspace} && go mod download                ││
+│  └──────────────────────────────────────────────────┘│
+│                                                      │
+│  command:                                            │
+│  ┌──────────────────────────────────────────────────┐│
+│  │ cd {workspace} && go test ./... -v -cover 2>&1   ││
+│  └──────────────────────────────────────────────────┘│
+│                                                      │
+│  超时:  [300] 秒                                     │
+│                                                      │
+│  💡 可用变量: {testFile} {workspace} {projectDir}   │
+│  📝 留空则使用 framework 默认命令                     │
+└──────────────────────────────────────────────────────┘
+```
+
+**交互规则**：
+
+| 操作 | 行为 |
+|------|------|
+| 点击「快速模板」 | 自动填充对应框架的默认 install + command |
+| 修改 framework 下拉 | 若 testScript 为空，自动更新模板提示；若已填写则不动 |
+| 清空 install + command | 保存时 testScript 置 null，执行时回退 framework 映射 |
+| 仅填 command，空 install | 仅跳过依赖安装步骤 |
 
 ### 4.3.12 CLI 辅助接口 `/api/v1/cli`
 
