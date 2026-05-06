@@ -617,7 +617,7 @@ API Key 创建时必须声明权限范围，最小权限原则：
 | `requirement:write` | 创建/更新需求 |
 | `skill:install` | 安装 Skill |
 | `project:admin` | 项目管理（配置/成员） |
-| `org:admin` | 组织管理（成员/计费） |
+| `org:admin` | 组织管理（成员） |
 
 ```go
 // internal/middleware/api_key.go
