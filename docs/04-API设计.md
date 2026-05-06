@@ -406,16 +406,18 @@ Content-Type: application/json
 | `## 响应` | ✅ | 成功/失败响应说明 |
 | `## 备注` | | 注意事项 |
 
-### 4.3.10b 外部 AI 工具集成流程
+### 4.3.10c 外部 AI 工具集成流程
 
 ```
 ┌─ 项目仓库 ─────────────────────────────────────────────┐
 │                                                          │
-│  .flowcode/skills/                                       │
-│  ├── issue-create.md        ← flowcode sync 写入        │
-│  ├── issue-search.md                                    │
-│  ├── test-result.md                                     │
-│  └── ...                                                │
+│  .flowcode/                                              │
+│  ├── config.yaml              ← API 地址 + 密钥          │
+│  └── skills/                                             │
+│      ├── issue-create.md      ← skill 指令文件           │
+│      ├── issue-search.md                                │
+│      ├── test-result.md                                 │
+│      └── ...                                            │
 │                                                          │
 └──────────────────────┬───────────────────────────────────┘
                        │
@@ -423,33 +425,43 @@ Content-Type: application/json
         ▼              ▼              ▼
    opencode         codex       claude-code
         │              │              │
-        │  读取 .flowcode/skills/*.md，理解调用方式
-        │
-        ▼
-  按 Skill 指令调用 flowcode API
-  (POST /api/v1/issues, GET /api/v1/issues/:id, ...)
+        │  ① 读取 .flowcode/config.yaml
+        │  ② 读取 .flowcode/skills/*.md，替换 {API_URL} 等变量
+        │  ③ 按 Skill 指令调用 flowcode API
         │
         ▼
   flowcode 执行操作 → 返回结果 → AI 工具拿到结果继续编码
 ```
 
 **关键点**：
+- **域名问题**：Skill 文件用 `{API_URL}` 占位，AI 工具从 `config.yaml` 读取实际地址
 - Skill 文件是纯 Markdown，**零依赖**，任何 AI 工具都能读
-- 变量占位 `{API_KEY}`, `{项目 ID}` 由 AI 工具从上下文自动填充
-- flowcode 通过 `POST /api/v1/projects/:pid/skills/sync` 将 org 的 published Skills 写入项目 Git 仓库
+- 变量 `{API_KEY}`, `{PROJECT_ID}`, `{ORG_ID}` 同理从 `config.yaml` 获取
+- flowcode 通过 `POST /api/v1/projects/:pid/skills/sync` 将 `config.yaml` + published Skills 写入项目 Git 仓库
 
-### 4.3.10c sync 实现
+### 4.3.10d sync 实现
 
 ```go
 // POST /api/v1/projects/:pid/skills/sync 时执行
 func (s *SkillService) SyncToRepo(ctx context.Context, projectID string) error {
-    skills := s.getPublishedSkills(projectID)
-    dir := ".flowcode/skills"
+    project := s.getProject(projectID)
+
+    // 1. 写入 config.yaml
+    configYaml := fmt.Sprintf(`apiUrl: "%s"
+apiKey: "%s"
+projectId: "%s"
+orgId: "%s"
+`, s.cfg.BaseURL, project.APIKey, project.ID, project.OrgID)
+    s.git.WriteFile(projectID, ".flowcode/config.yaml", []byte(configYaml), "sync config")
+
+    // 2. 写入所有 published Skills
+    skills := s.getPublishedSkills(project.OrgID)
     for _, sk := range skills {
-        filename := fmt.Sprintf("%s/%s.md", dir, sk.Slug)
+        filename := fmt.Sprintf(".flowcode/skills/%s.md", sk.Slug)
         s.git.WriteFile(projectID, filename, []byte(sk.Content), "sync skills")
     }
-    return s.git.CommitAndPush(projectID, "chore: sync flowcode skills")
+
+    return s.git.CommitAndPush(projectID, "chore: sync flowcode config and skills")
 }
 ```
 
