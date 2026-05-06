@@ -2,7 +2,7 @@
 
 ## 8.1 概述
 
-flowcode 不内置 Git 托管，而是通过 Provider 模式对接外部 Git 平台（GitHub / Gitea / GitLab）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在本地沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request。
+flowcode 不内置 Git 托管，而是通过 Provider 模式对接外部 Git 平台（GitHub / Gitea / GitLab）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request。
 
 ## 8.2 整体流程
 
@@ -213,107 +213,65 @@ type ValidateError struct {
 
 ## 8.2c 代码克隆 (Git Clone)
 
-AI 工具执行编码任务前，系统需要将目标仓库克隆到本地沙盒目录。克隆支持 HTTP 和 SSH 两种协议。
+AI 工具执行编码任务前，系统需要在 Docker 沙盒容器内克隆目标仓库。克隆支持 HTTP 和 SSH 两种协议。
 
-### Clone 服务实现
+### Clone in Sandbox 实现
+
+克隆操作不再在宿主机本地文件系统执行，而是在 Docker 容器内通过 `SandboxManager.Exec()` 完成：
 
 ```go
-// internal/service/git/clone_service.go
+// internal/service/sandbox/prepare.go
 
-type CloneService struct {
-    credentialRepo *CredentialRepository
-    sandboxRoot    string // /tmp/flowcode-sandbox
-}
+// PrepareWorkspace 在容器内准备代码工作区
+func (d *DockerSandbox) PrepareWorkspace(ctx context.Context, sb *Sandbox, project *model.Project, cred *model.GitCredential) error {
+    // 1. 根据协议构建 clone URL 和环境变量
+    var cloneCmd []string
 
-func (s *CloneService) Clone(ctx context.Context, project *model.Project, sessionID string) (string, error) {
-    // 1. 获取项目凭证
-    cred, err := s.credentialRepo.GetByProject(ctx, project.ID)
-    if err != nil {
-        return "", fmt.Errorf("no credential configured for project %s: %w", project.ID, err)
-    }
-
-    // 2. 构建沙盒工作目录
-    workDir := filepath.Join(s.sandboxRoot, sessionID, "repo")
-    if err := os.MkdirAll(workDir, 0755); err != nil {
-        return "", fmt.Errorf("failed to create workdir: %w", err)
-    }
-
-    // 3. 根据协议选择克隆方式
-    var cloneURL string
     switch cred.AuthMethod {
     case "http":
-        cloneURL = s.buildHTTPCloneURL(project.GitRepoUrl, cred.AccessToken)
+        // HTTP: token 嵌入 URL
+        cloneURL := buildHTTPCloneURL(project.GitRepoUrl, cred.AccessToken)
+        cloneCmd = []string{"git", "clone", "--depth", "1", cloneURL, "/workspace/repo"}
+
     case "ssh":
-        cloneURL = project.GitRepoUrl
+        // SSH: 将解密后的私钥写入容器内临时文件
+        sshKeyPath := "/tmp/flowcode_ssh_key"
+        privateKey := decryptAES256GCM(cred.SSHPrivateKey, os.Getenv("FLOWCODE_ENCRYPTION_KEY"))
+
+        // 先写入私钥到容器
+        d.Exec(ctx, sb, []string{"sh", "-c", fmt.Sprintf(
+            "echo '%s' > %s && chmod 600 %s",
+            escapeShell(privateKey), sshKeyPath, sshKeyPath,
+        )}, nil)
+
+        cloneCmd = []string{"sh", "-c", fmt.Sprintf(
+            "GIT_SSH_COMMAND='ssh -i %s -o StrictHostKeyChecking=accept-new' git clone --depth 1 %s /workspace/repo",
+            sshKeyPath, project.GitRepoUrl,
+        )}
     }
 
-    // 4. 执行 git clone
-    if err := s.runClone(ctx, cloneURL, workDir, cred); err != nil {
-        return "", fmt.Errorf("clone failed: %w", err)
+    // 2. 容器内执行 clone
+    result, err := d.Exec(ctx, sb, cloneCmd, nil)
+    if err != nil {
+        return fmt.Errorf("clone in sandbox: %w, output: %s", err, result.Output)
     }
 
-    return workDir, nil
+    // 3. 注入 Skills prompt
+    skillsContent := d.loadSkills(ctx, project.ID)
+    writeSkillsCmd := []string{"sh", "-c", fmt.Sprintf(
+        "cat > /workspace/.flowcode_prompt.md << 'EOSKILL'\n%s\nEOSKILL",
+        skillsContent,
+    )}
+    d.Exec(ctx, sb, writeSkillsCmd, nil)
+
+    return nil
 }
 
-// buildHTTPCloneURL 将 token 嵌入 URL 用于免交互认证
-func (s *CloneService) buildHTTPCloneURL(repoURL string, token string) string {
-    // https://github.com/user/repo.git → https://token@github.com/user/repo.git
+// buildHTTPCloneURL 将 token 嵌入 URL
+func buildHTTPCloneURL(repoURL string, token string) string {
     u, _ := url.Parse(repoURL)
     u.User = url.User(token)
     return u.String()
-}
-
-// runClone 执行 git clone，支持超时和重试
-func (s *CloneService) runClone(ctx context.Context, cloneURL string, workDir string, cred *model.GitCredential) error {
-    var cmd *exec.Cmd
-
-    if cred.AuthMethod == "ssh" {
-        // SSH 模式：解密私钥，写入临时文件，通过 GIT_SSH_COMMAND 指定
-        keyFile, cleanup, err := s.prepareSSHKey(ctx, cred)
-        if err != nil {
-            return err
-        }
-        defer cleanup()
-
-        sshCmd := fmt.Sprintf(
-            "ssh -i %s -o StrictHostKeyChecking=accept-new -o PasswordAuthentication=no",
-            keyFile,
-        )
-        cmd = exec.CommandContext(ctx, "git", "clone", "--depth", "1", cloneURL, workDir)
-        cmd.Env = append(os.Environ(),
-            "GIT_TERMINAL_PROMPT=0",
-            "GIT_SSH_COMMAND="+sshCmd,
-        )
-    } else {
-        // HTTP 模式：token 已嵌入 URL
-        cmd = exec.CommandContext(ctx, "git", "clone", "--depth", "1", cloneURL, workDir)
-        cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-    }
-
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    return cmd.Run()
-}
-
-// prepareSSHKey 解密 SSH 私钥并写入临时文件
-func (s *CloneService) prepareSSHKey(ctx context.Context, cred *model.GitCredential) (keyFile string, cleanup func(), err error) {
-    // 解密私钥
-    decrypted, err := crypto.DecryptAES256GCM(cred.SSHPrivateKey, os.Getenv("FLOWCODE_ENCRYPTION_KEY"))
-    if err != nil {
-        return "", nil, fmt.Errorf("failed to decrypt SSH key: %w", err)
-    }
-
-    // 写入临时文件
-    tmpFile, err := os.CreateTemp("", "flowcode-ssh-key-*")
-    if err != nil {
-        return "", nil, err
-    }
-    tmpFile.WriteString(decrypted)
-    tmpFile.Chmod(0600)
-    tmpFile.Close()
-
-    cleanup = func() { os.Remove(tmpFile.Name()) }
-    return tmpFile.Name(), cleanup, nil
 }
 ```
 
@@ -321,11 +279,38 @@ func (s *CloneService) prepareSSHKey(ctx context.Context, cred *model.GitCredent
 
 | 参数 | 说明 |
 |------|------|
-| `--depth 1` | 浅克隆，仅拉取最新提交，减少传输量 |
-| `--single-branch` | 仅克隆默认分支 |
-| 超时 | 默认 120 秒，大仓库可调整 |
+| `--depth 1` | 浅克隆，仅拉取最新提交 |
+| 超时 | 120 秒 |
 | 重试 | 失败自动重试 1 次 |
-| 缓存 | 同一仓库 + 同一分支的克隆结果缓存在 `/tmp/flowcode-sandbox/.cache/` |
+| SSH 密钥 | 容器内临时文件，执行完 `rm` 清理 |
+| 工作目录 | 容器内 `/workspace/repo`，宿主机通过 Docker Volume 访问 |
+
+### 容器内 Commit & Push
+
+```go
+// internal/service/sandbox/commit.go
+
+func (d *DockerSandbox) CommitAndPush(ctx context.Context, sb *Sandbox, issue *model.Issue) (string, error) {
+    cmds := [][]string{
+        {"git", "-C", "/workspace/repo", "config", "user.email", "flowcode@flowcode.dev"},
+        {"git", "-C", "/workspace/repo", "config", "user.name", "flowcode"},
+        {"git", "-C", "/workspace/repo", "add", "-A"},
+        {"git", "-C", "/workspace/repo", "commit", "-m", issue.Title},
+        {"git", "-C", "/workspace/repo", "push", "origin", issue.GitBranch},
+    }
+    for _, cmd := range cmds {
+        if _, err := d.Exec(ctx, sb, cmd, nil); err != nil {
+            return "", fmt.Errorf("git cmd '%s': %w", strings.Join(cmd, " "), err)
+        }
+    }
+
+    // 获取最新 commit SHA
+    result, _ := d.Exec(ctx, sb, []string{"git", "-C", "/workspace/repo", "rev-parse", "HEAD"}, nil)
+    return strings.TrimSpace(result.Output), nil
+}
+```
+
+> **安全性**：容器内的 git push 使用的是容器中注入的凭证（HTTP token 或 SSH key），不会泄露到宿主机。容器销毁后凭证随之清除。
 
 ## 8.2d SSH 密钥管理
 
