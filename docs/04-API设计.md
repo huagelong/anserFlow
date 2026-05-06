@@ -105,13 +105,13 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/projects/:pid/requirements` | 需求列表 |
-| POST | `/api/projects/:pid/requirements` | 创建需求 |
-| GET | `/api/requirements/:id` | 需求详情 |
-| PUT | `/api/requirements/:id` | 更新需求 |
-| DELETE | `/api/requirements/:id` | 删除需求 |
-| POST | `/api/requirements/:id/convert-to-issues` | **拆解为 Issue(s)** |
-| PUT | `/api/requirements/:id/status` | 变更需求状态 |
+| GET | `/api/v1/projects/:pid/requirements` | 需求列表 |
+| POST | `/api/v1/projects/:pid/requirements` | 创建需求 |
+| GET | `/api/v1/requirements/:id` | 需求详情 |
+| PUT | `/api/v1/requirements/:id` | 更新需求 |
+| DELETE | `/api/v1/requirements/:id` | 删除需求 |
+| POST | `/api/v1/requirements/:id/convert-to-issues` | **拆解为 Issue(s)** |
+| PUT | `/api/v1/requirements/:id/status` | 变更需求状态 |
 
 **拆解为 Issue 请求体**：
 
@@ -119,7 +119,7 @@
 {
   "issues": [
     {
-      "title": "实现用户登录接口 POST /api/auth/login",
+      "title": "实现用户登录接口 POST /api/v1/auth/login",
       "description": "使用 JWT 方案，支持邮箱+密码登录...",
       "priority": "p0",
       "category": "feature",
@@ -140,19 +140,19 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/projects/:pid/issues` | Issue 列表（支持筛选/排序） |
-| POST | `/api/projects/:pid/issues` | 创建 Issue |
-| GET | `/api/issues/:id` | Issue 详情（含执行日志摘要） |
-| PUT | `/api/issues/:id` | 更新 Issue |
-| DELETE | `/api/issues/:id` | 删除 Issue |
-| POST | `/api/issues/:id/approve` | **管理员审核通过** |
-| POST | `/api/issues/:id/reject` | **管理员驳回（附原因）** |
-| POST | `/api/issues/:id/execute` | **触发 AI 执行** |
-| POST | `/api/issues/:id/continue` | **继续 vibe coding** |
-| POST | `/api/issues/:id/cancel` | 取消执行 |
-| GET | `/api/issues/:id/logs` | 获取执行日志列表 |
-| PUT | `/api/issues/:id/priority` | 调整优先级 |
-| PUT | `/api/issues/:id/category` | 调整分类 |
+| GET | `/api/v1/projects/:pid/issues` | Issue 列表（支持筛选/排序） |
+| POST | `/api/v1/projects/:pid/issues` | 创建 Issue |
+| GET | `/api/v1/issues/:id` | Issue 详情（含执行日志摘要） |
+| PUT | `/api/v1/issues/:id` | 更新 Issue |
+| DELETE | `/api/v1/issues/:id` | 删除 Issue |
+| POST | `/api/v1/issues/:id/approve` | **管理员审核通过** |
+| POST | `/api/v1/issues/:id/reject` | **管理员驳回（附原因）** |
+| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行** |
+| POST | `/api/v1/issues/:id/continue` | **继续 vibe coding** |
+| POST | `/api/v1/issues/:id/cancel` | 取消执行 |
+| GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
+| PUT | `/api/v1/issues/:id/priority` | 调整优先级 |
+| PUT | `/api/v1/issues/:id/category` | 调整分类 |
 
 **Issue 列表查询参数**：
 
@@ -172,8 +172,8 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/executions/:logId` | 获取执行日志详情 |
-| GET | `/api/executions/:logId/stdout` | 获取完整标准输出 |
+| GET | `/api/v1/executions/:logId` | 获取执行日志详情 |
+| GET | `/api/v1/executions/:logId/stdout` | 获取完整标准输出 |
 | WS | `/ws/executions/:issueId` | **WebSocket 实时日志流** |
 
 ### 4.3.6 Git 管理 `/api/v1/git`
@@ -181,11 +181,11 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/v1/git/validate-url` | **校验 Git 地址可达性**（创建项目前置） |
-| POST | `/api/projects/:pid/git/connect` | 配置 Git 凭证（PAT 或 SSH 密钥） |
-| GET | `/api/projects/:pid/git/status` | Git 连接状态 |
-| GET | `/api/projects/:pid/git/branches` | 仓库分支列表 |
-| POST | `/api/projects/:pid/git/pr` | 手动创建 PR |
-| GET | `/api/issues/:id/pr-status` | 查看 Issue 关联 PR 状态 |
+| POST | `/api/v1/projects/:pid/git/connect` | 配置 Git 凭证（PAT 或 SSH 密钥） |
+| GET | `/api/v1/projects/:pid/git/status` | Git 连接状态 |
+| GET | `/api/v1/projects/:pid/git/branches` | 仓库分支列表 |
+| POST | `/api/v1/projects/:pid/git/pr` | 手动创建 PR |
+| GET | `/api/v1/issues/:id/pr-status` | 查看 Issue 关联 PR 状态 |
 
 **校验 Git 地址** `POST /api/v1/git/validate-url`：
 
@@ -235,7 +235,7 @@
 }
 ```
 
-**配置 Git 凭证** `POST /api/projects/:pid/git/connect`：
+**配置 Git 凭证** `POST /api/v1/projects/:pid/git/connect`：
 
 ```json
 // HTTP 方式
@@ -261,20 +261,20 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/monitor/:projectKey/events` | **接收监控事件**（公开接口） |
-| GET | `/api/projects/:pid/monitor/events` | 查看监控事件列表 |
-| GET | `/api/projects/:pid/monitor/stats` | 监控统计（错误趋势等） |
-| POST | `/api/monitor/events/:id/convert` | 事件转 Issue |
+| POST | `/api/v1/monitor/:projectKey/events` | **接收监控事件**（公开接口） |
+| GET | `/api/v1/projects/:pid/monitor/events` | 查看监控事件列表 |
+| GET | `/api/v1/projects/:pid/monitor/stats` | 监控统计（错误趋势等） |
+| POST | `/api/v1/monitor/events/:id/convert` | 事件转 Issue |
 
 ### 4.3.8 AI 工具配置 `/api/v1/ai-tools`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/projects/:pid/ai-tools` | AI 工具配置列表 |
-| POST | `/api/projects/:pid/ai-tools` | 添加 AI 工具配置 |
-| PUT | `/api/ai-tools/:id` | 更新配置 |
-| DELETE | `/api/ai-tools/:id` | 删除配置 |
-| POST | `/api/ai-tools/:id/test` | **测试连接** |
+| GET | `/api/v1/projects/:pid/ai-tools` | AI 工具配置列表 |
+| POST | `/api/v1/projects/:pid/ai-tools` | 添加 AI 工具配置 |
+| PUT | `/api/v1/ai-tools/:id` | 更新配置 |
+| DELETE | `/api/v1/ai-tools/:id` | 删除配置 |
+| POST | `/api/v1/ai-tools/:id/test` | **测试连接** |
 
 ### 4.3.9 标签管理 `/api/v1/labels`
 
@@ -286,20 +286,6 @@
 | DELETE | `/api/v1/labels/:id` | 删除标签 |
 
 ### 4.3.10 Skills 管理 `/api/v1/skills`
-
-**组织内部 Skills CRUD**（需 org 权限）：
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/skills` | Skills 列表 (支持搜索/分类筛选) |
-| GET | `/api/v1/skills/:slug` | Skill 详情 (含 Markdown 内容) |
-| POST | `/api/v1/skills` | 创建自定义 Skill |
-| PUT | `/api/v1/skills/:slug` | 更新 Skill |
-| DELETE | `/api/v1/skills/:slug` | 删除 Skill |
-| POST | `/api/v1/skills/:slug/publish` | 发布 (status=published) |
-| POST | `/api/v1/skills/:slug/deprecate` | 标记为废弃 |
-| POST | `/api/v1/projects/:pid/skills/sync` | 将 org 的 published Skills 写入项目 Git 仓库 `.flowcode/skills/` |
-| GET | `/api/v1/orgs/:slug/skills` | 组织已安装的 Skills |
 
 **组织内部 Skills CRUD**（需 org 权限）：
 
@@ -375,14 +361,13 @@ AI 工具使用方式：
 
 ## API 调用
 
-POST {API_URL}/api/v1/issues
+POST {API_URL}/api/v1/projects/{PROJECT_ID}/issues
 Authorization: Bearer {API_KEY}
 Content-Type: application/json
 
 {
   "title": "{用户描述的需求标题}",
   "description": "{用户描述的需求详情}",
-  "projectId": "{PROJECT_ID}",
   "priority": "P2"
 }
 
@@ -738,7 +723,7 @@ swag init -g cmd/server/main.go -o docs/swagger --parseDependency
 // @Failure      400   {object}  Response
 // @Failure      403   {object}  Response
 // @Security     BearerAuth
-// @Router       /api/projects/{pid}/issues [post]
+// @Router       /api/v1/projects/{pid}/issues [post]
 func (h *IssueHandler) Create(c *gin.Context) { ... }
 ```
 
