@@ -541,20 +541,28 @@ orgId: "%s"
 
 ### 4.3.13 审计日志 `/api/v1/audit-logs`
 
+**操作审计**（业务敏感操作）：
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/v1/projects/:pid/audit-logs` | 项目操作审计日志 |
 | GET | `/api/v1/orgs/:slug/audit-logs` | 组织级操作审计日志 |
 | GET | `/api/v1/users/me/audit-logs` | 当前用户个人操作历史 |
+| GET | `/api/v1/issues/:id/audit-logs` | 某个 Issue 的全部操作记录 |
+| GET | `/api/v1/test-cases/:id/audit-logs` | 某个测试用例的全部操作记录 |
 
 **查询参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| action | string | 操作类型: issue.create / issue.execute / test.run ... |
+| action | string | 操作类型: issue.create / issue.execute / test_case.run ... |
 | source | string | 来源: cli / web / api / webhook |
-| since | string | 起始时间 (如 7d / 30d) |
+| targetType | string | 目标类型: issue / test_case / project / skill |
 | userId | UUID | 按操作人过滤 (组织级可用) |
+| since | string | 起始时间 (如 7d / 30d / 2026-05-01) |
+| until | string | 结束时间 |
+| cursor | string | 分页游标 |
+| limit | int | 每页数量 (默认 50) |
 
 **响应示例**：
 
@@ -564,14 +572,103 @@ orgId: "%s"
   "data": [
     {
       "id": "audit_001",
-      "action": "issue.create",
+      "action": "issue.execute",
       "source": "cli",
-      "detail": "创建 Issue: 用户登录页 (iss_abc123)",
+      "targetType": "issue",
+      "targetId": "iss_abc123",
+      "detail": "触发 AI 执行: 用户登录页",
+      "changes": {"status": {"old": "approved", "new": "queued"}},
       "userId": "user_001",
       "userName": "张三",
       "deviceId": "dev_macbook_01",
       "ip": "192.168.1.100",
       "createdAt": "2026-05-06T10:20:00Z"
+    }
+  ],
+  "cursor": "eyJjcmVhdGVkQXQiOiAiMjAyNi0wNS0wNlQ...",
+  "hasMore": true
+}
+```
+
+### 4.3.13b 登录日志 `/api/v1/login-logs`
+
+**登录审计**（所有登录尝试，含失败记录）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/users/me/login-logs` | 当前用户登录历史 |
+| GET | `/api/v1/orgs/:slug/login-logs` | 组织成员登录记录（管理员） |
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| status | string | success / failed |
+| source | string | cli / web |
+| userId | UUID | 按用户过滤 (组织级可用) |
+| since | string | 起始时间 |
+| cursor | string | 分页游标 |
+| limit | int | 每页数量 (默认 20) |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "login_001",
+      "userId": "user_001",
+      "status": "success",
+      "ip": "192.168.1.100",
+      "userAgent": "Mozilla/5.0 ...",
+      "deviceId": "dev_macbook_01",
+      "deviceName": "MacBook Pro M3",
+      "source": "web",
+      "createdAt": "2026-05-06T09:00:00Z"
+    },
+    {
+      "id": "login_002",
+      "userId": "user_001",
+      "status": "failed",
+      "failReason": "invalid_password",
+      "ip": "192.168.1.100",
+      "userAgent": "Mozilla/5.0 ...",
+      "source": "web",
+      "createdAt": "2026-05-06T09:01:00Z"
+    }
+  ]
+}
+```
+
+**安全告警查询**（组织管理员）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/orgs/:slug/login-logs/anomalies` | 登录异常检测 |
+
+返回近 24 小时内同一 IP 失败 ≥ 5 次 / 异地登录 / 新设备登录等异常事件：
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "type": "brute_force",
+      "severity": "high",
+      "ip": "203.0.113.42",
+      "failedCount": 12,
+      "userIds": ["user_001", "user_003"],
+      "firstSeen": "2026-05-06T08:00:00Z",
+      "lastSeen": "2026-05-06T08:15:00Z"
+    },
+    {
+      "type": "new_device",
+      "severity": "low",
+      "userId": "user_005",
+      "deviceName": "Unknown Windows PC",
+      "ip": "198.51.100.10",
+      "createdAt": "2026-05-06T07:30:00Z"
     }
   ]
 }
