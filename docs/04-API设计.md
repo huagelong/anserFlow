@@ -287,15 +287,141 @@
 
 ### 4.3.10 Skills 管理 `/api/v1/skills`
 
+**组织内部 Skills CRUD**（需 org 权限）：
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/v1/skills` | Skills 列表 (支持搜索/分类筛选) |
-| GET | `/api/v1/skills/:id` | Skill 详情 (含 markdown 内容) |
+| GET | `/api/v1/skills/:slug` | Skill 详情 (含 Markdown 内容) |
 | POST | `/api/v1/skills` | 创建自定义 Skill |
-| PUT | `/api/v1/skills/:id` | 更新 Skill |
-| DELETE | `/api/v1/skills/:id` | 删除 Skill |
-| POST | `/api/v1/skills/:id/install` | 安装到组织 (从市场) |
+| PUT | `/api/v1/skills/:slug` | 更新 Skill |
+| DELETE | `/api/v1/skills/:slug` | 删除 Skill |
+| POST | `/api/v1/skills/:slug/publish` | 发布 (status=published) |
+| POST | `/api/v1/skills/:slug/deprecate` | 标记为废弃 |
+| POST | `/api/v1/projects/:pid/skills/sync` | 将 org 的 published Skills 写入项目 Git 仓库 `.flowcode/skills/` |
 | GET | `/api/v1/orgs/:slug/skills` | 组织已安装的 Skills |
+
+**组织内部 Skills CRUD**（需 org 权限）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/skills` | Skills 列表 (支持搜索/分类筛选) |
+| GET | `/api/v1/skills/:slug` | Skill 详情 (含 Markdown 内容) |
+| POST | `/api/v1/skills` | 创建自定义 Skill |
+| PUT | `/api/v1/skills/:slug` | 更新 Skill |
+| DELETE | `/api/v1/skills/:slug` | 删除 Skill |
+| POST | `/api/v1/skills/:slug/publish` | 发布 (status=published) |
+| POST | `/api/v1/skills/:slug/deprecate` | 标记为废弃 |
+| POST | `/api/v1/projects/:pid/skills/sync` | 将 org 的 published Skills 写入项目 Git 仓库 `.flowcode/skills/` |
+| GET | `/api/v1/orgs/:slug/skills` | 组织已安装的 Skills |
+
+### 4.3.10a Skill 文件格式
+
+Skill 存于 DB 用于管理，**导出到项目目录** 供外部 AI 工具直接读取。文件格式：
+
+```
+.flowcode/skills/
+├── issue-create.md          ← 创建需求
+├── issue-search.md          ← 搜索需求
+├── issue-status.md          ← 查看状态
+├── requirement-update.md    ← 更新需求
+├── test-result.md           ← 查询测试结果
+├── workflow-next.md         ← 推进工作流
+└── git-pr-create.md         ← 创建 PR
+```
+
+**单个 Skill 文件示例** (`issue-create.md`)：
+
+```markdown
+# Skill: 创建需求 (Issue)
+
+## 用途
+当需要创建新的需求/Issue 时使用此 Skill。
+
+## 何时触发
+- 用户说"创建一个需求"、"新建 Issue"
+- 用户描述了新功能但未关联已有 Issue
+- 从需求文档中提取出新的开发任务
+
+## API 调用
+
+POST https://flowcode.example.com/api/v1/issues
+Authorization: Bearer {API_KEY}
+Content-Type: application/json
+
+{
+  "title": "{用户描述的需求标题}",
+  "description": "{用户描述的需求详情}",
+  "projectId": "{当前项目 ID}",
+  "priority": "P2"
+}
+
+## 响应
+成功返回 201，响应体包含 issue ID，后续操作使用此 ID。
+
+## 备注
+- title 必填，不超过 200 字符
+- description 支持 Markdown
+- priority 可选 P0/P1/P2/P3，默认 P2
+```
+
+**Skill 内容模板**（创建时自动填充骨架）：
+
+| 章节 | 必填 | 说明 |
+|------|------|------|
+| `# Skill: {name}` | ✅ | 标题 |
+| `## 用途` | ✅ | 一句话说明 |
+| `## 何时触发` | ✅ | AI 判断是否调用此 Skill 的条件 |
+| `## API 调用` | ✅ | HTTP 方法 + URL + 请求体示例 + 变量占位 |
+| `## 响应` | ✅ | 成功/失败响应说明 |
+| `## 备注` | | 注意事项 |
+
+### 4.3.10b 外部 AI 工具集成流程
+
+```
+┌─ 项目仓库 ─────────────────────────────────────────────┐
+│                                                          │
+│  .flowcode/skills/                                       │
+│  ├── issue-create.md        ← flowcode sync 写入        │
+│  ├── issue-search.md                                    │
+│  ├── test-result.md                                     │
+│  └── ...                                                │
+│                                                          │
+└──────────────────────┬───────────────────────────────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+   opencode         codex       claude-code
+        │              │              │
+        │  读取 .flowcode/skills/*.md，理解调用方式
+        │
+        ▼
+  按 Skill 指令调用 flowcode API
+  (POST /api/v1/issues, GET /api/v1/issues/:id, ...)
+        │
+        ▼
+  flowcode 执行操作 → 返回结果 → AI 工具拿到结果继续编码
+```
+
+**关键点**：
+- Skill 文件是纯 Markdown，**零依赖**，任何 AI 工具都能读
+- 变量占位 `{API_KEY}`, `{项目 ID}` 由 AI 工具从上下文自动填充
+- flowcode 通过 `POST /api/v1/projects/:pid/skills/sync` 将 org 的 published Skills 写入项目 Git 仓库
+
+### 4.3.10c sync 实现
+
+```go
+// POST /api/v1/projects/:pid/skills/sync 时执行
+func (s *SkillService) SyncToRepo(ctx context.Context, projectID string) error {
+    skills := s.getPublishedSkills(projectID)
+    dir := ".flowcode/skills"
+    for _, sk := range skills {
+        filename := fmt.Sprintf("%s/%s.md", dir, sk.Slug)
+        s.git.WriteFile(projectID, filename, []byte(sk.Content), "sync skills")
+    }
+    return s.git.CommitAndPush(projectID, "chore: sync flowcode skills")
+}
+```
 
 ### 4.3.11 测试用例管理 `/api/v1/test-cases`
 
@@ -327,688 +453,4 @@
     "timeout": 120
   }
 }
-```
-
-> **testScript 优先级**：若提供 `testScript`，执行时使用其 `command` 和 `install` 替代 `framework` 的默认映射。未提供时回退到框架映射表（见 07-AI编程工具集成.md § 语言/框架映射表）。
-
-**审核通过后的自动流程**：
-
-```
-TestCase approved
-      │
-      ▼
-┌─ Asynq 异步任务 ─────────────────────────────────────┐
-│  1. 创建 Docker 沙盒容器                                │
-│  2. git clone 项目代码到 /workspace/repo                │
-│  3. 注入 description 作为 prompt 到 AI 工具             │
-│  4. opencode/codex 生成测试代码 → 写入 testCode         │
-│  5. 自动注入测试代码到沙盒项目目录                        │
-│  6. 执行测试命令（go test / vitest / pytest）            │
-│  7. 解析结果 + 覆盖率 → 写入 result JSONB                │
-│  8. status = passed | failed                           │
-│  9. 销毁沙盒容器（失败时保留现场）                        │
-└──────────────────────────────────────────────────────┘
-      │
-      ▼
-  WebSocket 推送结果到前端
-  Hook: test_case:passed | test_case:failed
-```
-
-**手动运行测试 `POST /api/v1/test-cases/:id/run`**：
-
-无需请求体。响应：
-
-```json
-{
-  "id": "tc-abc123",
-  "status": "passed",
-  "result": {
-    "status": "passed",
-    "durationMs": 2340,
-    "total": 5,
-    "passed": 5,
-    "failed": 0,
-    "skipped": 0,
-    "coverage": "82.5%",
-    "output": "=== RUN   TestLogin_Success\n--- PASS: TestLogin_Success (0.80s)\n...",
-    "errors": [],
-    "runAt": "2026-05-06T10:30:00Z"
-  }
-}
-```
-
-**前端展示要点**：
-
-| 页面位置 | 展示内容 |
-|---------|---------|
-| Issue 详情页 → 测试 Tab | 该 Issue 下所有 TestCase 列表，每行显示名称 + 状态徽标 (`✅ passed` / `❌ failed` / `⏳ pending`) + 耗时 |
-| TestCase 详情弹窗 | 结果概览卡片 (通过/失败/跳过数 + 覆盖率) + 逐条执行结果 + 原始输出折叠区 |
-| 实时执行 | WebSocket 推送 stdout/stderr，前端实时滚动显示 |
-
-**前端自定义测试脚本编辑器**：
-
-创建/编辑 TestCase 时，提供一个**可折叠的高级脚本编辑器**（默认隐藏，用户点击「自定义脚本」展开）：
-
-```
-┌─ 🔧 自定义测试脚本 (可选) ──────────────────────────┐
-│                                                      │
-│  📋 快速模板:  [Go testing] [Vitest] [Maven]        │
-│               [Playwright] [Cargo] [自定义]          │
-│                                                      │
-│  install:                                            │
-│  ┌──────────────────────────────────────────────────┐│
-│  │ cd {workspace} && go mod download                ││
-│  └──────────────────────────────────────────────────┘│
-│                                                      │
-│  command:                                            │
-│  ┌──────────────────────────────────────────────────┐│
-│  │ cd {workspace} && go test ./... -v -cover 2>&1   ││
-│  └──────────────────────────────────────────────────┘│
-│                                                      │
-│  超时:  [300] 秒                                     │
-│                                                      │
-│  💡 可用变量: {testFile} {workspace} {projectDir}   │
-│  📝 留空则使用 framework 默认命令                     │
-└──────────────────────────────────────────────────────┘
-```
-
-**交互规则**：
-
-| 操作 | 行为 |
-|------|------|
-| 点击「快速模板」 | 自动填充对应框架的默认 install + command |
-| 修改 framework 下拉 | 若 testScript 为空，自动更新模板提示；若已填写则不动 |
-| 清空 install + command | 保存时 testScript 置 null，执行时回退 framework 映射 |
-| 仅填 command，空 install | 仅跳过依赖安装步骤 |
-
-### 4.3.12 CLI 辅助接口 `/api/v1/cli`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/cli/version` | 最新 CLI 版本信息 |
-| GET | `/api/v1/cli/download/:os/:arch` | CLI 下载 (自动重定向) |
-| GET | `/api/v1/cli/status` | CLI 服务状态
-
-### 4.3.13 历史记录 `/api/v1/history`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/projects/:id/history` | 项目变更历史时间线 |
-| GET | `/api/v1/requirements/:id/history` | 需求变更历史 |
-| GET | `/api/v1/issues/:id/history` | Issue 变更历史 |
-| GET | `/api/v1/test-cases/:id/history` | 测试用例变更历史 |
-| GET | `/api/v1/history/compare/:id` | **对比两个历史版本** (v1 vs v2) |
-| GET | `/api/v1/history/:recordId` | 单条历史记录详情 |
-
-## 4.4 WebSocket 协议
-
-### 连接地址
-
-```
-ws://localhost:3000/ws/executions/:issueId?token=<JWT>
-```
-
-### 消息格式
-
-**服务端 → 客户端**：
-
-```json
-{
-  "type": "log",
-  "data": {
-    "timestamp": 1715000000000,
-    "level": "info",
-    "content": "Installing dependencies: express, zod, jsonwebtoken...",
-    "step": "install"
-  }
-}
-```
-
-```json
-{
-  "type": "status",
-  "data": {
-    "status": "completed",
-    "filesChanged": ["src/routes/auth.ts", "src/middleware/auth.ts"],
-    "exitCode": 0,
-    "duration": 45200
-  }
-}
-```
-
-```json
-{
-  "type": "progress",
-  "data": {
-    "percent": 75,
-    "currentStep": "Writing tests",
-    "stepsTotal": 4,
-    "stepsDone": 3
-  }
-}
-```
-
-### 连接生命周期
-
-```
-[连接] → [认证JWT] → [订阅Issue] → [接收实时日志]
-   │                                      │
-   │          ┌───────────────────────────┘
-   │          ▼
-   │   [执行完成/失败] → [服务端发送 status 消息] → [关闭连接]
-   │
-   └── [客户端主动断开]
-```
-
-## 4.5 鉴权方案
-
-- 使用 JWT (Access Token + Refresh Token)
-- Access Token 有效期 2 小时，Refresh Token 有效期 30 天
-- 除 `/api/v1/auth/*` 和 `/api/v1/monitor/:projectKey/events` 外，所有接口需携带 `Authorization: Bearer <token>`
-- **API Key 鉴权**：可在 HTTP Header 中传递 `X-API-Key: fc_sk_xxx` 用于 CLI 和 CI/CD 场景
-- 监控事件接口使用 `projectKey`（项目级 Key）鉴权
-
----
-
-## 4.5b 历史记录与版本对比
-
-### 查询参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| limit | int | 每页数量 (默认 50) |
-| cursor | string | 分页游标 |
-| action | string | 按操作类型过滤 (created/updated/status_changed) |
-| fieldName | string | 按字段名过滤 (title/description/status/priority) |
-
-### 响应格式
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "h_rec_xxx",
-      "targetType": "issue",
-      "targetId": "abc123",
-      "action": "status_changed",
-      "fieldName": "status",
-      "oldValue": {"status": "draft"},
-      "newValue": {"status": "approved"},
-      "changedBy": {
-        "id": "u1",
-        "username": "admin"
-      },
-      "createdAt": "2026-05-06T14:30:00Z"
-    }
-  ],
-  "message": "ok",
-  "timestamp": 1715000000000
-}
-```
-
-### 版本对比
-
-#### Diff 技术栈
-
-| 层级 | 技术 | 用途 |
-|------|------|------|
-| **后端 — 字符串 Diff** | [sergi/go-diff](https://github.com/sergi/go-diff) | 文本字段（title/description）生成 unified diff patch |
-| **后端 — JSON Diff** | 自实现递归对比 | 结构体字段逐 key 比较，输出新增/删除/修改路径 |
-| **后端 — 标量 Diff** | 直接 oldValue ↔ newValue | number/bool/enum 字段前后值展示 |
-| **前端 — 文本 Diff 渲染** | [diff2html](https://github.com/rtfpessoa/diff2html) (npm) | 将 unified diff 渲染为彩色行内对比 |
-| **前端 — 代码 Diff** | Monaco Editor diff mode | testCode 等大段代码用编辑器原生 diff 视图 |
-| **前端 — 字段并排对比** | 自研 `FieldDiffCard` 组件 | 简单字段并排显示 before → after |
-
-#### GET /api/v1/history/compare/:recordId
-
-返回该条历史记录对应的 diff 信息：
-
-```json
-{
-  "code": 0,
-  "data": {
-    "recordId": "h_rec_yyy",
-    "fieldName": "title",
-    "diff": {
-      "type": "unified",
-      "lines": [
-        {"type": "remove", "content": "修复登录页面"},
-        {"type": "add",   "content": "修复登录页面样式错乱问题"}
-      ]
-    },
-    "oldValue": "修复登录页面",
-    "newValue": "修复登录页面样式错乱问题",
-    "changedAt": "2026-05-06T14:30:00Z",
-    "changedBy": "admin"
-  }
-}
-```
-
-```go
-// internal/service/diff.go — 后端 diff 引擎
-
-import "github.com/sergi/go-diff/diffmatchpatch"
-
-func ComputeDiff(oldVal, newVal interface{}, fieldName string) *DiffResult {
-    switch fieldName {
-    case "title", "description", "testCode":
-        // 大段文本 → unified diff
-        dmp := diffmatchpatch.New()
-        diffs := dmp.DiffMain(toString(oldVal), toString(newVal), true)
-        return toUnifiedLines(dmp.DiffCleanupSemantic(diffs))
-
-    case "priority", "assigneeId", "status", "reviewStatus":
-        // 标量 → 直接返回前后值
-        return &DiffResult{Type: "scalar", Old: oldVal, New: newVal}
-
-    default:
-        // JSON 对象 → 递归 key 对比
-        return jsonDiff(oldVal.(map[string]interface{}), newVal.(map[string]interface{}))
-    }
-}
-```
-
-### 回滚功能
-
-#### POST /api/v1/:entity/:id/rollback/:historyRecordId
-
-将实体指定字段回滚到历史版本的值。
-
-**URL 示例**：`POST /api/v1/issues/abc123/rollback/h_rec_yyy`
-
-**请求体**（可选，不传则使用历史记录的 fieldName）：
-
-```json
-{
-  "fields": ["title"]
-}
-```
-
-**后端处理流程**：
-
-```
-1. 查询 HistoryRecord → 取 oldValue
-2. 校验 oldValue 对应 fieldName 的字段在当前实体上存在
-3. 执行 UPDATE SET field = oldValue
-4. 插入新 HistoryRecord (action=rollback, fieldName="*", oldValue=回滚前的值)
-5. 返回更新后的实体
-```
-
-**响应**：
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "abc123",
-    "title": "修复登录页面",
-    "updatedAt": "2026-05-06T15:00:00Z"
-  },
-  "message": "已回滚到 h_rec_yyy"
-}
-```
-
-#### 前端回滚交互
-
-```
-┌─ 历史记录时间线 ─────────────────────────────────┐
-│                                                    │
-│  ● 2026-05-06 14:35  admin                        │
-│    修改了 title                                    │
-│    ┌───────────────────────────────────────────┐  │
-│    │ 修复登录页面  →  修复登录页面样式错乱问题  │  │
-│    └───────────────────────────────────────────┘  │
-│    [查看 Diff]  [回滚到此版本]                     │
-│                                                    │
-│  ● 2026-05-06 14:32  admin                        │
-│    修改了 priority                                 │
-│    P3 → P1                                        │
-│    [查看 Diff]  [回滚到此版本]                     │
-│                                                    │
-│  ● 2026-05-06 14:30  system                       │
-│    创建了 issue                                    │
-│    [查看详情]                                      │
-└────────────────────────────────────────────────────┘
-```
-
-**回滚确认弹窗**：
-
-```
-┌─ 确认回滚 ──────────────────────────────────────────┐
-│                                                      │
-│  将「title」回滚到 2026-05-06 14:32 的版本？         │
-│                                                      │
-│  当前值:  修复登录页面样式错乱问题                    │
-│  回滚到:  修复登录页面                               │
-│                                                      │
-│  ⚠️ 回滚后会产生一条新的历史记录，可再次回滚撤销     │
-│                                                      │
-│        [取消]              [确认回滚]                │
-└──────────────────────────────────────────────────────┘
-```
-
-## 4.6 API 安全机制
-
-### 4.6.1 请求签名 (HMAC-SHA256)
-
-CLI 和第三方集成在调用敏感接口时，除 API Key 外还需附带请求签名，防止中间人篡改：
-
-```
-请求头:
-  X-API-Key: fc_sk_xxx
-  X-Request-Timestamp: 1715000000
-  X-Request-Nonce: random-uuid-v4
-  X-Request-Signature: sha256=<HMAC(method+path+body+timestamp+nonce, api_secret)>
-```
-
-```go
-// internal/middleware/request_sign.go
-
-func RequestSignatureMiddleware(secret string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        timestamp := c.GetHeader("X-Request-Timestamp")
-        nonce := c.GetHeader("X-Request-Nonce")
-        signature := c.GetHeader("X-Request-Signature")
-
-        // 1. 时间戳防重放 (5 分钟窗口)
-        ts, _ := strconv.ParseInt(timestamp, 10, 64)
-        if time.Now().Unix()-ts > 300 || ts-time.Now().Unix() > 300 {
-            c.AbortWithStatusJSON(401, gin.H{"code": 40101, "message": "Request expired"})
-            return
-        }
-
-        // 2. Nonce 防重放 (Redis SETNX, 5 分钟 TTL)
-        if !redis.SetNX(c.Request.Context(), "nonce:"+nonce, "1", 5*time.Minute).Val() {
-            c.AbortWithStatusJSON(401, gin.H{"code": 40102, "message": "Nonce already used"})
-            return
-        }
-
-        // 3. 签名验证
-        bodyBytes, _ := io.ReadAll(c.Request.Body)
-        c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-        payload := fmt.Sprintf("%s%s%s%s%s",
-            c.Request.Method,
-            c.Request.URL.Path,
-            string(bodyBytes),
-            timestamp,
-            nonce,
-        )
-        mac := hmac.New(sha256.New, []byte(secret))
-        mac.Write([]byte(payload))
-        expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-
-        if !hmac.Equal([]byte(signature), []byte(expected)) {
-            c.AbortWithStatusJSON(401, gin.H{"code": 40103, "message": "Invalid signature"})
-            return
-        }
-
-        c.Next()
-    }
-}
-```
-
-### 4.6.2 频率限制 (Rate Limiting)
-
-多层级限流策略，防止滥用和 DDoS：
-
-| 层级 | 限流键 | 默认限制 | 适用对象 |
-|------|--------|----------|---------|
-| 全局限流 | IP | 1000 req/min | 所有请求 |
-| API Key 限流 | API Key ID | 300 req/min | CLI/API 调用 |
-| 用户限流 | User ID | 500 req/min | Web 用户 |
-| 敏感接口限流 | 接口路径 | 10 req/min | login/register/execute |
-
-```go
-// internal/middleware/rate_limiter.go
-
-func RateLimiter(store *redis.Client) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        // 优先级: API Key > User ID > IP
-        key := c.ClientIP()
-        limit := 1000
-
-        if apiKey := c.GetHeader("X-API-Key"); apiKey != "" {
-            key = "apikey:" + sha256Prefix(apiKey)
-            limit = 300
-        } else if userID := c.GetString("userID"); userID != "" {
-            key = "user:" + userID
-            limit = 500
-        }
-
-        // 敏感接口更严限制
-        if isSensitivePath(c.Request.URL.Path) {
-            limit = 10
-        }
-
-        count, _ := store.Incr(c.Request.Context(), "ratelimit:"+key+":"+windowKey()).Result()
-        if count == 1 {
-            store.Expire(c.Request.Context(), "ratelimit:"+key+":"+windowKey(), time.Minute)
-        }
-        if count > int64(limit) {
-            c.AbortWithStatusJSON(429, gin.H{
-                "code":      42900,
-                "message":   "Too many requests, please retry later",
-                "retryAfter": 60,
-            })
-            return
-        }
-
-        c.Header("X-RateLimit-Limit", strconv.Itoa(limit))
-        c.Header("X-RateLimit-Remaining", strconv.Itoa(limit-int(count)))
-        c.Next()
-    }
-}
-```
-
-### 4.6.3 API Key 权限范围 (Scopes)
-
-API Key 创建时必须声明权限范围，最小权限原则：
-
-```json
-{
-  "name": "CI/CD Pipeline",
-  "scopes": ["issue:read", "issue:write", "execution:trigger"],
-  "allowedIPs": ["10.0.1.0/24", "203.0.113.5"],
-  "expiresIn": "90d"
-}
-```
-
-| Scope | 允许操作 |
-|-------|---------|
-| `issue:read` | 查看 Issue 列表/详情 |
-| `issue:write` | 创建/更新 Issue |
-| `execution:trigger` | 触发 AI 执行 |
-| `requirement:read` | 查看需求 |
-| `requirement:write` | 创建/更新需求 |
-| `skill:install` | 安装 Skill |
-| `project:admin` | 项目管理（配置/成员） |
-| `org:admin` | 组织管理（成员） |
-
-```go
-// internal/middleware/api_key.go
-
-func APIKeyAuth(db *gorm.DB) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        key := c.GetHeader("X-API-Key")
-        if key == "" {
-            c.Next()
-            return
-        }
-
-        hashed := sha256Hex(key)
-        var token model.APIToken
-        if err := db.Where("token = ?", hashed).First(&token).Error; err != nil {
-            c.AbortWithStatusJSON(401, gin.H{"code": 40100, "message": "Invalid API Key"})
-            return
-        }
-
-        // 检查过期
-        if token.ExpiresAt != nil && token.ExpiresAt.Before(time.Now()) {
-            c.AbortWithStatusJSON(401, gin.H{"code": 40104, "message": "API Key expired"})
-            return
-        }
-
-        // 检查 IP 白名单
-        if len(token.AllowedIPs) > 0 && !isIPAllowed(c.ClientIP(), token.AllowedIPs) {
-            c.AbortWithStatusJSON(403, gin.H{"code": 40301, "message": "IP not allowed"})
-            return
-        }
-
-        // 检查 scope 权限
-        var scopes []string
-        json.Unmarshal([]byte(token.Scopes), &scopes)
-        if !hasScope(scopes, requiredScope(c.Request)) {
-            c.AbortWithStatusJSON(403, gin.H{"code": 40302, "message": "Insufficient scope"})
-            return
-        }
-
-        // 更新最后使用时间
-        db.Model(&token).Update("last_used_at", time.Now())
-
-        c.Set("orgID", token.OrgID)
-        c.Set("userID", token.UserID)
-        c.Set("authMethod", "apikey")
-        c.Next()
-    }
-}
-```
-
-### 4.6.4 输入校验与防注入
-
-所有外部输入必须经过严格校验，使用 Go validator 库：
-
-```go
-// internal/middleware/validator.go
-
-type CreateIssueInput struct {
-    Title       string `json:"title"       binding:"required,min=3,max=200,safetext"`
-    Description string `json:"description" binding:"required,max=10000,safetext"`
-    Priority    string `json:"priority"    binding:"required,oneof=p0 p1 p2 p3"`
-    Category    string `json:"category"    binding:"required,oneof=feature bug refactor docs infra"`
-    ProjectID   string `json:"project_id"  binding:"required,uuid"`
-    AITool      string `json:"ai_tool"     binding:"required,alphanum,min=2,max=30"`
-    SkillIDs    []string `json:"skill_ids" binding:"max=10,dive,uuid"`
-}
-```
-
-关键防护措施：
-
-| 措施 | 说明 |
-|------|------|
-| **类型约束** | 所有字段声明 Go 类型，JSON 反序列化自动类型检查 |
-| **长度限制** | 标题 max=200，描述 max=10000，数组 max=10 |
-| **枚举约束** | priority/category 仅允许预定义值 |
-| **UUID 校验** | ID 类字段强制 UUID 格式 |
-| **XSS 防护** | 输出时 HTML 转义 (前端 + 服务端双保险) |
-| **SQL 注入防护** | Gorm 参数化查询，不拼接 SQL |
-| **Prompt 注入防护** | Skills 内容注入前做 Markdown 解析器沙箱化处理 |
-
-### 4.6.5 CORS 与安全头
-
-```go
-// internal/middleware/security_headers.go
-
-func SecurityHeaders() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        c.Header("X-Content-Type-Options", "nosniff")
-        c.Header("X-Frame-Options", "DENY")
-        c.Header("X-XSS-Protection", "1; mode=block")
-        c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-        c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'")
-        c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        c.Next()
-    }
-}
-```
-
-CORS 白名单仅允许已注册的域名：
-
-```go
-func CORS(allowedOrigins []string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        origin := c.GetHeader("Origin")
-        for _, allowed := range allowedOrigins {
-            if origin == allowed {
-                c.Header("Access-Control-Allow-Origin", origin)
-                c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE")
-                c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type,X-API-Key,X-Request-Timestamp,X-Request-Nonce,X-Request-Signature")
-                c.Header("Access-Control-Max-Age", "86400")
-                break
-            }
-        }
-        if c.Request.Method == "OPTIONS" {
-            c.AbortWithStatus(204)
-            return
-        }
-        c.Next()
-    }
-}
-```
-
-### 4.6.6 审计日志
-
-所有敏感操作记录审计日志，不可篡改：
-
-```go
-// internal/middleware/audit.go
-
-type AuditLog struct {
-    ID         string    `gorm:"primaryKey"`
-    UserID     string
-    OrgID      string
-    Action     string    // "issue.execute" / "org.member.add" / "api_key.create"
-    Resource   string    // "issue:abc123" / "org:my-org"
-    IP         string
-    UserAgent  string
-    AuthMethod string    // "jwt" / "apikey" / "projectkey"
-    Detail     string    // JSON 详情
-    CreatedAt  time.Time
-}
-
-func AuditMiddleware(db *gorm.DB, sensitiveActions []string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        c.Next() // 先执行业务逻辑
-
-        action := c.GetString("auditAction")
-        if !contains(sensitiveActions, action) {
-            return
-        }
-
-        db.Create(&AuditLog{
-            UserID:     c.GetString("userID"),
-            OrgID:      c.GetString("orgID"),
-            Action:     action,
-            Resource:   c.GetString("auditResource"),
-            IP:         c.ClientIP(),
-            UserAgent:  c.GetHeader("User-Agent"),
-            AuthMethod: c.GetString("authMethod"),
-            Detail:     c.GetString("auditDetail"),
-        })
-    }
-}
-```
-
-### 4.6.7 安全中间件执行顺序
-
-```
-请求 → CORS → SecurityHeaders → RateLimiter → [Auth选择]
-                                                      │
-                                    ┌─────────────────┼─────────────────┐
-                                    ▼                 ▼                 ▼
-                              JWT Auth          API Key Auth      ProjectKey Auth
-                                │                   │                   │
-                                └───────────────────┼───────────────────┘
-                                                    ▼
-                                            RequestSignature (可选)
-                                                    │
-                                                    ▼
-                                              InputValidator
-                                                    │
-                                                    ▼
-                                              业务 Handler
-                                                    │
-                                                    ▼
-                                              AuditLogger
 ```
