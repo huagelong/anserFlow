@@ -377,7 +377,7 @@ Content-Type: application/json
 ## 备注
 - title 必填，不超过 200 字符
 - description 支持 Markdown
-- priority 可选 P0/P1/P2/P3，默认 P2
+- priority 可选 p0/p1/p2/p3，默认 p2
 ```
 
 **Skill 内容模板**（创建时自动填充骨架）：
