@@ -327,8 +327,56 @@
 **审核通过后的自动流程**：
 
 ```
-TestCase approved → AI 根据 description 生成 testCode → status=generated → 自动运行测试 → 记录结果
+TestCase approved
+      │
+      ▼
+┌─ Asynq 异步任务 ─────────────────────────────────────┐
+│  1. 创建 Docker 沙盒容器                                │
+│  2. git clone 项目代码到 /workspace/repo                │
+│  3. 注入 description 作为 prompt 到 AI 工具             │
+│  4. opencode/codex 生成测试代码 → 写入 testCode         │
+│  5. 自动注入测试代码到沙盒项目目录                        │
+│  6. 执行测试命令（go test / vitest / pytest）            │
+│  7. 解析结果 + 覆盖率 → 写入 result JSONB                │
+│  8. status = passed | failed                           │
+│  9. 销毁沙盒容器（失败时保留现场）                        │
+└──────────────────────────────────────────────────────┘
+      │
+      ▼
+  WebSocket 推送结果到前端
+  Hook: test_case:passed | test_case:failed
 ```
+
+**手动运行测试 `POST /api/v1/test-cases/:id/run`**：
+
+无需请求体。响应：
+
+```json
+{
+  "id": "tc-abc123",
+  "status": "passed",
+  "result": {
+    "status": "passed",
+    "durationMs": 2340,
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "coverage": "82.5%",
+    "output": "=== RUN   TestLogin_Success\n--- PASS: TestLogin_Success (0.80s)\n...",
+    "errors": [],
+    "runAt": "2026-05-06T10:30:00Z"
+  }
+}
+```
+
+**前端展示要点**：
+
+| 页面位置 | 展示内容 |
+|---------|---------|
+| Issue 详情页 → 测试 Tab | 该 Issue 下所有 TestCase 列表，每行显示名称 + 状态徽标 (`✅ passed` / `❌ failed` / `⏳ pending`) + 耗时 |
+| TestCase 详情弹窗 | 结果概览卡片 (通过/失败/跳过数 + 覆盖率) + 逐条执行结果 + 原始输出折叠区 |
+| 实时执行 | WebSocket 推送 stdout/stderr，前端实时滚动显示 |
 
 ### 4.3.12 CLI 辅助接口 `/api/v1/cli`
 
