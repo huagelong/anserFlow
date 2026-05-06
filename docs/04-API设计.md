@@ -368,7 +368,7 @@ Content-Type: application/json
 {
   "title": "{用户描述的需求标题}",
   "description": "{用户描述的需求详情}",
-  "priority": "P2"
+  "priority": "p2"
 }
 
 ## 响应
