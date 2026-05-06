@@ -496,3 +496,119 @@ orgId: "%s"
   }
 }
 ```
+
+### 4.3.12 PR 列表 `/api/v1/prs`
+
+整合该项目所有 Issue 关联的 PR，通过 `PlatformProvider` 实时获取最新状态：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/projects/:pid/prs` | **项目 PR 列表**（支持状态筛选） |
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| status | string | 状态过滤: open / merged / closed |
+| issueId | UUID | 按关联 Issue 过滤 |
+| sort | string | 排序: createdAt / updatedAt (默认 createdAt) |
+| order | string | asc / desc (默认 desc) |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "prId": "pr_001",
+      "prNumber": 42,
+      "prTitle": "feat: 用户登录页 (iss_abc123)",
+      "prUrl": "https://github.com/user/repo/pull/42",
+      "sourceBranch": "flowcode/iss_abc123",
+      "targetBranch": "main",
+      "status": "open",
+      "issueId": "iss_abc123",
+      "issueTitle": "用户登录页",
+      "createdAt": "2026-05-06T10:30:00Z",
+      "updatedAt": "2026-05-06T11:00:00Z"
+    }
+  ]
+}
+```
+
+> status 不依赖 Webhook 延迟：调用 `PlatformProvider.GetPR()` 实时拉取最新状态。
+
+### 4.3.13 审计日志 `/api/v1/audit-logs`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/projects/:pid/audit-logs` | 项目操作审计日志 |
+| GET | `/api/v1/orgs/:slug/audit-logs` | 组织级操作审计日志 |
+| GET | `/api/v1/users/me/audit-logs` | 当前用户个人操作历史 |
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| action | string | 操作类型: issue.create / issue.execute / test.run ... |
+| source | string | 来源: cli / web / api / webhook |
+| since | string | 起始时间 (如 7d / 30d) |
+| userId | UUID | 按操作人过滤 (组织级可用) |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "audit_001",
+      "action": "issue.create",
+      "source": "cli",
+      "detail": "创建 Issue: 用户登录页 (iss_abc123)",
+      "userId": "user_001",
+      "userName": "张三",
+      "deviceId": "dev_macbook_01",
+      "ip": "192.168.1.100",
+      "createdAt": "2026-05-06T10:20:00Z"
+    }
+  ]
+}
+```
+
+### 4.3.14 设备管理 `/api/v1/devices`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/users/me/devices` | 当前用户已登录设备列表 |
+| DELETE | `/api/v1/devices/:id` | **吊销设备**（远程登出） |
+| DELETE | `/api/v1/users/me/devices` | 吊销当前用户所有其他设备 (仅保留当前设备) |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "dev_macbook_01",
+      "deviceName": "MacBook Pro M3",
+      "os": "darwin",
+      "arch": "arm64",
+      "current": true,
+      "lastSeenAt": "2026-05-06T11:00:00Z",
+      "createdAt": "2026-04-15T09:00:00Z"
+    },
+    {
+      "id": "dev_ci_runner_02",
+      "deviceName": "CI Runner #2",
+      "os": "linux",
+      "arch": "amd64",
+      "current": false,
+      "lastSeenAt": "2026-05-05T18:30:00Z",
+      "createdAt": "2026-04-20T14:00:00Z"
+    }
+  ]
+}
+```
