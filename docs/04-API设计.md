@@ -549,7 +549,20 @@ ws://localhost:3000/ws/executions/:issueId?token=<JWT>
 
 ### 版本对比
 
-`GET /api/v1/history/compare/:recordId`
+#### Diff 技术栈
+
+| 层级 | 技术 | 用途 |
+|------|------|------|
+| **后端 — 字符串 Diff** | [sergi/go-diff](https://github.com/sergi/go-diff) | 文本字段（title/description）生成 unified diff patch |
+| **后端 — JSON Diff** | 自实现递归对比 | 结构体字段逐 key 比较，输出新增/删除/修改路径 |
+| **后端 — 标量 Diff** | 直接 oldValue ↔ newValue | number/bool/enum 字段前后值展示 |
+| **前端 — 文本 Diff 渲染** | [diff2html](https://github.com/rtfpessoa/diff2html) (npm) | 将 unified diff 渲染为彩色行内对比 |
+| **前端 — 代码 Diff** | Monaco Editor diff mode | testCode 等大段代码用编辑器原生 diff 视图 |
+| **前端 — 字段并排对比** | 自研 `FieldDiffCard` 组件 | 简单字段并排显示 before → after |
+
+#### GET /api/v1/history/compare/:recordId
+
+返回该条历史记录对应的 diff 信息：
 
 ```json
 {
@@ -570,6 +583,109 @@ ws://localhost:3000/ws/executions/:issueId?token=<JWT>
     "changedBy": "admin"
   }
 }
+```
+
+```go
+// internal/service/diff.go — 后端 diff 引擎
+
+import "github.com/sergi/go-diff/diffmatchpatch"
+
+func ComputeDiff(oldVal, newVal interface{}, fieldName string) *DiffResult {
+    switch fieldName {
+    case "title", "description", "testCode":
+        // 大段文本 → unified diff
+        dmp := diffmatchpatch.New()
+        diffs := dmp.DiffMain(toString(oldVal), toString(newVal), true)
+        return toUnifiedLines(dmp.DiffCleanupSemantic(diffs))
+
+    case "priority", "assigneeId", "status", "reviewStatus":
+        // 标量 → 直接返回前后值
+        return &DiffResult{Type: "scalar", Old: oldVal, New: newVal}
+
+    default:
+        // JSON 对象 → 递归 key 对比
+        return jsonDiff(oldVal.(map[string]interface{}), newVal.(map[string]interface{}))
+    }
+}
+```
+
+### 回滚功能
+
+#### POST /api/v1/:entity/:id/rollback/:historyRecordId
+
+将实体指定字段回滚到历史版本的值。
+
+**URL 示例**：`POST /api/v1/issues/abc123/rollback/h_rec_yyy`
+
+**请求体**（可选，不传则使用历史记录的 fieldName）：
+
+```json
+{
+  "fields": ["title"]
+}
+```
+
+**后端处理流程**：
+
+```
+1. 查询 HistoryRecord → 取 oldValue
+2. 校验 oldValue 对应 fieldName 的字段在当前实体上存在
+3. 执行 UPDATE SET field = oldValue
+4. 插入新 HistoryRecord (action=rollback, fieldName="*", oldValue=回滚前的值)
+5. 返回更新后的实体
+```
+
+**响应**：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": "abc123",
+    "title": "修复登录页面",
+    "updatedAt": "2026-05-06T15:00:00Z"
+  },
+  "message": "已回滚到 h_rec_yyy"
+}
+```
+
+#### 前端回滚交互
+
+```
+┌─ 历史记录时间线 ─────────────────────────────────┐
+│                                                    │
+│  ● 2026-05-06 14:35  admin                        │
+│    修改了 title                                    │
+│    ┌───────────────────────────────────────────┐  │
+│    │ 修复登录页面  →  修复登录页面样式错乱问题  │  │
+│    └───────────────────────────────────────────┘  │
+│    [查看 Diff]  [回滚到此版本]                     │
+│                                                    │
+│  ● 2026-05-06 14:32  admin                        │
+│    修改了 priority                                 │
+│    P3 → P1                                        │
+│    [查看 Diff]  [回滚到此版本]                     │
+│                                                    │
+│  ● 2026-05-06 14:30  system                       │
+│    创建了 issue                                    │
+│    [查看详情]                                      │
+└────────────────────────────────────────────────────┘
+```
+
+**回滚确认弹窗**：
+
+```
+┌─ 确认回滚 ──────────────────────────────────────────┐
+│                                                      │
+│  将「title」回滚到 2026-05-06 14:32 的版本？         │
+│                                                      │
+│  当前值:  修复登录页面样式错乱问题                    │
+│  回滚到:  修复登录页面                               │
+│                                                      │
+│  ⚠️ 回滚后会产生一条新的历史记录，可再次回滚撤销     │
+│                                                      │
+│        [取消]              [确认回滚]                │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## 4.6 API 安全机制
