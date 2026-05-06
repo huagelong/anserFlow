@@ -433,7 +433,7 @@ AI 工具执行完成后，系统从以下来源拼装 Commit Message：
 ```
 feat(auth): implement JWT-based login endpoint
 
-- Add POST /api/auth/login route
+- Add POST /api/v1/auth/login route
 - Add JWT sign and verify utilities
 - Add login rate limiting
 - Add unit tests for auth flow
@@ -1080,9 +1080,9 @@ Git 平台的 Webhook 用于感知 PR 合并/关闭事件：
 ### 多 Provider 路由
 
 ```
-POST /api/git/webhook/github  ← GitHub 回调
-POST /api/git/webhook/gitlab  ← GitLab 回调
-POST /api/git/webhook/gitea   ← Gitea 回调
+POST /api/v1/git/webhook/github  ← GitHub 回调
+POST /api/v1/git/webhook/gitlab  ← GitLab 回调
+POST /api/v1/git/webhook/gitea   ← Gitea 回调
 ```
 
 ### 统一处理器
