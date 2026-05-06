@@ -612,3 +612,44 @@ orgId: "%s"
   ]
 }
 ```
+
+## 4.4 OpenAPI 文档生成
+
+API 设计完成后，通过代码注解自动生成 OpenAPI 3.0 (Swagger) 文档：
+
+### 工具选型：swaggo/swag
+
+```bash
+# 安装
+go install github.com/swaggo/swag/cmd/swag@latest
+
+# 从 Gin Handler 注解生成 docs/
+swag init -g cmd/server/main.go -o docs/swagger --parseDependency
+```
+
+### 注解示例
+
+```go
+// @Summary      创建 Issue
+// @Description  在指定项目中创建新的 Issue
+// @Tags         Issues
+// @Accept       json
+// @Produce      json
+// @Param        pid   path      string              true  "项目 ID"
+// @Param        body  body      CreateIssueRequest  true  "Issue 内容"
+// @Success      201   {object}  Response{data=Issue}
+// @Failure      400   {object}  Response
+// @Failure      403   {object}  Response
+// @Security     BearerAuth
+// @Router       /api/projects/{pid}/issues [post]
+func (h *IssueHandler) Create(c *gin.Context) { ... }
+```
+
+### 访问方式
+
+```
+开发环境: http://localhost:3000/swagger/index.html
+生产环境: https://flowcode.example.com/swagger/index.html
+```
+
+> Swagger UI 仅在 `server.mode=debug` 时启用，生产环境关闭。
