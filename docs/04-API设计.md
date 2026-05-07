@@ -124,7 +124,38 @@
 | POST | `/api/v1/requirements/:id/convert-to-issues` | **确认拆解 → 批量创建 Issue(s)** |
 | PUT | `/api/v1/requirements/:id/status` | 变更需求状态 |
 
-**拆解为 Issue 请求体**：
+**AI 拆解响应**（`GET/POST .../ai-decompose`）：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "requirementId": "req-abc123",
+    "summary": "该需求可拆解为 4 个独立 Issue：认证中间件、API 接口、前端页面、单元测试",
+    "issues": [
+      {
+        "title": "实现 JWT 认证中间件",
+        "description": "创建 Gin 中间件，解析 JWT token...",
+        "priority": "p0",
+        "category": "feature",
+        "aiToolHint": "claude-code",
+        "reason": "核心阻塞任务，涉及安全逻辑"
+      },
+      {
+        "title": "编写登录/注册 API",
+        "description": "实现 POST /auth/login 和 POST /auth/register...",
+        "priority": "p0",
+        "category": "feature",
+        "aiToolHint": "codex",
+        "reason": "依赖 Issue 1 的中间件，但可并行开发"
+      }
+    ]
+  },
+  "message": "ok"
+}
+```
+
+**拆解为 Issue 请求体**（`POST .../convert-to-issues`，用户确认后提交）：
 
 ```json
 {
