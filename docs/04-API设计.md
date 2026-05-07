@@ -198,6 +198,10 @@
 | GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
 | PUT | `/api/v1/issues/:id/priority` | 调整优先级 |
 | PUT | `/api/v1/issues/:id/category` | 调整分类 |
+| GET | `/api/v1/issues/:id/comments` | **Issue 评论列表** |
+| POST | `/api/v1/issues/:id/comments` | **添加评论** |
+| PUT | `/api/v1/comments/:id` | **编辑评论** |
+| DELETE | `/api/v1/comments/:id` | **删除评论（软删除）** |
 
 **Issue 列表查询参数**：
 
@@ -212,6 +216,128 @@
 | order | string | asc / desc |
 | cursor | string | 分页游标 |
 | limit | int | 每页数量 (默认20) |
+
+**更新 Issue** `PUT /api/v1/issues/:id`：
+
+> Issue 创建后可随时编辑补充内容。`description` 支持全文替换或增量追加。
+
+```json
+// 请求（所有字段可选，仅传需更新的字段）
+{
+  "title": "修复登录页面样式错乱并优化移动端适配",
+  "description": "补充：发现 iOS Safari 下 input 框圆角异常，需要额外处理 -webkit-appearance",
+  "appendDescription": true,
+  "priority": "p1",
+  "tags": ["frontend", "bug", "ios"],
+  "assigneeId": "user_xxx",
+  "aiTool": "claude-code",
+  "estimatedHours": 2.5
+}
+```
+
+| 可编辑字段 | 类型 | 说明 |
+|-----------|------|------|
+| title | string | 标题 |
+| description | string | 描述（Markdown）。`appendDescription=true` 时追加而非替换 |
+| appendDescription | bool | 设为 true 时，description 内容追加到现有描述末尾 |
+| priority | string | p0 / p1 / p2 / p3 |
+| tags | []string | 标签数组 |
+| assigneeId | UUID | 指派执行者 |
+| aiTool | string | 更换 AI 工具（仅在 approved 之前可修改） |
+| estimatedHours | float | 预估工时 |
+
+> **不可编辑字段**（系统管理）：`status`（走工作流流转）、`category`（走独立 API）、`gitBranch`/`gitPRUrl`/`gitCommitSha`（AI 执行后自动写入）、`sourcePlatform`/`sourceIssueId`（导入后不可变）。
+
+#### 评论 `comments`
+
+多用户可在 Issue 下协作讨论，支持 Markdown 和嵌套回复（楼中楼）。Issue 关闭后仍可评论。
+
+**评论列表** `GET /api/v1/issues/:id/comments`：
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "cmt_1",
+      "body": "这个按钮在 Safari 下确实有问题，我复现了。建议加 `-webkit-appearance: none`",
+      "author": { "id": "user_1", "nickname": "小明", "avatarUrl": "..." },
+      "parentId": null,
+      "editedAt": null,
+      "createdAt": "2026-05-06T10:30:00Z",
+      "replies": [
+        {
+          "id": "cmt_2",
+          "body": "同意，我来修。另外 iOS 的 input 圆角也需要处理",
+          "author": { "id": "user_2", "nickname": "小红", "avatarUrl": "..." },
+          "parentId": "cmt_1",
+          "editedAt": null,
+          "createdAt": "2026-05-06T10:35:00Z",
+          "replies": []
+        }
+      ]
+    }
+  ],
+  "message": "ok"
+}
+```
+
+**添加评论** `POST /api/v1/issues/:id/comments`：
+
+```json
+// 请求
+{
+  "body": "建议优先处理登录页的样式问题，影响面最大。",
+  "parentId": null
+}
+```
+
+```json
+// 回复某条评论
+{
+  "body": "@小明 好的，我先修登录页。",
+  "parentId": "cmt_1"
+}
+```
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": {
+    "id": "cmt_3",
+    "body": "建议优先处理登录页的样式问题，影响面最大。",
+    "author": { "id": "user_1", "nickname": "小明" },
+    "parentId": null,
+    "createdAt": "2026-05-06T11:00:00Z"
+  },
+  "message": "ok"
+}
+```
+
+**编辑评论** `PUT /api/v1/comments/:id`：
+
+> 仅作者可编辑自己的评论。编辑后 `editedAt` 自动更新。
+
+```json
+// 请求
+{
+  "body": "建议优先处理登录页的样式问题，影响面最大。（已确认 Safari 14+ 均受影响）"
+}
+```
+
+**删除评论** `DELETE /api/v1/comments/:id`：
+
+> 仅作者可删除。软删除，有子回复时保留占位（"此评论已删除"）。
+
+```json
+// 响应
+{
+  "code": 0,
+  "message": "ok"
+}
+```
 
 ### 4.3.5 执行管理 `/api/v1/executions`
 
