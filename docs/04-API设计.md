@@ -120,7 +120,8 @@
 | GET | `/api/v1/requirements/:id` | 需求详情 |
 | PUT | `/api/v1/requirements/:id` | 更新需求 |
 | DELETE | `/api/v1/requirements/:id` | 删除需求 |
-| POST | `/api/v1/requirements/:id/convert-to-issues` | **拆解为 Issue(s)** |
+| POST | `/api/v1/requirements/:id/ai-decompose` | **AI 拆解为 Issue 列表**（返回建议，用户确认后提交 convert-to-issues） |
+| POST | `/api/v1/requirements/:id/convert-to-issues` | **确认拆解 → 批量创建 Issue(s)** |
 | PUT | `/api/v1/requirements/:id/status` | 变更需求状态 |
 
 **拆解为 Issue 请求体**：
