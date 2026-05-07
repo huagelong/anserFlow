@@ -190,11 +190,13 @@
 | GET | `/api/v1/issues/:id` | Issue 详情（含执行日志摘要） |
 | PUT | `/api/v1/issues/:id` | 更新 Issue |
 | DELETE | `/api/v1/issues/:id` | 删除 Issue |
-| POST | `/api/v1/issues/:id/approve` | **管理员审核通过** |
+| POST | `/api/v1/issues/:id/approve` | **管理员审核通过（执行前必须）** |
 | POST | `/api/v1/issues/:id/reject` | **管理员驳回（附原因）** |
-| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行** |
+| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved 状态）** |
 | POST | `/api/v1/issues/:id/continue` | **继续 vibe coding** |
 | POST | `/api/v1/issues/:id/cancel` | 取消执行 |
+| POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed 均可关闭） |
+| POST | `/api/v1/issues/:id/reopen` | **重新打开**（关闭后重开，须重新审核） |
 | GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
 | PUT | `/api/v1/issues/:id/priority` | 调整优先级 |
 | PUT | `/api/v1/issues/:id/category` | 调整分类 |
