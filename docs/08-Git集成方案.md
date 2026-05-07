@@ -153,9 +153,9 @@ Issue 触发执行 (approved → running)
            │                        │
            ▼                        ▼
 ┌───────────────────────────────────────────┐
-│         Webhook 回调 flowcode              │
-│  - PR merged  → issue.status = 'deployed' │
-│  - PR closed  → issue.status = 'reopened' │
+│         Webhook 回调 flowcode                          │
+│  - PR merged  → issue 触发 deploy → close             │
+│  - PR closed  → issue 触发 reopen → reopened → approved │
 └───────────────────────────────────────────┘
 ```
 
@@ -1223,7 +1223,8 @@ func (h *GitHandler) HandleWebhook(provider ProviderType) gin.HandlerFunc {
 func (h *GitHandler) onPRMerged(ctx context.Context, event *WebhookEvent) {
     issue, _ := h.svc.FindIssueByRepoAndBranch(ctx, event.RepoFullName, event.HeadRef)
     if issue != nil {
-        h.issueSvc.Transition(ctx, issue.ID, "deployed")
+        h.issueSvc.Transition(ctx, issue.ID, "deploy")
+        h.issueSvc.Transition(ctx, issue.ID, "close")
         h.hookRegistry.Emit(ctx, "issue:pr:merged", map[string]any{
             "issue":    issue,
             "platform": event.Platform,
@@ -1235,7 +1236,7 @@ func (h *GitHandler) onPRMerged(ctx context.Context, event *WebhookEvent) {
 func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookEvent) {
     issue, _ := h.svc.FindIssueByRepoAndBranch(ctx, event.RepoFullName, event.HeadRef)
     if issue != nil {
-        h.issueSvc.Transition(ctx, issue.ID, "reopened")
+        h.issueSvc.Transition(ctx, issue.ID, "reopen")
     }
 }
 ```
@@ -1411,7 +1412,7 @@ flowcode project import-issues --state all
 2. **凭证加密**：数据库存储加密，日志脱敏
 3. **操作审计**：所有 Git 操作自动写入 `audit_logs` 表（action=`git.*`），可追溯
 4. **分支保护**：AI 创建的分支带有 `flowcode/` 前缀，不触碰 `main`/`master`
-5. **可回滚**：PR 关闭不合并时，Issue 回到 `reopened` 状态
+5. **可回滚**：PR 关闭不合并时，Issue 触发 `reopen`，随后回到重新审核链路
 6. **SSH 密钥安全**：
    - 私钥仅存储在数据库中（AES-256-GCM 加密），使用后立即清理临时文件
    - `GIT_TERMINAL_PROMPT=0` 禁止任何交互式密码输入
