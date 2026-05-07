@@ -681,7 +681,7 @@ type WebhookEvent struct {
 }
 ```
 
-> **Issue 不在接口中**：Issue 的创建/查询/更新均由 flowcode 自身管理。Git 平台仅用于 PR/MR 生命周期和 Webhook 事件。
+> Issue 的创建/查询/更新由 flowcode 自身管理，仅支持从 Git 平台**单向导入**。Git 平台负责 PR/MR 生命周期 + Webhook 事件。
 
 ## 8.7 GitHub Provider（go-github SDK）
 
