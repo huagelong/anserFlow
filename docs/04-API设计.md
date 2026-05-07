@@ -97,6 +97,7 @@
   "gitRepoUrl": "https://github.com/user/my-saas",
   "gitRepoId": "user/my-saas",
   "defaultBranch": "main",
+  "gitCredentialId": "cred_xxx",
   "settings": {
     "autoCreatePR": true,
     "defaultAITool": "claude-code",
@@ -108,6 +109,8 @@
   }
 }
 ```
+
+> **gitCredentialId**：从项目已配置的凭证列表中选取（`GET /api/v1/projects/:pid/git/credentials`）。创建时可先不填，后续通过更新接口绑定。
 
 > **创建流程**：前端先调用 `POST /api/v1/git/validate-url` 校验 Git 地址可达性 → 获得 `defaultBranch` / `repoId` → 填充完整请求体 → 调用创建项目接口。校验不通过则阻断创建。
 
