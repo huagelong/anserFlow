@@ -1257,20 +1257,10 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 
 从 Git 平台（GitHub / GitLab / Gitea）将已有 Issue 单向导入 flowcode。
 
-### 平台接口扩展
-
-在 GitProvider 接口中新增 Issue 导入方法：
+### 平台接口方法
 
 ```go
 // internal/adapter/git/provider.go
-
-type GitProvider interface {
-    // ... 原有方法 (ValidateCredentials, CreatePR, etc.) ...
-
-    // ── Issue 导入 ──
-    ListIssues(ctx context.Context, repoID string, opts ListIssueOptions) ([]*RemoteIssue, error)
-    GetIssue(ctx context.Context, repoID string, issueNumber int) (*RemoteIssue, error)
-}
 
 type ListIssueOptions struct {
     State  string    // open / closed / all，默认 open
@@ -1292,6 +1282,8 @@ type RemoteIssue struct {
     UpdatedAt time.Time `json:"updated_at"`
 }
 ```
+
+`GitProvider` 主接口已包含 `ListIssues` / `GetIssue`，这里仅补充导入相关参数与返回结构。
 
 ### 字段映射
 
