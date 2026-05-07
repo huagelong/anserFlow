@@ -634,6 +634,10 @@ type PlatformProvider interface {
     RegisterWebhook(ctx context.Context, repoID, callbackURL, secret string) error
     UnregisterWebhook(ctx context.Context, repoID string, webhookID int64) error
     ParseWebhookPayload(r *http.Request) (*WebhookEvent, error)
+
+    // ── Issue 导入 ──
+    ListIssues(ctx context.Context, repoID string, opts ListIssueOptions) ([]*RemoteIssue, error)
+    GetIssue(ctx context.Context, repoID string, issueNumber int) (*RemoteIssue, error)
 }
 
 // ── 公共类型 ──
@@ -1244,6 +1248,159 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 | GitHub (OAuth) | flowcode OAuth App | 后续版本支持 |
 
 凭证在数据库中 AES-256-GCM 加密存储。加密密钥通过环境变量 `FLOWCODE_ENCRYPTION_KEY` 注入。
+
+## 8.12b Issue 单向导入
+
+从 Git 平台（GitHub / GitLab / Gitea）将已有 Issue 单向导入 flowcode。导入后由 flowcode 独立管理，不会回写到 Git 平台。
+
+### 平台接口扩展
+
+在 PlatformProvider 接口中新增 Issue 导入方法：
+
+```go
+// internal/adapter/git/provider.go
+
+type PlatformProvider interface {
+    // ... 原有方法 (ValidateCredentials, CreatePR, etc.) ...
+
+    // ── Issue 导入 ──
+    ListIssues(ctx context.Context, repoID string, opts ListIssueOptions) ([]*RemoteIssue, error)
+    GetIssue(ctx context.Context, repoID string, issueNumber int) (*RemoteIssue, error)
+}
+
+type ListIssueOptions struct {
+    State  string    // open / closed / all，默认 open
+    Since  time.Time // 只拉取此时间之后的（增量导入）
+    Page   int       // 分页，1-based
+    PerPage int      // 每页数量，默认 30，最大 100
+}
+
+type RemoteIssue struct {
+    Number    int       `json:"number"`     // 平台侧 Issue 编号
+    Title     string    `json:"title"`
+    Body      string    `json:"body"`       // Markdown
+    State     string    `json:"state"`      // open / closed
+    Labels    []string  `json:"labels"`
+    Assignee  string    `json:"assignee"`   // 用户名
+    Milestone string    `json:"milestone"`
+    URL       string    `json:"url"`        // https://github.com/.../issues/123
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
+```
+
+### 字段映射
+
+| Git 平台字段 | flowcode Issue 字段 | 映射规则 |
+|-------------|-------------------|---------|
+| Number | sourceIssueId | 平台原始编号 |
+| Title | title | 直接映射 |
+| Body | description | Markdown 原样保留 |
+| State=open | status | → `draft`（待评审） |
+| State=closed | status | → `done` |
+| Labels[0] | category | 尝试匹配 keyword 规则，未命中则留空待 AI 分类 |
+| Labels | tags | 全部保留为 JSON 数组 |
+| Assignee | assigneeId | 按用户名/邮箱匹配本地用户，未匹配则为空 |
+| URL | sourceIssueUrl | 原始链接 |
+| — | sourcePlatform | `github` / `gitlab` / `gitea` |
+| CreatedAt | createdAt | 保留原始时间 |
+
+### 去重策略
+
+按 `projectId + sourcePlatform + sourceIssueId` 唯一约束去重：
+
+```sql
+CREATE UNIQUE INDEX idx_issue_source
+ON issues(project_id, source_platform, source_issue_id)
+WHERE source_platform IS NOT NULL;
+```
+
+- 已导入的 Issue 再次触发导入时**跳过**（幂等）
+- 不更新已导入 Issue 的内容（单向导入，后续由 flowcode 独立管理）
+
+### API
+
+```
+POST   /api/v1/projects/:pid/git/import-issues  # 触发导入
+GET    /api/v1/projects/:pid/git/import-status   # 查询导入结果
+```
+
+### 导入流程
+
+```go
+// internal/service/git/issue_importer.go
+
+func (s *IssueImporter) Import(ctx context.Context, projectID string, opts ImportOptions) (*ImportResult, error) {
+    // 1. 获取项目和凭证
+    project, _ := s.projectRepo.GetByID(ctx, projectID)
+    cred, _ := s.credRepo.GetByID(ctx, project.GitCredentialId)
+
+    // 2. 创建 PlatformProvider
+    provider, _ := NewPlatformProvider(cred.Provider, cred.AccessToken, "")
+
+    // 3. 分页拉取远程 Issue 列表
+    var imported, skipped int
+    for page := 1; ; page++ {
+        issues, _ := provider.ListIssues(ctx, project.GitRepoId, ListIssueOptions{
+            State:   opts.State,   // open / all
+            Since:   opts.Since,   // 增量导入用
+            Page:    page,
+            PerPage: 100,
+        })
+        if len(issues) == 0 { break }
+
+        for _, ri := range issues {
+            // 4. 去重检查
+            exists, _ := s.issueRepo.ExistsBySource(ctx, projectID, cred.Provider, ri.Number)
+            if exists { skipped++; continue }
+
+            // 5. 字段映射 + 创建
+            issue := s.mapToIssue(project, ri, cred.Provider)
+            s.issueRepo.Create(ctx, issue)
+            imported++
+        }
+    }
+
+    return &ImportResult{Imported: imported, Skipped: skipped}, nil
+}
+```
+
+### 导入结果
+
+```json
+{
+  "code": 0,
+  "data": {
+    "imported": 12,
+    "skipped": 3,
+    "total": 15,
+    "details": [
+      { "number": 1, "title": "Add login page", "action": "imported", "flowcodeId": "iss_xxx" },
+      { "number": 2, "title": "Fix navbar",    "action": "skipped",  "reason": "already_exists" }
+    ]
+  },
+  "message": "ok"
+}
+```
+
+### CLI
+
+```bash
+# 全量导入（open 状态）
+flowcode project import-issues --state open
+
+# 增量导入（仅导入指定日期之后的）
+flowcode project import-issues --since 2026-01-01
+
+# 导入所有状态（含已关闭的）
+flowcode project import-issues --state all
+```
+
+> **注意事项**：
+> - 导入前需先配置 Git 凭证并绑定到项目
+> - Issue 标签中的分类关键词命中规则时自动设置 category，未命中则留空由后续 AI 分类
+> - 导入不触发 opencode 前置分析（避免大量调用），可手动批量触发
+> - GitLab 的 Issue 在 SDK 中对应 `gitlab.Issue`（非 MR），Gitea 同理
 
 ## 8.13 安全考虑
 

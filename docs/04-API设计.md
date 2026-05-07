@@ -233,6 +233,8 @@
 | GET | `/api/v1/projects/:pid/git/branches` | 仓库分支列表 |
 | POST | `/api/v1/projects/:pid/git/pr` | 手动创建 PR |
 | GET | `/api/v1/issues/:id/pr-status` | 查看 Issue 关联 PR 状态 |
+| POST | `/api/v1/projects/:pid/git/import-issues` | **从 Git 平台导入 Issues** |
+| GET | `/api/v1/projects/:pid/git/import-status` | **查询导入结果** |
 
 **校验 Git 地址** `POST /api/v1/git/validate-url`：
 
@@ -359,6 +361,57 @@
 // 响应
 {
   "code": 0,
+  "message": "ok"
+}
+```
+
+**导入 Issues** `POST /api/v1/projects/:pid/git/import-issues`：
+
+> 需先配置 Git 凭证并在项目中绑定 (`gitCredentialId`)。导入为幂等操作，已存在的 Issue 自动跳过。
+
+```json
+// 请求
+{
+  "state": "open",
+  "since": "2026-01-01T00:00:00Z"
+}
+```
+
+| 参数 | 必填 | 说明 |
+|------|:--:|------|
+| state | 否 | `open` / `closed` / `all`，默认 `open` |
+| since | 否 | ISO 8601 时间，仅导入此时间之后的 Issue（增量导入） |
+
+```json
+// 响应（异步任务，立即返回任务ID）
+{
+  "code": 0,
+  "data": {
+    "taskId": "task_import_xxx",
+    "status": "queued"
+  },
+  "message": "导入任务已创建"
+}
+```
+
+**查询导入结果** `GET /api/v1/projects/:pid/git/import-status?taskId=task_import_xxx`：
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": {
+    "taskId": "task_import_xxx",
+    "status": "completed",
+    "imported": 12,
+    "skipped": 3,
+    "total": 15,
+    "details": [
+      { "number": 1, "title": "Add login page",   "action": "imported", "flowcodeId": "iss_abc" },
+      { "number": 3, "title": "Update README",     "action": "imported", "flowcodeId": "iss_def" },
+      { "number": 2, "title": "Fix navbar z-index","action": "skipped",  "reason": "already_exists" }
+    ]
+  },
   "message": "ok"
 }
 ```
