@@ -188,13 +188,14 @@
 |------|------|------|
 | GET | `/api/v1/projects/:pid/issues` | Issue 列表（支持筛选/排序） |
 | POST | `/api/v1/projects/:pid/issues` | 创建 Issue |
-| GET | `/api/v1/issues/:id` | Issue 详情（含执行日志摘要） |
+| GET | `/api/v1/issues/:id` | Issue 详情（含分析结果、执行计划、执行日志摘要） |
 | PUT | `/api/v1/issues/:id` | 更新 Issue |
 | DELETE | `/api/v1/issues/:id` | 删除 Issue |
-| POST | `/api/v1/issues/:id/approve` | **管理员审核通过（执行前必须）** |
+| POST | `/api/v1/issues/:id/approve` | **管理员审核通过（执行前必须，审批后可生成执行计划）** |
 | POST | `/api/v1/issues/:id/reject` | **管理员驳回（附原因）** |
-| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved 状态）** |
-| POST | `/api/v1/issues/:id/continue` | **继续 vibe coding** |
+| POST | `/api/v1/issues/:id/plan` | **生成/重新生成执行计划（须先完成分析）** |
+| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved；若无计划则先生成计划）** |
+| POST | `/api/v1/issues/:id/continue` | **基于原计划继续 vibe coding** |
 | POST | `/api/v1/issues/:id/cancel` | 取消执行 |
 | POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/rejected 均可关闭） |
 | POST | `/api/v1/issues/:id/reopen` | **重新打开**（支持从 closed/rejected/cancelled/done/deployed/pr_created 重开，重开后回到 approved 并重新审核） |
@@ -250,6 +251,8 @@
 | estimatedHours | float | 预估工时 |
 
 > **不可编辑字段**（系统管理）：`status`（走工作流流转）、`category`（走独立 API）、`gitBranch`/`gitPRUrl`/`gitCommitSha`（AI 执行后自动写入）、`sourcePlatform`/`sourceIssueId`（导入后不可变）。
+
+> **系统生成字段**：`isBug`、`needsCodeChange`、`analysisReason`、`analysisCompleted`、`planSummary`、`planDetail`、`planCompleted`、`planGeneratedAt` 由分析/计划流程自动维护，不接受普通更新接口直接写入。
 
 #### 评论 `comments`
 
@@ -828,7 +831,7 @@ orgId: "%s"
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| action | string | 操作类型: issue.create / issue.execute / test_case.run ... |
+| action | string | 操作类型: issue.create / issue.plan / issue.execute / test_case.run ... |
 | source | string | 来源: cli / web / api / webhook |
 | targetType | string | 目标类型: issue / test_case / project / skill |
 | userId | UUID | 按操作人过滤 (组织级可用) |

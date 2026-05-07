@@ -114,7 +114,7 @@ curl -X DELETE /api/v1/projects/proj_1/git/credentials/cred_1 \
                 ▼
         项目创建成功
                 │
-Issue 触发执行 (approved → running)
+Issue 进入编码阶段 (approved → 分析完成 → 计划完成 → running)
         │
         ▼
 ┌───────────────────────────────┐
@@ -125,7 +125,7 @@ Issue 触发执行 (approved → running)
 │  │    - HTTP: token@URL      │ │
 │  │    - SSH: 临时 SSH 密钥   │ │
 │  │ 3. 创建 flowcode/ 分支    │ │
-│  │ 4. AI 工具执行编码        │ │
+│  │ 4. AI 工具按计划执行编码   │ │
 │  │ 5. Git Add & Commit       │ │
 │  │ 6. Git Push 到远程        │ │
 │  └───────────────────────────┘ │
@@ -1395,7 +1395,7 @@ flowcode project import-issues --state all
 > **注意事项**：
 > - 导入前需先配置 Git 凭证并绑定到项目
 > - Issue 标签中的分类关键词命中规则时自动设置 category，未命中则留空由后续 AI 分类
-> - 导入不触发 opencode 前置分析（避免大量调用），可手动批量触发
+> - 导入不自动触发 opencode 前置分析与执行计划生成（避免大量调用），可手动批量触发
 > - GitLab 的 Issue 在 SDK 中对应 `gitlab.Issue`（非 MR），Gitea 同理
 
 ## 8.13 安全考虑
