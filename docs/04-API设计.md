@@ -3,6 +3,7 @@
 ## 4.1 设计原则
 
 - **RESTful 风格**，资源路径清晰
+- **国际化**：请求通过 `Accept-Language` 头指定语言，错误信息 message 字段按该语言返回；登录态则优先使用 User.locale
 - **统一响应格式**：`{ code, data, message, timestamp }`
 - **WebSocket** 用于执行日志实时推送
 - **分页**统一使用 cursor-based (对看板场景更友好)
@@ -49,7 +50,8 @@
 | POST | `/api/v1/auth/register` | 注册 |
 | POST | `/api/v1/auth/login` | 登录，返回 JWT |
 | POST | `/api/v1/auth/refresh` | 刷新 token |
-| GET | `/api/v1/auth/me` | 获取当前用户信息 |
+| GET | `/api/v1/auth/me` | 获取当前用户信息（含 locale） |
+| PUT | `/api/v1/auth/me` | 更新用户信息（locale / avatarUrl） |
 
 ### 4.3.1b 组织管理 `/api/v1/orgs` (SaaS)
 
