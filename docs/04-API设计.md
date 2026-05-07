@@ -224,6 +224,8 @@
 |------|------|------|
 | POST | `/api/v1/git/validate-url` | **校验 Git 地址可达性**（创建项目前置） |
 | POST | `/api/v1/projects/:pid/git/connect` | 配置 Git 凭证（PAT 或 SSH 密钥） |
+| GET | `/api/v1/projects/:pid/git/credentials` | **凭证列表** |
+| DELETE | `/api/v1/projects/:pid/git/credentials/:id` | **删除凭证** |
 | GET | `/api/v1/projects/:pid/git/status` | Git 连接状态 |
 | GET | `/api/v1/projects/:pid/git/branches` | 仓库分支列表 |
 | POST | `/api/v1/projects/:pid/git/pr` | 手动创建 PR |
@@ -279,9 +281,12 @@
 
 **配置 Git 凭证** `POST /api/v1/projects/:pid/git/connect`：
 
+> 一个项目可以配置多个凭证，每次调用创建一个新凭证。用 `name` 区分。
+
 ```json
 // HTTP 方式
 {
+  "name": "GitHub 主仓库",
   "authMethod": "http",
   "accessToken": "ghp_xxxxxxxxxxxxxxxxxxxx",
   "tokenType": "pat",
@@ -290,6 +295,7 @@
 
 // SSH 方式
 {
+  "name": "公司 GitLab",
   "authMethod": "ssh",
   "sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA...\n-----END OPENSSH PRIVATE KEY-----",
   "sshPassphrase": "",
@@ -297,7 +303,62 @@
 }
 ```
 
+```json
+// 响应
+{
+  "code": 0,
+  "data": {
+    "id": "cred_xxx",
+    "name": "GitHub 主仓库",
+    "fingerprint": "SHA256:xxxx"  // SSH 模式返回指纹
+  },
+  "message": "ok"
+}
+```
+
 > SSH 私钥传入后，服务端验证格式与指纹，加密后写入 `GitCredential.sshPrivateKey`。指纹通过响应返回供确认。
+
+**凭证列表** `GET /api/v1/projects/:pid/git/credentials`：
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "cred_1",
+      "name": "GitHub 主仓库",
+      "provider": "github",
+      "authMethod": "http",
+      "expiresAt": "2027-01-01T00:00:00Z",
+      "lastUsedAt": "2026-05-06T10:30:00Z",
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "cred_2",
+      "name": "公司 GitLab",
+      "provider": "gitlab",
+      "authMethod": "ssh",
+      "fingerprint": "SHA256:xxxx",
+      "lastUsedAt": null,
+      "createdAt": "2026-04-01T00:00:00Z"
+    }
+  ],
+  "message": "ok"
+}
+```
+
+> 列表不返回 `accessToken` 和 `sshPrivateKey` 明文。
+
+**删除凭证** `DELETE /api/v1/projects/:pid/git/credentials/:id`：
+
+```json
+// 响应
+{
+  "code": 0,
+  "message": "ok"
+}
+```
 
 ### 4.3.7 监控管理 `/api/v1/monitor`
 
