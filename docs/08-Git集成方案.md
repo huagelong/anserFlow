@@ -4,7 +4,7 @@
 
 flowcode 不内置 Git 托管，而是通过 **PlatformProvider 接口** 对接外部 Git 平台（GitHub / Gitea / GitLab）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request / Merge Request。
 
-> **职责边界**：Issue 由 flowcode 独立管理，不在 Git 平台创建。Git 平台仅负责 PR/MR 生命周期 + Webhook 事件回调。所有三个平台 SDK（go-github / go-gitlab / go-gitea）均为必需依赖。
+> **职责边界**：Issue 由 flowcode 独立管理，不在 Git 平台创建。Git 平台仅负责 PR/MR 生命周期 + Webhook 事件回调。Issue 单向导入为**纯手动操作**（Web 控制台按钮 / CLI 命令），不做自动同步。所有三个平台 SDK（go-github / go-gitlab / go-gitea）均为必需依赖。
 
 ### 8.1b Git SDK 配置清单
 
@@ -1198,7 +1198,8 @@ func (h *GitHandler) HandleWebhook(provider ProviderType) gin.HandlerFunc {
 
         event, err := p.ParseWebhookPayload(c.Request)
         if err != nil {
-            // 非 PR 事件，返回 200 让平台知道已接收
+            // 非 PR 事件（如 issues、issue_comment 等），接收但不处理
+            // Issue 导入为手动操作，不做自动同步
             if strings.Contains(err.Error(), "unsupported") {
                 c.JSON(200, gin.H{"received": true})
                 return
@@ -1249,9 +1250,11 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 
 凭证在数据库中 AES-256-GCM 加密存储。加密密钥通过环境变量 `FLOWCODE_ENCRYPTION_KEY` 注入。
 
-## 8.12b Issue 单向导入
+## 8.12b Issue 单向导入（手动）
 
-从 Git 平台（GitHub / GitLab / Gitea）将已有 Issue 单向导入 flowcode。导入后由 flowcode 独立管理，不会回写到 Git 平台。
+> ⚠️ **仅手动导入，不做自动同步**。导入由用户在 Web 控制台点击按钮或执行 CLI 命令触发，不监听 Git 平台 Webhook、不设定时任务。导入后 Issue 由 flowcode 独立管理，不回写 Git 平台。
+
+从 Git 平台（GitHub / GitLab / Gitea）将已有 Issue 单向导入 flowcode。
 
 ### 平台接口扩展
 
