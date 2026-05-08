@@ -2,7 +2,7 @@
 
 ## 8.1 概述
 
-flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接外部 Git 平台（GitHub / Gitea / GitLab）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request / Merge Request。
+flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接外部 Git 平台（GitHub / GitLab / Gitea）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request / Merge Request。
 
 > **职责边界**：Issue 由 flowcode 独立管理，不在 Git 平台创建。Git 平台仅负责 PR/MR 生命周期 + Webhook 事件回调。Issue 单向导入为**纯手动操作**（Web 控制台按钮 / CLI 命令），不做自动同步。所有三个平台 SDK（go-github / go-gitlab / go-gitea）均为必需依赖。
 
@@ -543,7 +543,7 @@ Ref: https://flowcode.local/projects/xxx/issues/abc123
 | 概念 | 管理方 | 说明 |
 |------|--------|------|
 | **Issue** | flowcode | 需求录入、优先级、分类、状态流转均在 flowcode 内部 |
-| **PR / MR** | Git 平台 | 代码审查、合并、讨论在 GitHub/Gitea/GitLab 上 |
+| **PR / MR** | Git 平台 | 代码审查、合并、讨论在 GitHub/GitLab/Gitea 上 |
 | **关联** | flowcode | PR URL 写入 Issue.prUrl；平台 PR body 中引用 flowcode Issue 链接 |
 
 ### 触发条件
