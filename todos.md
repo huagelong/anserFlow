@@ -86,8 +86,8 @@
   - 参考 wiki 小文档：
     - [5.1 Issue 生命周期状态机](wiki/05-工作流引擎/5.1-Issue-生命周期状态机.md)
     - [5.2 状态详解](wiki/05-工作流引擎/5.2-状态详解.md)
-    - [5.3.1 Issue 状态机定义](wiki/05-工作流引擎/5.3-状态机实现-–-基于-looplabfsm/5.3.1-Issue-状态机定义.md)
-    - [5.3.2 转换验证](wiki/05-工作流引擎/5.3-状态机实现-–-基于-looplabfsm/5.3.2-转换验证.md)
+    - [5.3.1 Issue 状态机定义](wiki/05-工作流引擎/5.3-状态机实现-—-基于-looplabfsm/5.3.1-Issue-状态机定义.md)
+    - [5.3.2 转换验证](wiki/05-工作流引擎/5.3-状态机实现-—-基于-looplabfsm/5.3.2-转换验证.md)
   - 验收：合法流转通过，非法流转失败；状态变化有测试覆盖。
 
 - [ ] T10 执行日志、历史记录与审计记录
@@ -102,7 +102,7 @@
 - [ ] T11 Vibe Coding 续跑能力
   - 目标：允许 AI 执行失败或用户补充要求后继续编辑同一 Issue。
   - 参考 wiki 小文档：
-    - [5.4.3 继续编辑 vibe coding 续跑](wiki/05-工作流引擎/5.4-关键业务逻辑-–-回调实现/5.4.3-继续编辑-vibe-coding-续跑.md)
+    - [5.4.3 继续编辑 vibe coding 续跑](wiki/05-工作流引擎/5.4-关键业务逻辑-—-回调实现/5.4.3-继续编辑-vibe-coding-续跑.md)
     - [Issue.aiConfig](wiki/03-数据模型/3.3-配置与状态字段设计细节/Issue.aiConfig.md)
     - [4.3.5 执行管理](wiki/04-API设计/4.3-接口清单/4.3.5-执行管理-apiv1executions.md)
   - 验收：同一 Issue 可多轮追加上下文；历史执行记录不被覆盖。
@@ -120,18 +120,18 @@
 - [ ] T13 IssueAnalyzer 前置分析
   - 目标：在 Issue 执行前生成复杂度、风险、建议工具和初步计划。
   - 参考 wiki 小文档：
-    - [分析 Prompt 模板](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器IssueAnalyzer/分析-Prompt-模板.md)
-    - [异步分析任务](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器IssueAnalyzer/异步分析任务.md)
-    - [分析与计划触发时机](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器IssueAnalyzer/分析与计划触发时机.md)
-    - [前端体验](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器IssueAnalyzer/前端体验.md)
+    - [分析 Prompt 模板](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器-IssueAnalyzer/分析-Prompt-模板.md)
+    - [异步分析任务](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器-IssueAnalyzer/异步分析任务.md)
+    - [分析与计划触发时机](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器-IssueAnalyzer/分析与计划触发时机.md)
+    - [前端体验](wiki/07-AI编程工具集成/7.6b-前置分析与分类适配器-IssueAnalyzer/前端体验.md)
   - 验收：Issue 创建或进入分析状态后可得到分析结果；分析失败不会阻断人工处理。
 
 - [ ] T14 RequirementDecomposer 需求拆解
   - 目标：把较大需求拆成可执行 Issue，并给用户确认入口。
   - 参考 wiki 小文档：
-    - [拆解流程](wiki/07-AI编程工具集成/7.6c-需求自动拆解RequirementDecomposer/拆解流程.md)
-    - [适配器实现](wiki/07-AI编程工具集成/7.6c-需求自动拆解RequirementDecomposer/适配器实现.md)
-    - [用户确认界面](wiki/07-AI编程工具集成/7.6c-需求自动拆解RequirementDecomposer/用户确认界面.md)
+    - [拆解流程](wiki/07-AI编程工具集成/7.6c-需求自动拆解-RequirementDecomposer/拆解流程.md)
+    - [适配器实现](wiki/07-AI编程工具集成/7.6c-需求自动拆解-RequirementDecomposer/适配器实现.md)
+    - [用户确认界面](wiki/07-AI编程工具集成/7.6c-需求自动拆解-RequirementDecomposer/用户确认界面.md)
   - 验收：用户可确认、修改或拒绝 AI 拆解结果；确认后批量生成 Issue。
 
 - [ ] T15 AI 执行通信与 Docker 沙箱
@@ -139,8 +139,8 @@
   - 参考 wiki 小文档：
     - [7.1b 通信机制](wiki/07-AI编程工具集成/7.1-概述/7.1b-通信机制.md)
     - [7.1c 触发 opencode 开始开发](wiki/07-AI编程工具集成/7.1-概述/7.1c-触发-opencode-开始开发.md)
-    - [SandboxManager 实现](wiki/07-AI编程工具集成/7.2-Docker-沙箱执行环境/SandboxManager-实现.md)
-    - [Docker 沙箱镜像](wiki/07-AI编程工具集成/7.2-Docker-沙箱执行环境/Docker-沙箱镜像.md)
+    - [SandboxManager 实现](wiki/07-AI编程工具集成/7.2-Docker-沙盒执行环境/SandboxManager-实现.md)
+    - [Docker 沙箱镜像](wiki/07-AI编程工具集成/7.2-Docker-沙盒执行环境/Docker-沙盒镜像.md)
   - 验收：一个 Issue 可被投递到沙箱执行；执行输出、失败原因和退出状态可查询。
 
 - [ ] T16 OpenCode 与 Codex 适配
@@ -226,14 +226,14 @@
   - 参考 wiki 小文档：
     - [9.5 监控面板](wiki/09-监控与反馈闭环/9.5-监控面板/README.md)
     - [9.7 反馈入口](wiki/09-监控与反馈闭环/9.7-反馈入口.md)
-    - [9.8 监控与 Issue 双向追踪](wiki/09-监控与反馈闭环/9.8-监控与-Issue-双向追踪.md)
+    - [9.8 监控与 Issue 双向追踪](wiki/09-监控与反馈闭环/9.8-监控与-Issue-双向追溯.md)
   - 验收：用户可以从监控事件进入 Issue，也可以从 Issue 回看来源事件。
 
 - [ ] T25 SaaS 多租户隔离
   - 目标：补齐组织、成员、租户识别和查询隔离，避免跨组织数据访问。
   - 参考 wiki 小文档：
     - [2.4 SaaS 多租户架构](wiki/02-系统架构/2.4-SaaS-多租户架构/README.md)
-    - [3.2.0 Organization 组织表](wiki/03-数据模型/3.2-核心表结构/3.2.0-Organization-组织表SaaS-核心.md)
+    - [3.2.0 Organization 组织表](wiki/03-数据模型/3.2-核心表结构/3.2.0-Organization-组织表-SaaS-核心.md)
     - [3.2.0b OrgMember 组织成员表](wiki/03-数据模型/3.2-核心表结构/3.2.0b-OrgMember-组织成员表.md)
     - [4.3.1b 组织管理](wiki/04-API设计/4.3-接口清单/4.3.1b-组织管理-apiv1orgs-SaaS.md)
   - 验收：任意项目、需求、Issue、日志查询都受 orgId 约束；越权访问有测试。
