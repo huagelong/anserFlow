@@ -88,7 +88,7 @@ curl -X POST /api/v1/projects/proj_1/git/connect \
     "name": "公司 GitLab",
     "authMethod": "ssh",
     "sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----",
-    "provider": "github"
+    "provider": "gitlab"
   }'
 
 # 查看凭证列表
@@ -1404,7 +1404,7 @@ flowcode project import-issues --state all
 2. **凭证加密**：数据库存储加密，日志脱敏
 3. **操作审计**：所有 Git 操作自动写入 `audit_logs` 表（action=`git.*`），可追溯
 4. **分支保护**：AI 创建的分支带有 `flowcode/` 前缀，不触碰 `main`/`master`
-5. **可回滚**：PR 关闭不合并时，Issue 触发 `reopen`，随后回到重新审核链路
+5. **可回滚**：PR 关闭不合并时，Issue 触发 `reopen`，随后经 `reopened` 自动回到 `approved` 入口
 6. **SSH 密钥安全**：
    - 私钥仅存储在数据库中（AES-256-GCM 加密），使用后立即清理临时文件
    - `GIT_TERMINAL_PROMPT=0` 禁止任何交互式密码输入
