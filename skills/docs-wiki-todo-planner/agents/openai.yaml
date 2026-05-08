@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "Docs Wiki Todo Planner"
+  short_description: "从项目文档生成 wiki，再从 wiki 生成 vibe coding 任务计划"
+  default_prompt: "从项目文档生成 wiki，并基于 wiki 索引生成由简单到复杂的任务计划。"
