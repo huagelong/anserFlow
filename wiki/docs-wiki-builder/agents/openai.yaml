@@ -1,0 +1,7 @@
+interface:
+  display_name: "Docs Wiki Builder"
+  short_description: "Split docs into a linked wiki."
+  default_prompt: "Use $docs-wiki-builder to turn this project's docs into a linked wiki knowledge base."
+
+policy:
+  allow_implicit_invocation: true
