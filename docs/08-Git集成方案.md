@@ -159,6 +159,8 @@ Issue 进入编码阶段 (approved → 分析完成 → 计划完成 → running
 └───────────────────────────────────────────┘
 ```
 
+> **说明**：上图仅以 GitHub / Gitea 为例展示，GitLab 走同一套 `GitProvider + Webhook` 链路。
+
 ## 8.2b Git URL 可用性校验
 
 添加项目时，系统必须先校验 Git 仓库地址是否可达，防止保存无效配置。
@@ -1246,6 +1248,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 | 平台 | 推荐方式 | 配置方式 |
 |------|---------|---------|
 | GitHub | Fine-grained PAT | Settings > Developer settings > PAT |
+| GitLab | Personal Access Token | User Settings > Access Tokens |
 | Gitea | Access Token | Settings > Applications > Generate Token |
 | GitHub (OAuth) | flowcode OAuth App | 后续版本支持 |
 
