@@ -60,7 +60,7 @@
   - 参考 wiki 小文档：
     - [4.3.3 需求管理](wiki/04-API设计/4.3-接口清单/4.3.3-需求管理-apiv1requirements.md)
     - [3.2.3 Requirement 需求表](wiki/03-数据模型/3.2-核心表结构/3.2.3-Requirement-需求表.md)
-    - [Requirement.status 状态字段](wiki/03-数据模型/3.3-配置与状态字段设计细节/Requirement.status-状态机.md)
+    - [Requirement.status 状态字段](wiki/03-数据模型/3.3-配置与状态字段设计细节/Requirement.status-状态枚举.md)
   - 验收：需求状态变更被记录；非法状态值不能写入。
 
 - [ ] T07 Issue、评论、标签基础管理
@@ -86,8 +86,8 @@
   - 参考 wiki 小文档：
     - [5.1 Issue 生命周期状态机](wiki/05-工作流引擎/5.1-Issue-生命周期状态机.md)
     - [5.2 状态详解](wiki/05-工作流引擎/5.2-状态详解.md)
-    - [5.3.1 Issue 状态机定义](wiki/05-工作流引擎/5.3-状态机实现-基于-looplabfsm/5.3.1-Issue-状态机定义.md)
-    - [5.3.2 转换验证](wiki/05-工作流引擎/5.3-状态机实现-基于-looplabfsm/5.3.2-转换验证.md)
+    - [5.3.1 Issue 状态机定义](wiki/05-工作流引擎/5.3-状态机实现-–-基于-looplabfsm/5.3.1-Issue-状态机定义.md)
+    - [5.3.2 转换验证](wiki/05-工作流引擎/5.3-状态机实现-–-基于-looplabfsm/5.3.2-转换验证.md)
   - 验收：合法流转通过，非法流转失败；状态变化有测试覆盖。
 
 - [ ] T10 执行日志、历史记录与审计记录
@@ -102,7 +102,7 @@
 - [ ] T11 Vibe Coding 续跑能力
   - 目标：允许 AI 执行失败或用户补充要求后继续编辑同一 Issue。
   - 参考 wiki 小文档：
-    - [5.4.3 继续编辑 vibe coding 续跑](wiki/05-工作流引擎/5.4-关键业务逻辑-回调实现/5.4.3-继续编辑-vibe-coding-续跑.md)
+    - [5.4.3 继续编辑 vibe coding 续跑](wiki/05-工作流引擎/5.4-关键业务逻辑-–-回调实现/5.4.3-继续编辑-vibe-coding-续跑.md)
     - [Issue.aiConfig](wiki/03-数据模型/3.3-配置与状态字段设计细节/Issue.aiConfig.md)
     - [4.3.5 执行管理](wiki/04-API设计/4.3-接口清单/4.3.5-执行管理-apiv1executions.md)
   - 验收：同一 Issue 可多轮追加上下文；历史执行记录不被覆盖。
