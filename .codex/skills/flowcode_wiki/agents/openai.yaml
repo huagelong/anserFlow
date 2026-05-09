@@ -1,0 +1,7 @@
+interface:
+  display_name: "FlowCode Wiki Builder"
+  short_description: "Split docs into a linked wiki."
+  default_prompt: "Use $flowcode_wiki to turn this project's docs into a linked wiki knowledge base."
+
+policy:
+  allow_implicit_invocation: true
