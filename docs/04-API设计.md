@@ -197,6 +197,12 @@
 | POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved；若无计划则先生成计划）** |
 | POST | `/api/v1/issues/:id/continue` | **基于原计划继续 vibe coding** |
 | POST | `/api/v1/issues/:id/cancel` | 取消执行 |
+| POST | `/api/v1/issues/:id/retry` | **重试执行**（从 failed/cancelled/done 回到 approved） |
+| POST | `/api/v1/issues/:id/skip` | **跳过执行**（opencode 判定无需代码变更时，从 approved 直接到 done） |
+| POST | `/api/v1/issues/:id/pause` | **暂停执行**（running → paused） |
+| POST | `/api/v1/issues/:id/resume` | **恢复执行**（paused → running） |
+| POST | `/api/v1/issues/:id/deploy` | **标记已部署**（pr_created → deployed） |
+| POST | `/api/v1/issues/:id/fast-exec` | **管理员快速执行**（跳过排队，approved → queued） |
 | POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/rejected/pr_created 均可关闭） |
 | POST | `/api/v1/issues/:id/reopen` | **重新打开**（支持从 closed/rejected/cancelled/done/deployed/pr_created 重开；先进入 `reopened`，再自动回到 `approved`） |
 | GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
