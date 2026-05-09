@@ -206,20 +206,78 @@
 | POST | `/api/v1/issues/:id/comments` | **添加评论** |
 | PUT | `/api/v1/comments/:id` | **编辑评论** |
 | DELETE | `/api/v1/comments/:id` | **删除评论（软删除）** |
+| GET | `/api/v1/issues/:id/questions` | **获取 Issue 的 AI 问询列表** |
+| PUT | `/api/v1/issues/:id/questions/:qid/answer` | **回答 AI 问询** |
+| PUT | `/api/v1/issues/:id/questions/:qid/skip` | **跳过 AI 问询** |
+
+**AI 问询列表** `GET /api/v1/issues/:id/questions`：
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": [
+    {
+      "id": "q_abc123",
+      "issueId": "iss_xyz",
+      "question": "检测到项目同时存在 src/components/ 和 components/ 目录，应将新组件放在哪个目录下？",
+      "context": "- 当前文件: App.tsx\n- src/components/ 包含 12 个组件\n- components/ 包含 3 个组件（较旧）",
+      "options": ["src/components/ (推荐)", "components/", "统一到 src/components/ 并迁移旧组件"],
+      "status": "pending",
+      "askedAt": "2026-05-09T14:30:00Z"
+    }
+  ],
+  "message": "ok"
+}
+```
+
+**回答问询** `PUT /api/v1/issues/:id/questions/:qid/answer`：
+
+```json
+// 请求
+{
+  "answer": "统一到 src/components/ 并迁移旧组件",
+  "selectedOption": 2
+}
+```
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": {
+    "id": "q_abc123",
+    "status": "answered",
+    "answer": "统一到 src/components/ 并迁移旧组件",
+    "answeredAt": "2026-05-09T14:35:00Z"
+  },
+  "message": "ok"
+}
+```
+
+**跳过问询** `PUT /api/v1/issues/:id/questions/:qid/skip`：
+
+```json
+// 请求 (无请求体或可选原因)
+{
+  "reason": "让 AI 自行决策"
+}
+```
+
+```json
+// 响应
+{
+  "code": 0,
+  "data": {
+    "id": "q_abc123",
+    "status": "skipped",
+    "answeredAt": "2026-05-09T14:35:00Z"
+  },
+  "message": "ok"
+}
+```
 
 **Issue 列表查询参数**：
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| status | string | 状态过滤，逗号分隔 |
-| priority | string | 优先级过滤 |
-| category | string | 分类过滤 |
-| search | string | 标题/描述全文搜索 |
-| requirementId | UUID | 按需求筛选 |
-| sort | string | 排序字段 (createdAt/priority/updatedAt) |
-| order | string | asc / desc |
-| cursor | string | 分页游标 |
-| limit | int | 每页数量 (默认20) |
 
 **更新 Issue** `PUT /api/v1/issues/:id`：
 
