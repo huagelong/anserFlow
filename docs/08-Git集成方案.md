@@ -436,36 +436,18 @@ type SSHKeyManager struct {
 
 func (m *SSHKeyManager) ValidatePublicKey(privateKeyPEM string, passphrase string) (fingerprint string, err error) {
     // 1. 解析私钥
-    var block *pem.Block
+    var rawKey interface{}
     if passphrase != "" {
-        block, _ = pem.Decode([]byte(privateKeyPEM))
-        decrypted, err := x509.DecryptPEMBlock(block, []byte(passphrase))
-        if err != nil {
-            return "", fmt.Errorf("私钥密码错误: %w", err)
-        }
-        block = &pem.Block{Type: block.Type, Bytes: decrypted}
+        rawKey, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(privateKeyPEM), []byte(passphrase))
     } else {
-        block, _ = pem.Decode([]byte(privateKeyPEM))
-    }
-
-    // 2. 解析为 crypto.Signer
-    var key interface{}
-    switch block.Type {
-    case "RSA PRIVATE KEY":
-        key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-    case "EC PRIVATE KEY":
-        key, err = x509.ParseECPrivateKey(block.Bytes)
-    case "OPENSSH PRIVATE KEY":
-        key, err = ssh.ParseRawPrivateKey([]byte(privateKeyPEM))
-    default:
-        return "", fmt.Errorf("不支持的密钥类型: %s", block.Type)
+        rawKey, err = ssh.ParseRawPrivateKey([]byte(privateKeyPEM))
     }
     if err != nil {
-        return "", fmt.Errorf("密钥解析失败: %w", err)
+        return "", fmt.Errorf("私钥解析失败: %w", err)
     }
 
     // 3. 生成指纹 (SHA256)
-    publicKey := getPublicKey(key)
+    publicKey := getPublicKey(rawKey)
     sshPublicKey, _ := ssh.NewPublicKey(publicKey)
     fingerprint = ssh.FingerprintSHA256(sshPublicKey)
 
