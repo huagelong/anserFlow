@@ -197,7 +197,7 @@
 | POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved；若无计划则先生成计划）** |
 | POST | `/api/v1/issues/:id/continue` | **基于原计划继续 vibe coding** |
 | POST | `/api/v1/issues/:id/cancel` | 取消执行 |
-| POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/rejected 均可关闭） |
+| POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/rejected/pr_created 均可关闭） |
 | POST | `/api/v1/issues/:id/reopen` | **重新打开**（支持从 closed/rejected/cancelled/done/deployed/pr_created 重开；先进入 `reopened`，再自动回到 `approved`） |
 | GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
 | PUT | `/api/v1/issues/:id/priority` | 调整优先级 |

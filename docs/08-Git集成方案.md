@@ -255,8 +255,10 @@ func (v *GitURLValidator) validateSSH(ctx context.Context, parsed *GitURL, crede
     defer os.Remove(tmpKeyFile)
 
     // 使用 GIT_SSH_COMMAND 指定临时密钥进行校验
+    // 使用 parsed 的 SSH 格式 URL (git@host:user/repo.git)
+    sshURL := parsed.SSHURL()
     sshCmd := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o PasswordAuthentication=no", tmpKeyFile)
-    cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", gitURL)
+    cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", sshURL)
     cmd.Env = append(os.Environ(),
         "GIT_TERMINAL_PROMPT=0",
         "GIT_SSH_COMMAND="+sshCmd,
@@ -1239,6 +1241,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
     issue, _ := h.svc.FindIssueByRepoAndBranch(ctx, event.RepoFullName, event.HeadRef)
     if issue != nil {
         h.issueSvc.Transition(ctx, issue.ID, "reopen")
+        h.issueSvc.Transition(ctx, issue.ID, "reopen_to_approved")
     }
 }
 ```
