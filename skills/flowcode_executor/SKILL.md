@@ -1,13 +1,13 @@
 ---
-name: vibe-coding-todo-executor
-description: 按照已有 vibe coding todo list 逐项执行开发任务。Use when Codex 需要从现有 todos.md、任务清单或 wiki 生成的 todo list 中选择未完成任务，读取关联 wiki/文档，明确验收标准，做最小代码修改，运行验证，并在通过后更新 todo 状态；适用于“按照 todo list 执行”“继续下一个任务”“完成 Txx”“批量执行前 N 个 todo”等场景。
+name: flowcode_executor
+description: 按照已有 vibe coding todo list 逐项执行开发任务。Use when Codex 需要从现有 todos.md、任务清单或 wiki 生成的 todo list 中选择未完成任务，读取关联 wiki/文档，明确验收标准，做最小代码修改，运行验证，并在通过后更新 todo 状态；适用于"按照 todo list 执行""继续下一个任务""完成 Txx""批量执行前 N 个 todo"等场景。
 ---
 
 # Vibe Coding Todo Executor
 
 ## 使用目标
 
-按照已有 todo list 执行 vibe coding 任务，把任务从“计划”推进到“已验证完成”。
+按照已有 todo list 执行 vibe coding 任务，把任务从"计划"推进到"已验证完成"。
 
 必须遵守：
 
@@ -31,7 +31,7 @@ linkedDocs     当前任务引用的 wiki 或文档
 推断顺序：
 
 1. 优先使用用户明确给出的 todo 文件或任务编号。
-2. 如果用户只说“按照 todo list 执行”，优先查找当前项目根目录的 `todos.md`。
+2. 如果用户只说"按照 todo list 执行"，优先查找当前项目根目录的 `todos.md`。
 3. 如果 todo 中引用了 wiki 链接，只读取当前任务相关链接；不要一次性加载整个 wiki。
 4. 如果 todo 没有引用文档，但项目存在明显的 `wiki/README.md`，可把它作为索引辅助定位。
 5. 如果存在多个候选 todo 文件且无法判断，先询问用户。

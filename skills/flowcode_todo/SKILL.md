@@ -1,5 +1,5 @@
 ---
-name: docs-wiki-todo-planner
+name: flowcode_todo
 description: 从项目 Markdown 文档生成 wiki 知识库，并根据 wiki 索引生成 vibe coding 任务计划。Use when Codex 需要执行文档生成 wiki、wiki 生成 todos、或文档生成 wiki 再生成 todos 的综合流程；适用于用户要求拆分文档、生成知识库目录、根据 wiki 索引生成先简单后复杂的任务清单、并要求每个任务链接到对应 wiki 小文档的场景。目录必须支持用户指定或自动推断，不能把 docs、wiki、todos.md 写成唯一固定路径。
 ---
 
@@ -39,15 +39,15 @@ todoOutput      任务计划输出文件
 
 1. 优先使用用户明确给出的路径。
 2. 如果用户只给出 `wiki/README.md`，则 `wikiDir` 是其父目录，`wikiIndex` 是该文件。
-3. 如果用户只说“根据 wiki 生成 todo”，优先查找当前项目中已有的 wiki 索引，例如 `<wikiDir>/README.md`；不要假设只有根目录 `wiki/README.md`。
-4. 如果用户只说“根据 docs 生成 wiki”，优先查找当前项目中明显的 Markdown 文档目录，例如 `docs/`；如果存在多个候选且无法判断，先询问用户。
+3. 如果用户只说"根据 wiki 生成 todo"，优先查找当前项目中已有的 wiki 索引，例如 `<wikiDir>/README.md`；不要假设只有根目录 `wiki/README.md`。
+4. 如果用户只说"根据 docs 生成 wiki"，优先查找当前项目中明显的 Markdown 文档目录，例如 `docs/`；如果存在多个候选且无法判断，先询问用户。
 5. 如果用户要求输出到 `todos.md`，按要求写入；否则将任务计划写入用户指定的 `todoOutput`，没有指定时才默认使用项目根目录的 `todos.md`。
 
 在汇报中说明实际采用的路径。
 
 ## 生成 wiki 流程
 
-参考 `docs-wiki-builder` 的方法，但保持目录通用：
+参考 `flowcode_wiki` 的方法，但保持目录通用：
 
 1. 收集 `sourceDocsDir` 下的 Markdown 文件。
    - 默认只处理该目录内的 `.md` 文件。
@@ -75,7 +75,7 @@ todoOutput      任务计划输出文件
 
 ## 生成 todo list 流程
 
-当用户要求“根据 wiki/README.md 生成 vibe coding 任务计划，要求先简单后复杂；每个任务指向对应的 wiki 小文档；任务计划放到 todos.md 文档”时，执行以下流程。
+当用户要求"根据 wiki/README.md 生成 vibe coding 任务计划，要求先简单后复杂；每个任务指向对应的 wiki 小文档；任务计划放到 todos.md 文档"时，执行以下流程。
 
 1. 读取 `wikiIndex`。
    - 提取快速入口、推荐检索路径、关系图谱、细分文档树。
@@ -83,7 +83,7 @@ todoOutput      任务计划输出文件
 2. 必要时读取相关 wiki 小文档。
    - 优先读取任务所需的小文档，而不是一次性加载整个 wiki。
    - 任务标题和验收标准必须来自 wiki 内容或其明确关系，不要编造产品能力。
-3. 按“先简单后复杂”组织任务。
+3. 按"先简单后复杂"组织任务。
    - L1：项目启动、基础契约、健康检查、最小数据结构。
    - L2：核心 CRUD 和页面/接口入口。
    - L3：工作流、状态机、日志、可追踪性。
@@ -98,7 +98,7 @@ todoOutput      任务计划输出文件
    - 参考 wiki 小文档：至少一个真实存在的 wiki 链接。
    - 验收：可检查的完成标准。
 5. 写入 `todoOutput`。
-   - 如果目标文件已存在，先读取并判断是覆盖、更新还是合并；用户已明确要求“生成/放到”该文件时，可以更新该文件，但不要改无关内容。
+   - 如果目标文件已存在，先读取并判断是覆盖、更新还是合并；用户已明确要求"生成/放到"该文件时，可以更新该文件，但不要改无关内容。
    - 不额外创建 changelog、summary、临时检查报告。
 
 推荐结构：
@@ -140,7 +140,7 @@ todoOutput      任务计划输出文件
 - todo list 中所有 wiki 链接都能指向真实文件。
 - 任务编号连续，不重复。
 
-如果用户要求“循环检查 N 次”，用同一套确定性检查重复 N 次，并汇报每轮结果，例如：
+如果用户要求"循环检查 N 次"，用同一套确定性检查重复 N 次，并汇报每轮结果，例如：
 
 ```text
 ROUND=1 LEVELS=... TASKS=... LINKS=... MISSING=...

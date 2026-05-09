@@ -1,4 +1,0 @@
-interface:
-  display_name: "Vibe Coding Todo 执行器"
-  short_description: "按现有 todo list 逐项执行、验证并勾选任务。"
-  default_prompt: "Use $vibe-coding-todo-executor 按 todos.md 执行下一个未完成任务。"

@@ -1,5 +1,5 @@
 ---
-name: docs-wiki-builder
+name: flowcode_wiki
 description: Build a wiki-style knowledge base from a project's existing docs/*.md files. Use when Codex is asked to analyze documentation, split long docs into smaller Markdown pages, create a central wiki index, add retrieval paths, relationship graphs, and cross-links, while using docs as the only content source and avoiding unrelated file changes.
 ---
 
@@ -32,7 +32,7 @@ wiki/
       <子章节>.md
 ```
 
-如果本 Skill 的副本也放在项目 `wiki/docs-wiki-builder/` 下，生成业务 wiki 时不要覆盖或移动这个 Skill 目录。
+如果本 Skill 的副本也放在项目 `wiki/flowcode_wiki/` 下，生成业务 wiki 时不要覆盖或移动这个 Skill 目录。
 
 ## 拆分规则
 
