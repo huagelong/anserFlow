@@ -51,7 +51,30 @@
 | POST | `/api/v1/auth/login` | 登录，返回 JWT |
 | POST | `/api/v1/auth/refresh` | 刷新 token |
 | GET | `/api/v1/auth/me` | 获取当前用户信息（含 locale） |
-| PUT | `/api/v1/auth/me` | 更新用户信息（locale / avatarUrl） |
+| PUT | `/api/v1/auth/me` | 更新用户信息（locale / avatarUrl，不含 username） |
+| PUT | `/api/v1/auth/password` | 修改当前用户密码 |
+
+### 4.3.1a 密码管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| PUT | `/api/v1/auth/password` | 校验当前密码并更新为新密码 |
+
+请求示例：
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "NewPassword#2026",
+  "logoutOtherDevices": true
+}
+```
+
+说明：
+
+- `username` 为唯一账号标识，账号创建后冻结；成员本人和管理员都不能通过任何更新接口修改。
+- `logoutOtherDevices=true` 时，修改密码成功后吊销当前用户其他设备登录态，仅保留当前请求对应设备。
+- 失败时返回字段级错误或统一错误消息，不回显密码规则之外的敏感细节。
 
 ### 4.3.1b 组织管理 `/api/v1/orgs` (SaaS)
 
@@ -62,8 +85,34 @@
 | GET | `/api/v1/orgs/:slug` | 组织详情 |
 | PUT | `/api/v1/orgs/:slug` | 更新组织 |
 | POST | `/api/v1/orgs/:slug/members` | 邀请成员 |
+| GET | `/api/v1/orgs/:slug/members/:uid` | 获取成员资料详情 |
+| PUT | `/api/v1/orgs/:slug/members/:uid` | 更新成员资料与组织角色 |
 | DELETE | `/api/v1/orgs/:slug/members/:uid` | 移除成员 |
 | PUT | `/api/v1/orgs/:slug/members/:uid/role` | 修改成员角色 |
+
+### 4.3.1ba 成员资料管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/orgs/:slug/members/:uid` | 返回成员资料、成员状态、最近登录摘要 |
+| PUT | `/api/v1/orgs/:slug/members/:uid` | 更新邮箱、语言偏好、头像地址和当前组织角色 |
+
+请求示例：
+
+```json
+{
+  "email": "lina@flowcode.dev",
+  "locale": "zh-CN",
+  "avatarUrl": "https://cdn.flowcode.dev/avatar/lina.png",
+  "role": "admin"
+}
+```
+
+说明：
+
+- `username` 为唯一账号标识，账号创建后冻结；不允许通过该接口修改。
+- `role` 仅影响当前组织成员关系，不修改用户在其他组织中的身份。
+- 当目标成员是当前组织唯一 `owner` 时，接口必须拒绝将其降级。
 
 ### 4.3.1c API 密钥管理 `/api/v1/api-keys`
 
