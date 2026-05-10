@@ -256,7 +256,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -265,24 +267,46 @@
               "type": "frame",
               "id": "TioEU",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "fdAKQ",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo1"
-                },
+                  "name": "logo1",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "w7cr9d",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "lHvx2",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -295,7 +319,7 @@
                       "type": "text",
                       "id": "tmp5k",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -308,10 +332,11 @@
                   "id": "h2bwk",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -324,23 +349,14 @@
                       "type": "text",
                       "id": "Vc7nu",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "w7cr9d",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "rjpcc",
@@ -429,12 +445,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -459,7 +475,7 @@
                       "type": "text",
                       "id": "i7Wo0Y",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -473,7 +489,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -528,7 +544,7 @@
                       "type": "text",
                       "id": "xMpox",
                       "name": "navIssueIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📋",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -538,7 +554,7 @@
                       "type": "text",
                       "id": "WIzHU",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -590,7 +606,7 @@
                       "type": "text",
                       "id": "A5zi0",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -600,7 +616,7 @@
                       "type": "text",
                       "id": "I8j3i",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -626,7 +642,7 @@
                       "type": "text",
                       "id": "HRIZG",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -636,7 +652,7 @@
                       "type": "text",
                       "id": "lbyiv",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -662,7 +678,7 @@
                       "type": "text",
                       "id": "w3qWE5",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -672,7 +688,7 @@
                       "type": "text",
                       "id": "G93gTQ",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -698,7 +714,7 @@
                       "type": "text",
                       "id": "ZC9R5",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -708,7 +724,7 @@
                       "type": "text",
                       "id": "S6Suv3",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -732,7 +748,7 @@
                       "type": "text",
                       "id": "FqNNx",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -758,7 +774,7 @@
                       "type": "text",
                       "id": "dwoRU",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -768,7 +784,7 @@
                       "type": "text",
                       "id": "ZRx2Y",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -794,7 +810,7 @@
                       "type": "text",
                       "id": "BXOSb",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -804,7 +820,7 @@
                       "type": "text",
                       "id": "KexBV",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -830,7 +846,7 @@
                       "type": "text",
                       "id": "Lub1Q",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -840,7 +856,7 @@
                       "type": "text",
                       "id": "CR5QF",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -1714,7 +1730,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -1723,24 +1741,46 @@
               "type": "frame",
               "id": "aZz4z",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "cpsab",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo2"
-                },
+                  "name": "logo2",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rbxlX",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "udp1m",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -1753,7 +1793,7 @@
                       "type": "text",
                       "id": "qx4zF",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -1766,10 +1806,11 @@
                   "id": "tzT3L",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -1782,23 +1823,14 @@
                       "type": "text",
                       "id": "e3wP1F",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "rbxlX",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "Ri5Bc",
@@ -1887,12 +1919,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -1917,7 +1949,7 @@
                       "type": "text",
                       "id": "KH3a1",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -1931,7 +1963,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -1944,7 +1976,7 @@
                       "type": "text",
                       "id": "esKO7",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -1954,7 +1986,7 @@
                       "type": "text",
                       "id": "bWeYm",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -1968,7 +2000,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -1997,7 +2029,7 @@
                       "type": "text",
                       "id": "qwkWY",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2049,7 +2081,7 @@
                       "type": "text",
                       "id": "N59YC",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2059,7 +2091,7 @@
                       "type": "text",
                       "id": "Vues2",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2085,7 +2117,7 @@
                       "type": "text",
                       "id": "Q1Ta4",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2095,7 +2127,7 @@
                       "type": "text",
                       "id": "Z2JDn",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2121,7 +2153,7 @@
                       "type": "text",
                       "id": "PV7VR",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2131,7 +2163,7 @@
                       "type": "text",
                       "id": "pfVR6",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2157,7 +2189,7 @@
                       "type": "text",
                       "id": "sDnQM",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2167,7 +2199,7 @@
                       "type": "text",
                       "id": "J61Lyt",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2191,7 +2223,7 @@
                       "type": "text",
                       "id": "f5PRO",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -2217,7 +2249,7 @@
                       "type": "text",
                       "id": "oKzOX",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2227,7 +2259,7 @@
                       "type": "text",
                       "id": "EiLJx",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2253,7 +2285,7 @@
                       "type": "text",
                       "id": "c3dBO",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2263,7 +2295,7 @@
                       "type": "text",
                       "id": "nxyDd",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -2289,7 +2321,7 @@
                       "type": "text",
                       "id": "QQ37W",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -2299,7 +2331,7 @@
                       "type": "text",
                       "id": "Bzp9J",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3373,7 +3405,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -3382,24 +3416,46 @@
               "type": "frame",
               "id": "pas7J",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "lJ3Eu",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo3"
-                },
+                  "name": "logo3",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dpX1d",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "yl3ZG",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -3412,7 +3468,7 @@
                       "type": "text",
                       "id": "h30Y9",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3425,10 +3481,11 @@
                   "id": "VYKtq",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -3441,23 +3498,14 @@
                       "type": "text",
                       "id": "Qzgu6",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "dpX1d",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "PHYWy",
@@ -3546,12 +3594,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -3576,7 +3624,7 @@
                       "type": "text",
                       "id": "C4FL1",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -3590,7 +3638,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -3609,7 +3657,7 @@
                       "type": "text",
                       "id": "q4P88l",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3619,7 +3667,7 @@
                       "type": "text",
                       "id": "I86lX4",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3633,7 +3681,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -3656,7 +3704,7 @@
                       "type": "text",
                       "id": "l2mNl",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3708,7 +3756,7 @@
                       "type": "text",
                       "id": "ZVF7v",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3718,7 +3766,7 @@
                       "type": "text",
                       "id": "LZ46z",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3744,7 +3792,7 @@
                       "type": "text",
                       "id": "PED2J",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3754,7 +3802,7 @@
                       "type": "text",
                       "id": "qXcnL",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3780,7 +3828,7 @@
                       "type": "text",
                       "id": "fP853",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3790,7 +3838,7 @@
                       "type": "text",
                       "id": "kacz2",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3816,7 +3864,7 @@
                       "type": "text",
                       "id": "PSnGw",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3826,7 +3874,7 @@
                       "type": "text",
                       "id": "SjTc6",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3850,7 +3898,7 @@
                       "type": "text",
                       "id": "O4fM6Y",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -3876,7 +3924,7 @@
                       "type": "text",
                       "id": "QQsk1",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3886,7 +3934,7 @@
                       "type": "text",
                       "id": "Vlc4J",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3912,7 +3960,7 @@
                       "type": "text",
                       "id": "mLHge",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3922,7 +3970,7 @@
                       "type": "text",
                       "id": "JaHNG",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -3948,7 +3996,7 @@
                       "type": "text",
                       "id": "b8mlZZ",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -3958,7 +4006,7 @@
                       "type": "text",
                       "id": "gYhJ0",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -4967,7 +5015,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -4976,24 +5026,46 @@
               "type": "frame",
               "id": "WWmuV",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "zpPx5",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo4"
-                },
+                  "name": "logo4",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "YZ0Pl",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "g9C0gN",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -5006,7 +5078,7 @@
                       "type": "text",
                       "id": "QDnkA",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5019,10 +5091,11 @@
                   "id": "Rkd0t",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -5035,23 +5108,14 @@
                       "type": "text",
                       "id": "sUapJ",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "YZ0Pl",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "NOo3d",
@@ -5140,12 +5204,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -5170,7 +5234,7 @@
                       "type": "text",
                       "id": "d6T3Y",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -5184,7 +5248,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -5203,7 +5267,7 @@
                       "type": "text",
                       "id": "JfUC1",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5213,7 +5277,7 @@
                       "type": "text",
                       "id": "nAik2",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5227,7 +5291,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -5250,7 +5314,7 @@
                       "type": "text",
                       "id": "BLvid",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5302,7 +5366,7 @@
                       "type": "text",
                       "id": "qWhTp",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5312,7 +5376,7 @@
                       "type": "text",
                       "id": "djR1g",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5338,7 +5402,7 @@
                       "type": "text",
                       "id": "si04e",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5348,7 +5412,7 @@
                       "type": "text",
                       "id": "bnTpF",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5374,7 +5438,7 @@
                       "type": "text",
                       "id": "BnfLL",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5384,7 +5448,7 @@
                       "type": "text",
                       "id": "xS4ff",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5410,7 +5474,7 @@
                       "type": "text",
                       "id": "CwTuU",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5420,7 +5484,7 @@
                       "type": "text",
                       "id": "uYCbn",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5444,7 +5508,7 @@
                       "type": "text",
                       "id": "e2eCy",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -5470,7 +5534,7 @@
                       "type": "text",
                       "id": "sdXlc",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5480,7 +5544,7 @@
                       "type": "text",
                       "id": "keWW7",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5506,7 +5570,7 @@
                       "type": "text",
                       "id": "uzti7",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5516,7 +5580,7 @@
                       "type": "text",
                       "id": "wdZZo",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -5542,7 +5606,7 @@
                       "type": "text",
                       "id": "iaYW6",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -5552,7 +5616,7 @@
                       "type": "text",
                       "id": "CZfXt",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6319,7 +6383,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -6328,24 +6394,46 @@
               "type": "frame",
               "id": "u78vEH",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "a1y6pW",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo5"
-                },
+                  "name": "logo5",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d6dbU",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "JSBpP",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -6358,7 +6446,7 @@
                       "type": "text",
                       "id": "os5Nd",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6371,10 +6459,11 @@
                   "id": "guhbv",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -6387,23 +6476,14 @@
                       "type": "text",
                       "id": "w76rsa",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "d6dbU",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "HBUtf",
@@ -6492,12 +6572,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -6522,7 +6602,7 @@
                       "type": "text",
                       "id": "VSrYD",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -6536,7 +6616,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -6555,7 +6635,7 @@
                       "type": "text",
                       "id": "NAP4p",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6565,7 +6645,7 @@
                       "type": "text",
                       "id": "lUQU0",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6579,7 +6659,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -6602,7 +6682,7 @@
                       "type": "text",
                       "id": "yRYWg",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6654,7 +6734,7 @@
                       "type": "text",
                       "id": "Q3mnf",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6664,7 +6744,7 @@
                       "type": "text",
                       "id": "Stu69",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6690,7 +6770,7 @@
                       "type": "text",
                       "id": "hfFNc",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6700,7 +6780,7 @@
                       "type": "text",
                       "id": "MAjMW",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6726,7 +6806,7 @@
                       "type": "text",
                       "id": "yW9tH",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6736,7 +6816,7 @@
                       "type": "text",
                       "id": "jogjP",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6762,7 +6842,7 @@
                       "type": "text",
                       "id": "QDtsO",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6772,7 +6852,7 @@
                       "type": "text",
                       "id": "ipF7u",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6796,7 +6876,7 @@
                       "type": "text",
                       "id": "r7up3Q",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -6822,7 +6902,7 @@
                       "type": "text",
                       "id": "ve6jE",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6832,7 +6912,7 @@
                       "type": "text",
                       "id": "Clb4r",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6858,7 +6938,7 @@
                       "type": "text",
                       "id": "sQY25",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6868,7 +6948,7 @@
                       "type": "text",
                       "id": "aVlFS",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -6894,7 +6974,7 @@
                       "type": "text",
                       "id": "r7us5r",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -6904,7 +6984,7 @@
                       "type": "text",
                       "id": "Zrktq",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7527,7 +7607,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -7536,24 +7618,46 @@
               "type": "frame",
               "id": "l81ty",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "W7Imc",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo6"
-                },
+                  "name": "logo6",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "diR4E",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "HeJ0l",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -7566,7 +7670,7 @@
                       "type": "text",
                       "id": "upVWI",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7579,10 +7683,11 @@
                   "id": "US163",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -7595,23 +7700,14 @@
                       "type": "text",
                       "id": "RsIDl",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "diR4E",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "O3eSRd",
@@ -7700,12 +7796,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -7730,7 +7826,7 @@
                       "type": "text",
                       "id": "BBOml",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -7744,7 +7840,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -7763,7 +7859,7 @@
                       "type": "text",
                       "id": "t1L7y3",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -7773,7 +7869,7 @@
                       "type": "text",
                       "id": "m9Yt0U",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7787,7 +7883,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -7810,7 +7906,7 @@
                       "type": "text",
                       "id": "tON32",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7862,7 +7958,7 @@
                       "type": "text",
                       "id": "H0Wkt",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -7872,7 +7968,7 @@
                       "type": "text",
                       "id": "kHcBT",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7898,7 +7994,7 @@
                       "type": "text",
                       "id": "z0Ktd",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -7908,7 +8004,7 @@
                       "type": "text",
                       "id": "i3c24",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7934,7 +8030,7 @@
                       "type": "text",
                       "id": "W5ih0l",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -7944,7 +8040,7 @@
                       "type": "text",
                       "id": "tHp01",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -7970,7 +8066,7 @@
                       "type": "text",
                       "id": "ldEop",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -7980,7 +8076,7 @@
                       "type": "text",
                       "id": "ppmYS",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -8004,7 +8100,7 @@
                       "type": "text",
                       "id": "BxXgN",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -8030,7 +8126,7 @@
                       "type": "text",
                       "id": "Ruk0b",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -8040,7 +8136,7 @@
                       "type": "text",
                       "id": "ZMM6Z",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -8066,7 +8162,7 @@
                       "type": "text",
                       "id": "E7RK7F",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -8076,7 +8172,7 @@
                       "type": "text",
                       "id": "w3YCoX",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -8102,7 +8198,7 @@
                       "type": "text",
                       "id": "RyrVX",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -8112,7 +8208,7 @@
                       "type": "text",
                       "id": "ruJpH",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -8795,7 +8891,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -8804,24 +8902,46 @@
               "type": "frame",
               "id": "EMrlI",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "SC353",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo7"
-                },
+                  "name": "logo7",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "D0El3C",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "N9t2Lo",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -8834,7 +8954,7 @@
                       "type": "text",
                       "id": "ZbZGu",
                       "name": "orgName",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -8847,10 +8967,11 @@
                   "id": "oUcRp",
                   "name": "ProjSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "gap": 4,
                   "padding": [
@@ -8863,23 +8984,14 @@
                       "type": "text",
                       "id": "pEKQj",
                       "name": "projName",
-                      "fill": "$primary-text",
+                      "fill": "#303133",
                       "content": "flowcode-app ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "D0El3C",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "AWBZO",
@@ -8968,12 +9080,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -8998,7 +9110,7 @@
                       "type": "text",
                       "id": "u1DTi",
                       "name": "navGroup1",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "工作区",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -9012,7 +9124,7 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -9031,7 +9143,7 @@
                       "type": "text",
                       "id": "GB7Lv",
                       "name": "navDashIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📊",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9041,7 +9153,7 @@
                       "type": "text",
                       "id": "mkyTD",
                       "name": "navDashLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "仪表盘",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9055,7 +9167,7 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$surface",
+                  "fill": "#111827",
                   "cornerRadius": 4,
                   "gap": 8,
                   "padding": [
@@ -9078,7 +9190,7 @@
                       "type": "text",
                       "id": "UKfDa",
                       "name": "navIssueLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Issue 看板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9130,7 +9242,7 @@
                       "type": "text",
                       "id": "WBJHV",
                       "name": "navReqIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📝",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9140,7 +9252,7 @@
                       "type": "text",
                       "id": "s7juc0",
                       "name": "navReqLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "需求管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9166,7 +9278,7 @@
                       "type": "text",
                       "id": "crvb0",
                       "name": "navPRIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🔀",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9176,7 +9288,7 @@
                       "type": "text",
                       "id": "Y3rBJ",
                       "name": "navPRLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "PR 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9202,7 +9314,7 @@
                       "type": "text",
                       "id": "d5HaW4",
                       "name": "navTestIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🧪",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9212,7 +9324,7 @@
                       "type": "text",
                       "id": "NoTwh",
                       "name": "navTestLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "测试用例",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9238,7 +9350,7 @@
                       "type": "text",
                       "id": "k1fB5Z",
                       "name": "navMonitorIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📡",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9248,7 +9360,7 @@
                       "type": "text",
                       "id": "GXA2i",
                       "name": "navMonitorLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "监控面板",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9272,7 +9384,7 @@
                       "type": "text",
                       "id": "c2f2Yl",
                       "name": "navGroup2",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "管理",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -9298,7 +9410,7 @@
                       "type": "text",
                       "id": "B8Qyk",
                       "name": "navSettingsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "⚙️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9308,7 +9420,7 @@
                       "type": "text",
                       "id": "cCCFm",
                       "name": "navSettingsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目设置",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9334,7 +9446,7 @@
                       "type": "text",
                       "id": "uqYiD",
                       "name": "navSkillsIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🤖",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9344,7 +9456,7 @@
                       "type": "text",
                       "id": "AkPYk",
                       "name": "navSkillsLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "Skills 管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -9370,7 +9482,7 @@
                       "type": "text",
                       "id": "EMJcf",
                       "name": "navAuditIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📜",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -9380,7 +9492,7 @@
                       "type": "text",
                       "id": "sBIy0",
                       "name": "navAuditLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "审计日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -10161,7 +10273,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -10170,24 +10284,46 @@
               "type": "frame",
               "id": "KyUHs",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "Bvdk3",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo8"
-                },
+                  "name": "logo8",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zRjqC",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "lLUnA",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -10199,23 +10335,14 @@
                       "type": "text",
                       "id": "zgVJO",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "zRjqC",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "v7k9zy",
@@ -10281,12 +10408,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -10311,7 +10438,7 @@
                       "type": "text",
                       "id": "d4XFmT",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -10325,7 +10452,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -10380,7 +10507,7 @@
                       "type": "text",
                       "id": "EMqeI",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -10390,7 +10517,7 @@
                       "type": "text",
                       "id": "qC2qQ",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -10416,7 +10543,7 @@
                       "type": "text",
                       "id": "F4P00S",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -10426,7 +10553,7 @@
                       "type": "text",
                       "id": "M3XEXb",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -11304,7 +11431,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -11313,24 +11442,46 @@
               "type": "frame",
               "id": "Tdxol",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "cd8qf",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo9"
-                },
+                  "name": "logo9",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "I7ym9W",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "UUTr7",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -11342,23 +11493,14 @@
                       "type": "text",
                       "id": "bgh5A",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "I7ym9W",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "RoASx",
@@ -11424,12 +11566,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -11454,7 +11596,7 @@
                       "type": "text",
                       "id": "szey0",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -11468,7 +11610,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -11523,7 +11665,7 @@
                       "type": "text",
                       "id": "Ww8GL",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -11533,7 +11675,7 @@
                       "type": "text",
                       "id": "cnNgO",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -11559,7 +11701,7 @@
                       "type": "text",
                       "id": "o0CjHw",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -11569,7 +11711,7 @@
                       "type": "text",
                       "id": "bz7uT",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -12323,7 +12465,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -12332,24 +12476,46 @@
               "type": "frame",
               "id": "VgG3F",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "JmHvR",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo10"
-                },
+                  "name": "logo10",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dTYdc",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "vmBGj",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -12361,23 +12527,14 @@
                       "type": "text",
                       "id": "RyytE",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "dTYdc",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "Ul4hp",
@@ -12443,12 +12600,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -12473,7 +12630,7 @@
                       "type": "text",
                       "id": "robCh",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -12487,7 +12644,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -12542,7 +12699,7 @@
                       "type": "text",
                       "id": "N4gsEp",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -12552,7 +12709,7 @@
                       "type": "text",
                       "id": "fnTnT",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -12578,7 +12735,7 @@
                       "type": "text",
                       "id": "ymKt7",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -12588,7 +12745,7 @@
                       "type": "text",
                       "id": "x7LjX",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -13361,7 +13518,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -13370,24 +13529,46 @@
               "type": "frame",
               "id": "ykcAg",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "eXQXh",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo11"
-                },
+                  "name": "logo11",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "bogKn",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "SmERq",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -13399,23 +13580,14 @@
                       "type": "text",
                       "id": "j6UoBK",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "bogKn",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "QULiq",
@@ -13481,12 +13653,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -13511,7 +13683,7 @@
                       "type": "text",
                       "id": "WQhQo",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -13525,7 +13697,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -13580,7 +13752,7 @@
                       "type": "text",
                       "id": "gYKsk",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -13590,7 +13762,7 @@
                       "type": "text",
                       "id": "Rd3sa",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -13616,7 +13788,7 @@
                       "type": "text",
                       "id": "ogvaF",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -13626,7 +13798,7 @@
                       "type": "text",
                       "id": "wsXd7",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -14519,7 +14691,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -14528,24 +14702,46 @@
               "type": "frame",
               "id": "TleVm",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "LnkqM",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo12"
-                },
+                  "name": "logo12",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "g7Z0HN",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "FaCJU",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -14557,23 +14753,14 @@
                       "type": "text",
                       "id": "T6iAN",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "g7Z0HN",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "gQAyf",
@@ -14639,12 +14826,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -14669,7 +14856,7 @@
                       "type": "text",
                       "id": "S1G0C",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -14683,7 +14870,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -14738,7 +14925,7 @@
                       "type": "text",
                       "id": "lRLix",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -14748,7 +14935,7 @@
                       "type": "text",
                       "id": "cqFDx",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -14774,7 +14961,7 @@
                       "type": "text",
                       "id": "eTRj5",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -14784,7 +14971,7 @@
                       "type": "text",
                       "id": "b602c",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -15330,7 +15517,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -15339,24 +15528,46 @@
               "type": "frame",
               "id": "h9DmM",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "nqnZI",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo13"
-                },
+                  "name": "logo13",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dFs7v",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "a7WTDB",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -15368,23 +15579,14 @@
                       "type": "text",
                       "id": "DvfZS",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "dFs7v",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "XsGPt",
@@ -15450,12 +15652,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -15480,7 +15682,7 @@
                       "type": "text",
                       "id": "qY4Nx",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -15494,7 +15696,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -15549,7 +15751,7 @@
                       "type": "text",
                       "id": "o7KdTa",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -15559,7 +15761,7 @@
                       "type": "text",
                       "id": "f3N3LD",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -15585,7 +15787,7 @@
                       "type": "text",
                       "id": "Q1pwik",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -15595,7 +15797,7 @@
                       "type": "text",
                       "id": "KxRq5",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -16135,7 +16337,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -16144,24 +16348,46 @@
               "type": "frame",
               "id": "E9vYNQ",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "mu3Mn",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo14"
-                },
+                  "name": "logo14",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "q2DaW6",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "jjd7V",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -16173,23 +16399,14 @@
                       "type": "text",
                       "id": "Fmq2C",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "q2DaW6",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "AfhZS",
@@ -16255,12 +16472,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -16285,7 +16502,7 @@
                       "type": "text",
                       "id": "PD5uc",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -16299,7 +16516,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -16354,7 +16571,7 @@
                       "type": "text",
                       "id": "Bp8Yh",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -16364,7 +16581,7 @@
                       "type": "text",
                       "id": "znfYG",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -16390,7 +16607,7 @@
                       "type": "text",
                       "id": "cjZ8E",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -16400,7 +16617,7 @@
                       "type": "text",
                       "id": "uJa9N",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -17172,7 +17389,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -17181,24 +17400,46 @@
               "type": "frame",
               "id": "FDTUR",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "MVb9L",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo15"
-                },
+                  "name": "logo15",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "k3hQI",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "g84586",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -17210,23 +17451,14 @@
                       "type": "text",
                       "id": "TfexV",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "k3hQI",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "CKfW7",
@@ -17292,12 +17524,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -17322,7 +17554,7 @@
                       "type": "text",
                       "id": "DXxLD",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -17336,7 +17568,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -17391,7 +17623,7 @@
                       "type": "text",
                       "id": "gmLXR",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -17401,7 +17633,7 @@
                       "type": "text",
                       "id": "y9pzUs",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -17427,7 +17659,7 @@
                       "type": "text",
                       "id": "qOy1F",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -17437,7 +17669,7 @@
                       "type": "text",
                       "id": "TR6lQ",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -17975,7 +18207,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -17984,24 +18218,46 @@
               "type": "frame",
               "id": "D7D3N",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "LdUBw",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo16"
-                },
+                  "name": "logo16",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rrYfj",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "nqJMu",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -18013,23 +18269,14 @@
                       "type": "text",
                       "id": "rCNxb",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "rrYfj",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "E4a36H",
@@ -18095,12 +18342,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -18125,7 +18372,7 @@
                       "type": "text",
                       "id": "JqKVL",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -18139,7 +18386,7 @@
                   "name": "NavProjects",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -18194,7 +18441,7 @@
                       "type": "text",
                       "id": "UosIg",
                       "name": "projectNavOrgIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🏢",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -18204,7 +18451,7 @@
                       "type": "text",
                       "id": "VyCUV",
                       "name": "projectNavOrgLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "组织管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -18230,7 +18477,7 @@
                       "type": "text",
                       "id": "TdfkX",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -18240,7 +18487,7 @@
                       "type": "text",
                       "id": "Y7olIl",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -19168,7 +19415,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -19177,24 +19426,46 @@
               "type": "frame",
               "id": "m86XjV",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "legkp",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo10"
-                },
+                  "name": "logo10",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "y36C7",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "e9i9ps",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -19206,23 +19477,14 @@
                       "type": "text",
                       "id": "Ibmpj",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "y36C7",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "V87W5",
@@ -19288,12 +19550,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -19318,7 +19580,7 @@
                       "type": "text",
                       "id": "AfNtz",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -19343,7 +19605,7 @@
                     {
                       "type": "text",
                       "id": "oXh7j",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📁",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -19352,7 +19614,7 @@
                     {
                       "type": "text",
                       "id": "s2Kov",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -19366,7 +19628,7 @@
                   "name": "NavOrg",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -19419,7 +19681,7 @@
                       "type": "text",
                       "id": "e0vqPG",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -19429,7 +19691,7 @@
                       "type": "text",
                       "id": "k4jqlp",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -21211,7 +21473,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -21220,24 +21484,46 @@
               "type": "frame",
               "id": "NvPmA",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "E9kN3u",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo14"
-                },
+                  "name": "logo14",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "puu0f",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "Mynvh",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -21249,23 +21535,14 @@
                       "type": "text",
                       "id": "wiGcg",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "puu0f",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "tEttA",
@@ -21331,12 +21608,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -21360,7 +21637,7 @@
                     {
                       "type": "text",
                       "id": "n8iNZ",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "个人空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -21374,7 +21651,7 @@
                   "name": "NavProfile",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -21426,7 +21703,7 @@
                     {
                       "type": "text",
                       "id": "TbHNE",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -21435,7 +21712,7 @@
                     {
                       "type": "text",
                       "id": "puXF7",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "我的设备",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -21460,7 +21737,7 @@
                     {
                       "type": "text",
                       "id": "OK9Zg",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "🛡️",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -21469,7 +21746,7 @@
                     {
                       "type": "text",
                       "id": "DMRbW",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "安全日志",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -23080,7 +23357,9 @@
           },
           "padding": [
             0,
-            24
+            24,
+            0,
+            0
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -23089,24 +23368,46 @@
               "type": "frame",
               "id": "z33fIw",
               "name": "TopbarLeft",
+              "width": 248,
+              "height": 56,
+              "fill": "#111827",
               "gap": 16,
+              "padding": [
+                0,
+                24
+              ],
               "alignItems": "center",
               "children": [
                 {
                   "id": "I6NEWi",
                   "type": "ref",
                   "ref": "xptwO",
-                  "name": "logo10"
-                },
+                  "name": "logo10",
+                  "descendants": {
+                    "CBvyc": {
+                      "fill": "$surface"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "W3hCHd",
+              "name": "TopbarRight",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
                   "id": "KSFVq",
                   "name": "OrgSwitch",
                   "height": 32,
+                  "fill": "#FFFFFF",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$border"
+                    "fill": "#DCDFE6"
                   },
                   "padding": [
                     0,
@@ -23118,23 +23419,14 @@
                       "type": "text",
                       "id": "iySvk",
                       "name": "projectOrgText",
-                      "fill": "$regular-text",
+                      "fill": "#303133",
                       "content": "MyOrg ▾",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "W3hCHd",
-              "name": "TopbarRight",
-              "gap": 12,
-              "alignItems": "center",
-              "children": [
+                },
                 {
                   "type": "frame",
                   "id": "TBf32",
@@ -23200,12 +23492,12 @@
               "name": "Sidebar",
               "width": 248,
               "height": "fill_container",
-              "fill": "$surface",
+              "fill": "#111827",
               "stroke": {
                 "thickness": {
                   "right": 1
                 },
-                "fill": "$border"
+                "fill": "#374151"
               },
               "layout": "vertical",
               "gap": 2,
@@ -23230,7 +23522,7 @@
                       "type": "text",
                       "id": "icdfC",
                       "name": "projectSideGroupText",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "组织空间",
                       "fontFamily": "Inter",
                       "fontSize": 12,
@@ -23255,7 +23547,7 @@
                     {
                       "type": "text",
                       "id": "zhfsX",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "📁",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -23264,7 +23556,7 @@
                     {
                       "type": "text",
                       "id": "hwYLt",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "项目",
                       "fontFamily": "Inter",
                       "fontSize": 14,
@@ -23278,7 +23570,7 @@
                   "name": "NavOrg",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "$primary-light",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
                   "stroke": {
                     "thickness": {
@@ -23331,7 +23623,7 @@
                       "type": "text",
                       "id": "ZBXQ6",
                       "name": "projectNavDeviceIcon",
-                      "fill": "$secondary-text",
+                      "fill": "#94A3B8",
                       "content": "💻",
                       "fontFamily": "Inter",
                       "fontSize": 16,
@@ -23341,7 +23633,7 @@
                       "type": "text",
                       "id": "YLHcn",
                       "name": "projectNavDeviceLabel",
-                      "fill": "$regular-text",
+                      "fill": "#E5E7EB",
                       "content": "设备管理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
