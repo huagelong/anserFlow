@@ -114,7 +114,7 @@ Tabs / 菜单：
 
 ### API Key
 
-展示组织或项目相关 API Key 管理入口，遵循文档 API：
+展示组织级 API Key 管理，并在项目配置区展示 `.flowcode/config.yaml` 中项目级 key 的同步摘要；不提供文档未定义的项目 key 轮换界面。
 
 - 列表不展示完整 key，只显示前后缀。
 - 创建后仅弹窗展示一次完整 key。
