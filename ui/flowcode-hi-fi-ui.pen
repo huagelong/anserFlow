@@ -5,7 +5,7 @@
       "type": "frame",
       "id": "SLtsV",
       "x": 0,
-      "y": -528,
+      "y": 0,
       "name": "Login",
       "width": 1440,
       "height": 900,
@@ -233,8 +233,8 @@
     {
       "type": "frame",
       "id": "E1IGu",
-      "x": 1600,
-      "y": -528,
+      "x": 1720,
+      "y": 0,
       "name": "Dashboard",
       "width": 1440,
       "height": 900,
@@ -1214,7 +1214,7 @@
                             "fill": "$border"
                           },
                           "layout": "vertical",
-                          "gap": 4,
+                          "gap": 8,
                           "padding": 14,
                           "children": [
                             {
@@ -1249,217 +1249,216 @@
                             },
                             {
                               "type": "frame",
-                              "id": "yCptk",
-                              "name": "IssueRow1",
+                              "id": "aP3MV",
+                              "name": "IssueList",
                               "width": "fill_container",
-                              "height": 46,
-                              "stroke": {
-                                "thickness": {
-                                  "bottom": 1
-                                },
-                                "fill": "$border"
-                              },
-                              "padding": [
-                                4,
-                                0,
-                                6,
-                                0
-                              ],
+                              "layout": "vertical",
                               "children": [
                                 {
                                   "type": "frame",
-                                  "id": "viN98",
-                                  "name": "ir1Left",
+                                  "id": "yCptk",
+                                  "name": "IssueRow1",
                                   "width": "fill_container",
-                                  "layout": "vertical",
-                                  "gap": 6,
+                                  "height": 52,
+                                  "stroke": {
+                                    "thickness": {
+                                      "bottom": 1
+                                    },
+                                    "fill": "$border"
+                                  },
+                                  "alignItems": "center",
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "E4CCN9",
-                                      "name": "ir1Name",
-                                      "fill": "$primary-text",
-                                      "content": "修复登录页面在移动端的布局问题",
-                                      "fontFamily": "Inter",
-                                      "fontSize": 14,
-                                      "fontWeight": "500"
-                                    },
-                                    {
                                       "type": "frame",
-                                      "id": "yxxjb",
-                                      "name": "ir1Meta",
-                                      "gap": 6,
+                                      "id": "viN98",
+                                      "name": "ir1Left",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 4,
                                       "children": [
                                         {
-                                          "type": "frame",
-                                          "id": "BNVvA",
-                                          "name": "ir1Status",
-                                          "height": 22,
-                                          "fill": "$warning-light",
-                                          "cornerRadius": 999,
-                                          "padding": [
-                                            0,
-                                            7
-                                          ],
-                                          "alignItems": "center",
-                                          "children": [
-                                            {
-                                              "type": "text",
-                                              "id": "Z3FAWc",
-                                              "name": "ir1StatusText",
-                                              "fill": "$warning",
-                                              "content": "running",
-                                              "fontFamily": "Inter",
-                                              "fontSize": 12,
-                                              "fontWeight": "500"
-                                            }
-                                          ]
+                                          "type": "text",
+                                          "id": "E4CCN9",
+                                          "name": "ir1Name",
+                                          "fill": "$primary-text",
+                                          "content": "修复登录页面在移动端的布局问题",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 14,
+                                          "fontWeight": "500"
                                         },
                                         {
                                           "type": "frame",
-                                          "id": "Akq6i",
-                                          "name": "ir1Prio",
-                                          "height": 22,
-                                          "fill": "$danger-light",
-                                          "cornerRadius": 999,
-                                          "padding": [
-                                            0,
-                                            7
-                                          ],
-                                          "alignItems": "center",
+                                          "id": "yxxjb",
+                                          "name": "ir1Meta",
+                                          "gap": 5,
                                           "children": [
                                             {
-                                              "type": "text",
-                                              "id": "JzPbI",
-                                              "name": "ir1PrioText",
-                                              "fill": "$danger",
-                                              "content": "p0",
-                                              "fontFamily": "Inter",
-                                              "fontSize": 12,
-                                              "fontWeight": "500"
+                                              "type": "frame",
+                                              "id": "BNVvA",
+                                              "name": "ir1Status",
+                                              "height": 20,
+                                              "fill": "$warning-light",
+                                              "cornerRadius": 999,
+                                              "padding": [
+                                                0,
+                                                7
+                                              ],
+                                              "alignItems": "center",
+                                              "children": [
+                                                {
+                                                  "type": "text",
+                                                  "id": "Z3FAWc",
+                                                  "name": "ir1StatusText",
+                                                  "fill": "$warning",
+                                                  "content": "执行中",
+                                                  "fontFamily": "Inter",
+                                                  "fontSize": 12,
+                                                  "fontWeight": "500"
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "type": "frame",
+                                              "id": "Akq6i",
+                                              "name": "ir1Prio",
+                                              "height": 20,
+                                              "fill": "$danger-light",
+                                              "cornerRadius": 999,
+                                              "padding": [
+                                                0,
+                                                7
+                                              ],
+                                              "alignItems": "center",
+                                              "children": [
+                                                {
+                                                  "type": "text",
+                                                  "id": "JzPbI",
+                                                  "name": "ir1PrioText",
+                                                  "fill": "$danger",
+                                                  "content": "P0",
+                                                  "fontFamily": "Inter",
+                                                  "fontSize": 12,
+                                                  "fontWeight": "500"
+                                                }
+                                              ]
                                             }
                                           ]
                                         }
                                       ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "z5HYUQ",
+                                      "name": "ir1Time",
+                                      "fill": "#606266",
+                                      "content": "2 小时前",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
                                     }
                                   ]
                                 },
                                 {
-                                  "type": "text",
-                                  "id": "z5HYUQ",
-                                  "name": "ir1Time",
-                                  "fill": "#606266",
-                                  "content": "2 小时前",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "mr34t",
-                              "name": "IssueRow2",
-                              "width": "fill_container",
-                              "height": 46,
-                              "stroke": {
-                                "thickness": 0,
-                                "fill": "#DCDFE6"
-                              },
-                              "padding": [
-                                4,
-                                0,
-                                2,
-                                0
-                              ],
-                              "children": [
-                                {
                                   "type": "frame",
-                                  "id": "ePJcb",
-                                  "name": "ir2Left",
+                                  "id": "mr34t",
+                                  "name": "IssueRow2",
                                   "width": "fill_container",
-                                  "layout": "vertical",
-                                  "gap": 6,
+                                  "height": 52,
+                                  "stroke": {
+                                    "thickness": 0,
+                                    "fill": "#DCDFE6"
+                                  },
+                                  "alignItems": "center",
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "bNflP",
-                                      "name": "ir2Name",
-                                      "fill": "$primary-text",
-                                      "content": "添加测试覆盖率报告到 CI 流水线",
-                                      "fontFamily": "Inter",
-                                      "fontSize": 14,
-                                      "fontWeight": "500"
-                                    },
-                                    {
                                       "type": "frame",
-                                      "id": "pnkQq",
-                                      "name": "ir2Meta",
-                                      "gap": 6,
+                                      "id": "ePJcb",
+                                      "name": "ir2Left",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 4,
                                       "children": [
                                         {
-                                          "type": "frame",
-                                          "id": "z7mIwa",
-                                          "name": "ir2Status",
-                                          "height": 22,
-                                          "fill": "$primary-light",
-                                          "cornerRadius": 999,
-                                          "padding": [
-                                            0,
-                                            7
-                                          ],
-                                          "alignItems": "center",
-                                          "children": [
-                                            {
-                                              "type": "text",
-                                              "id": "jqjEs",
-                                              "name": "ir2StatusText",
-                                              "fill": "$primary",
-                                              "content": "approved",
-                                              "fontFamily": "Inter",
-                                              "fontSize": 12,
-                                              "fontWeight": "500"
-                                            }
-                                          ]
+                                          "type": "text",
+                                          "id": "bNflP",
+                                          "name": "ir2Name",
+                                          "fill": "$primary-text",
+                                          "content": "添加测试覆盖率报告到 CI 流水线",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 14,
+                                          "fontWeight": "500"
                                         },
                                         {
                                           "type": "frame",
-                                          "id": "d7eyO",
-                                          "name": "ir2Prio",
-                                          "height": 22,
-                                          "fill": "$primary-light",
-                                          "cornerRadius": 999,
-                                          "padding": [
-                                            0,
-                                            7
-                                          ],
-                                          "alignItems": "center",
+                                          "id": "pnkQq",
+                                          "name": "ir2Meta",
+                                          "gap": 5,
                                           "children": [
                                             {
-                                              "type": "text",
-                                              "id": "qiOlp",
-                                              "name": "ir2PrioText",
-                                              "fill": "$primary",
-                                              "content": "p2",
-                                              "fontFamily": "Inter",
-                                              "fontSize": 12,
-                                              "fontWeight": "500"
+                                              "type": "frame",
+                                              "id": "z7mIwa",
+                                              "name": "ir2Status",
+                                              "height": 20,
+                                              "fill": "$primary-light",
+                                              "cornerRadius": 999,
+                                              "padding": [
+                                                0,
+                                                7
+                                              ],
+                                              "alignItems": "center",
+                                              "children": [
+                                                {
+                                                  "type": "text",
+                                                  "id": "jqjEs",
+                                                  "name": "ir2StatusText",
+                                                  "fill": "$primary",
+                                                  "content": "已批准",
+                                                  "fontFamily": "Inter",
+                                                  "fontSize": 12,
+                                                  "fontWeight": "500"
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "type": "frame",
+                                              "id": "d7eyO",
+                                              "name": "ir2Prio",
+                                              "height": 20,
+                                              "fill": "$primary-light",
+                                              "cornerRadius": 999,
+                                              "padding": [
+                                                0,
+                                                7
+                                              ],
+                                              "alignItems": "center",
+                                              "children": [
+                                                {
+                                                  "type": "text",
+                                                  "id": "qiOlp",
+                                                  "name": "ir2PrioText",
+                                                  "fill": "$primary",
+                                                  "content": "P2",
+                                                  "fontFamily": "Inter",
+                                                  "fontSize": 12,
+                                                  "fontWeight": "500"
+                                                }
+                                              ]
                                             }
                                           ]
                                         }
                                       ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "pEfRT",
+                                      "name": "ir2Time",
+                                      "fill": "#606266",
+                                      "content": "5 小时前",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
                                     }
                                   ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "pEfRT",
-                                  "name": "ir2Time",
-                                  "fill": "#606266",
-                                  "content": "5 小时前",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -3521,8 +3520,8 @@
     {
       "type": "frame",
       "id": "mXb4p",
-      "x": 3167,
-      "y": -528,
+      "x": 3440,
+      "y": 0,
       "name": "Issue Board",
       "width": 1440,
       "height": 900,
@@ -5232,8 +5231,8 @@
     {
       "type": "frame",
       "id": "jvnbN",
-      "x": 4713,
-      "y": -528,
+      "x": 5160,
+      "y": 0,
       "name": "Issue Detail",
       "width": 1440,
       "height": 900,
@@ -6878,8 +6877,8 @@
     {
       "type": "frame",
       "id": "mGquI",
-      "x": 6277,
-      "y": -528,
+      "x": 6880,
+      "y": 0,
       "name": "Requirements",
       "width": 1440,
       "height": 900,
@@ -8282,7 +8281,7 @@
     {
       "type": "frame",
       "id": "Q7zyAa",
-      "x": 7600,
+      "x": 8600,
       "y": 0,
       "name": "PR Management",
       "width": 1440,
@@ -9542,7 +9541,7 @@
     {
       "type": "frame",
       "id": "ZSUgO",
-      "x": 9120,
+      "x": 10320,
       "y": 0,
       "name": "Test Cases",
       "width": 1440,
@@ -10862,7 +10861,7 @@
     {
       "type": "frame",
       "id": "g8BKc",
-      "x": 10640,
+      "x": 12040,
       "y": 0,
       "name": "Monitor",
       "width": 1440,
@@ -12250,7 +12249,7 @@
       "type": "frame",
       "id": "FxUoS",
       "x": 0,
-      "y": 980,
+      "y": 1240,
       "name": "Section-ProjectOrg",
       "layout": "vertical",
       "gap": 4,
@@ -12281,7 +12280,7 @@
       "type": "frame",
       "id": "V5UIO6",
       "x": 0,
-      "y": 1040,
+      "y": 1300,
       "name": "Project List",
       "width": 1440,
       "height": 900,
@@ -13458,8 +13457,8 @@
     {
       "type": "frame",
       "id": "gW9xp",
-      "x": 1520,
-      "y": 1040,
+      "x": 1720,
+      "y": 1300,
       "name": "Project Create",
       "width": 1440,
       "height": 900,
@@ -14512,8 +14511,8 @@
     {
       "type": "frame",
       "id": "ynthm",
-      "x": 3040,
-      "y": 1040,
+      "x": 3440,
+      "y": 1300,
       "name": "Organization",
       "width": 1440,
       "height": 900,
@@ -15585,8 +15584,8 @@
     {
       "type": "frame",
       "id": "gNU4o",
-      "x": 4560,
-      "y": 1040,
+      "x": 5160,
+      "y": 1300,
       "name": "Device Management",
       "width": 1440,
       "height": 900,
@@ -16748,7 +16747,7 @@
       "type": "frame",
       "id": "l042wr",
       "x": 0,
-      "y": 2020,
+      "y": 2540,
       "name": "Section-AIAdmin",
       "layout": "vertical",
       "gap": 4,
@@ -16779,7 +16778,7 @@
       "type": "frame",
       "id": "IjI3U",
       "x": 0,
-      "y": 2080,
+      "y": 2600,
       "name": "AI Questions",
       "width": 1440,
       "height": 900,
@@ -17624,8 +17623,8 @@
     {
       "type": "frame",
       "id": "LFXTe",
-      "x": 1520,
-      "y": 2080,
+      "x": 1720,
+      "y": 2600,
       "name": "History Diff",
       "width": 1440,
       "height": 900,
@@ -18464,8 +18463,8 @@
     {
       "type": "frame",
       "id": "QIzNk",
-      "x": 3040,
-      "y": 2080,
+      "x": 3440,
+      "y": 2600,
       "name": "Project Settings",
       "width": 1440,
       "height": 900,
@@ -19536,8 +19535,8 @@
     {
       "type": "frame",
       "id": "B2CIU",
-      "x": 4560,
-      "y": 2080,
+      "x": 5160,
+      "y": 2600,
       "name": "Skills",
       "width": 1440,
       "height": 900,
@@ -20374,8 +20373,8 @@
     {
       "type": "frame",
       "id": "tZGV1",
-      "x": 6080,
-      "y": 2080,
+      "x": 6880,
+      "y": 2600,
       "name": "Audit Log",
       "width": 1440,
       "height": 900,
@@ -21356,7 +21355,7 @@
     {
       "type": "frame",
       "id": "xptwO",
-      "x": 12160,
+      "x": 13760,
       "y": 0,
       "name": "BrandLogo/Small",
       "reusable": true,
@@ -21479,7 +21478,7 @@
     {
       "type": "frame",
       "id": "TPWMK",
-      "x": 12160,
+      "x": 13760,
       "y": 96,
       "name": "BrandLogo/Large",
       "reusable": true,
@@ -21603,7 +21602,7 @@
       "type": "frame",
       "id": "k8R0GZ",
       "x": 0,
-      "y": 3060,
+      "y": 4200,
       "name": "Manual User Create",
       "width": 1440,
       "height": 1360,
@@ -23623,7 +23622,7 @@
       "type": "frame",
       "id": "G61Zu",
       "x": 0,
-      "y": 3000,
+      "y": 4140,
       "name": "Section-OrgAdmin",
       "layout": "vertical",
       "gap": 4,
@@ -23651,8 +23650,8 @@
     {
       "type": "frame",
       "id": "F5Djm",
-      "x": 1520,
-      "y": 3000,
+      "x": 3440,
+      "y": 4140,
       "name": "Section-AccountCenter",
       "layout": "vertical",
       "gap": 4,
@@ -23680,8 +23679,8 @@
     {
       "type": "frame",
       "id": "u4MbD",
-      "x": 1520,
-      "y": 3060,
+      "x": 3440,
+      "y": 4200,
       "name": "Profile Center",
       "width": 1440,
       "height": 1660,
@@ -25584,8 +25583,8 @@
     {
       "type": "frame",
       "id": "RyqOZ",
-      "x": 3040,
-      "y": 3060,
+      "x": 1720,
+      "y": 4200,
       "name": "Member Edit",
       "width": 1440,
       "height": 1420,
@@ -27320,7 +27319,7 @@
     {
       "type": "frame",
       "id": "fal4X",
-      "x": 12160,
+      "x": 13760,
       "y": 220,
       "name": "Project Context Status Variants",
       "width": 520,
