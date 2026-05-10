@@ -42,7 +42,7 @@
 | Waiting Input | waiting_input | 320px | AI 等待回答。 |
 | Done | done | 300px | 可创建 PR / 重试 / 关闭。 |
 | PR | pr_ready, pr_created | 320px | 待创建 PR 或 PR 已创建。 |
-| Closed / Deploy | deployed, closed, rejected, cancelled, failed | 320px | 终态、失败、可重开。 |
+| 已结束 / 可重开 | deployed, closed, rejected, cancelled, failed | 320px | 终态、失败、可重开。 |
 
 列头：
 
@@ -172,15 +172,15 @@
 | 当前状态 | 主动作 | 次动作 |
 |----------|--------|--------|
 | draft | 审批通过 | 驳回、编辑、删除 |
-| approved | 执行 | 生成/重新生成计划、驳回、编辑 |
+| approved | 执行 | 生成/重新生成计划、编辑 |
 | queued | 取消执行 | 查看队列 |
 | running | 暂停 | 取消、查看日志 |
 | paused | 恢复执行 | 取消 |
 | waiting_input | 回答问询 | 跳过、取消 |
 | done | 创建 PR | 重试、关闭 |
-| failed | 重试 | 编辑、驳回、关闭 |
+| failed | 重试 | 编辑、关闭 |
 | cancelled | 重试 | 关闭 |
-| pr_ready | 创建 PR | 重试 |
+| pr_ready | 创建 PR | - |
 | pr_created | 标记已部署 | 重开 |
 | deployed | 关闭 | 重开 |
 | closed | 重新打开 | - |
