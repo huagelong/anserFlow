@@ -175,7 +175,7 @@
 | approved | 执行 | 生成/重新生成计划、驳回、编辑 |
 | queued | 取消执行 | 查看队列 |
 | running | 暂停 | 取消、查看日志 |
-| paused | 继续执行 | 取消 |
+| paused | 恢复执行 | 取消 |
 | waiting_input | 回答问询 | 跳过、取消 |
 | done | 创建 PR | 重试、关闭 |
 | failed | 重试 | 编辑、驳回、关闭 |
