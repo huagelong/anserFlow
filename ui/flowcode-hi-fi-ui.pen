@@ -294,66 +294,102 @@
               "type": "frame",
               "id": "w7cr9d",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "lHvx2",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "vagwc",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "tmp5k",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "h2bwk",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "lHvx2",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tmp5k",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "Vc7nu",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "l14fRT",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "h2bwk",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "T5bXF",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "Vc7nu",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -1768,66 +1804,102 @@
               "type": "frame",
               "id": "rbxlX",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "udp1m",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "RtrN7",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "qx4zF",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "tzT3L",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "udp1m",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qx4zF",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "e3wP1F",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "NpmeX",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tzT3L",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "uDZrR",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "e3wP1F",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -3443,66 +3515,102 @@
               "type": "frame",
               "id": "dpX1d",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "yl3ZG",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "ZmpVH",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "h30Y9",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "VYKtq",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "yl3ZG",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "h30Y9",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "Qzgu6",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "oRAxm",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "VYKtq",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "d8KCu",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "Qzgu6",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -5053,66 +5161,102 @@
               "type": "frame",
               "id": "YZ0Pl",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "g9C0gN",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "yY6hu",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "QDnkA",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "Rkd0t",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "g9C0gN",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QDnkA",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "sUapJ",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "wo5OR",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Rkd0t",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "cDujI",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "sUapJ",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -6421,66 +6565,102 @@
               "type": "frame",
               "id": "d6dbU",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "JSBpP",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "CoGBl",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "os5Nd",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "guhbv",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "JSBpP",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "os5Nd",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "w76rsa",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "JQHjK",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "guhbv",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "nP3D5",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "w76rsa",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -7645,66 +7825,102 @@
               "type": "frame",
               "id": "diR4E",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "HeJ0l",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "P3Cse",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "upVWI",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "US163",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "HeJ0l",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "upVWI",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "RsIDl",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "rWnXO",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "US163",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "RQwaG",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "RsIDl",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -8929,66 +9145,102 @@
               "type": "frame",
               "id": "D0El3C",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "N9t2Lo",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "O3kQqE",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
                   "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "ZbZGu",
-                      "name": "orgName",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "oUcRp",
-                  "name": "ProjSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#DCDFE6"
-                  },
-                  "gap": 4,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
+                      "type": "frame",
+                      "id": "N9t2Lo",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ZbZGu",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
                     {
-                      "type": "text",
-                      "id": "pEKQj",
-                      "name": "projName",
-                      "fill": "#303133",
-                      "content": "flowcode-app ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "CIIS0",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "oUcRp",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "gpmMw",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "pEKQj",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -10311,35 +10563,55 @@
               "type": "frame",
               "id": "zRjqC",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "lLUnA",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "CKAuo",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "zgVJO",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "lLUnA",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zgVJO",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -11469,35 +11741,55 @@
               "type": "frame",
               "id": "I7ym9W",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "UUTr7",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "vY5Ql",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "bgh5A",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "UUTr7",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bgh5A",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -12503,35 +12795,55 @@
               "type": "frame",
               "id": "dTYdc",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "vmBGj",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "D4RHmm",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "RyytE",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "vmBGj",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RyytE",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -13556,35 +13868,55 @@
               "type": "frame",
               "id": "bogKn",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "SmERq",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "ZPAfz",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "j6UoBK",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "SmERq",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "j6UoBK",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -14729,35 +15061,55 @@
               "type": "frame",
               "id": "g7Z0HN",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "FaCJU",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "Dgl1j",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "T6iAN",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "FaCJU",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "T6iAN",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -15555,35 +15907,55 @@
               "type": "frame",
               "id": "dFs7v",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "a7WTDB",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "Nd8Gs",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "DvfZS",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "a7WTDB",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DvfZS",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -16375,35 +16747,55 @@
               "type": "frame",
               "id": "q2DaW6",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "jjd7V",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "rwKz3",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "Fmq2C",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "jjd7V",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Fmq2C",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -17427,35 +17819,55 @@
               "type": "frame",
               "id": "k3hQI",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "g84586",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "w9UYO",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "TfexV",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "g84586",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "TfexV",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -18245,35 +18657,55 @@
               "type": "frame",
               "id": "rrYfj",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "nqJMu",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "LFWK5",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "rCNxb",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "nqJMu",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rCNxb",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -19453,35 +19885,55 @@
               "type": "frame",
               "id": "y36C7",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "e9i9ps",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "xcVyd",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "Ibmpj",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "e9i9ps",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ibmpj",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -21511,35 +21963,55 @@
               "type": "frame",
               "id": "puu0f",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "Mynvh",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "x4196q",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "wiGcg",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "Mynvh",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wiGcg",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -23395,35 +23867,55 @@
               "type": "frame",
               "id": "W3hCHd",
               "name": "TopbarRight",
-              "gap": 12,
+              "gap": 10,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "KSFVq",
-                  "name": "OrgSwitch",
-                  "height": 32,
-                  "fill": "#FFFFFF",
-                  "cornerRadius": 4,
+                  "id": "o5lttV",
+                  "name": "ContextSwitchGroup",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#DCDFE6"
+                    "fill": "#E4E7ED"
                   },
+                  "gap": 4,
                   "padding": [
                     0,
-                    12
+                    4
                   ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "iySvk",
-                      "name": "projectOrgText",
-                      "fill": "#303133",
-                      "content": "MyOrg ▾",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
+                      "type": "frame",
+                      "id": "KSFVq",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iySvk",
+                          "name": "projectOrgText",
+                          "fill": "#303133",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -25036,6 +25528,456 @@
                               ]
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "fal4X",
+      "x": 12160,
+      "y": 220,
+      "name": "Project Context Status Variants",
+      "width": 520,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "thickness": 1,
+        "fill": "#DCDFE6"
+      },
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 20,
+      "children": [
+        {
+          "type": "text",
+          "id": "Lx1pm",
+          "name": "PanelTitle",
+          "fill": "#303133",
+          "content": "项目切换状态变体",
+          "fontFamily": "Inter",
+          "fontSize": 18,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "lppS9",
+          "name": "PanelDesc",
+          "fill": "#606266",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "用于定义项目上下文在顶栏中的三态视觉：正常、待验证、未连接。",
+          "fontFamily": "Inter",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "r8u5K",
+          "name": "VariantStack",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "XNAuL",
+              "name": "Variant/Connected",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 6,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#E4E7ED"
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Tw0L5",
+                  "name": "VariantLabel",
+                  "fill": "#303133",
+                  "content": "正常连接",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "xU5SI",
+                  "name": "VariantDesc",
+                  "fill": "#909399",
+                  "content": "Git 已连接且最近同步正常，适用于默认健康态。",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "LeNcp",
+                  "name": "connectedChip",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E4E7ED"
+                  },
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    4
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "UCmJb",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KFiRA",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WMHTh",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "w4WWwn",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#ECF5FF",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#ECF5FF"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "imaPN",
+                          "name": "ProjectStatusDot",
+                          "fill": "#67C23A",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "pIuiI",
+                          "name": "projName",
+                          "fill": "#409EFF",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "CG3Mo",
+              "name": "Variant/Pending",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 6,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#E4E7ED"
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SHqhG",
+                  "name": "VariantLabel",
+                  "fill": "#303133",
+                  "content": "待验证 / 同步中",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "NOjxP",
+                  "name": "VariantDesc",
+                  "fill": "#909399",
+                  "content": "仓库配置刚变更、验证中或后台同步尚未完成时使用。",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "wXLuR",
+                  "name": "pendingChip",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E4E7ED"
+                  },
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    4
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "oYCLB",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "j4vgi",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cxca6",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Kbatu",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#FDF6EC",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#FDF6EC"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "T1vEZ1",
+                          "name": "ProjectStatusDot",
+                          "fill": "#E6A23C",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "W3GsZp",
+                          "name": "projName",
+                          "fill": "#E6A23C",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fomBj",
+              "name": "Variant/Unknown",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 6,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#E4E7ED"
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "O8YgXz",
+                  "name": "VariantLabel",
+                  "fill": "#303133",
+                  "content": "未连接 / 状态未知",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "W7xEl",
+                  "name": "VariantDesc",
+                  "fill": "#909399",
+                  "content": "项目尚未完成 Git 连接，或当前无法确认同步状态时使用。",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "ek7oo",
+                  "name": "unknownChip",
+                  "height": 36,
+                  "fill": "#F5F7FA",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E4E7ED"
+                  },
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    4
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bq2RY",
+                      "name": "OrgSwitch",
+                      "height": 28,
+                      "fill": "#F5F7FA",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F5F7FA"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mJcZo",
+                          "name": "orgName",
+                          "fill": "#606266",
+                          "content": "MyOrg ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pZy0s",
+                      "name": "SwitchDivider",
+                      "width": 1,
+                      "height": 16,
+                      "fill": "#E4E7ED"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "criYJ",
+                      "name": "ProjSwitch",
+                      "height": 28,
+                      "fill": "#F4F4F5",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 0,
+                        "fill": "#F4F4F5"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "Wv7Kd",
+                          "name": "ProjectStatusDot",
+                          "fill": "#909399",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "tWXID",
+                          "name": "projName",
+                          "fill": "#909399",
+                          "content": "flowcode-app ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
                         }
                       ]
                     }
