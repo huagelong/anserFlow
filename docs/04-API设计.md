@@ -76,62 +76,24 @@
 - `logoutOtherDevices=true` 时，修改密码成功后吊销当前用户其他设备登录态，仅保留当前请求对应设备。
 - 失败时返回字段级错误或统一错误消息，不回显密码规则之外的敏感细节。
 
-### 4.3.1b 组织管理 `/api/v1/orgs` (SaaS)
+### 4.3.1b API 密钥管理 `/api/v1/api-keys`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/orgs` | 创建组织 |
-| GET | `/api/v1/orgs` | 用户所属组织列表 |
-| GET | `/api/v1/orgs/:slug` | 组织详情 |
-| PUT | `/api/v1/orgs/:slug` | 更新组织 |
-| POST | `/api/v1/orgs/:slug/members` | 邀请成员 |
-| GET | `/api/v1/orgs/:slug/members/:uid` | 获取成员资料详情 |
-| PUT | `/api/v1/orgs/:slug/members/:uid` | 更新成员资料与组织角色 |
-| DELETE | `/api/v1/orgs/:slug/members/:uid` | 移除成员 |
-| PUT | `/api/v1/orgs/:slug/members/:uid/role` | 修改成员角色 |
-
-### 4.3.1ba 成员资料管理
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/orgs/:slug/members/:uid` | 返回成员资料、成员状态、最近登录摘要 |
-| PUT | `/api/v1/orgs/:slug/members/:uid` | 更新邮箱、语言偏好、头像地址和当前组织角色 |
-
-请求示例：
-
-```json
-{
-  "email": "lina@flowcode.dev",
-  "locale": "zh-CN",
-  "avatarUrl": "https://cdn.flowcode.dev/avatar/lina.png",
-  "role": "admin"
-}
-```
-
-说明：
-
-- `username` 为唯一账号标识，账号创建后冻结；不允许通过该接口修改。
-- `role` 仅影响当前组织成员关系，不修改用户在其他组织中的身份。
-- 当目标成员是当前组织唯一 `owner` 时，接口必须拒绝将其降级。
-
-### 4.3.1c API 密钥管理 `/api/v1/api-keys`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/orgs/:slug/api-keys` | 创建 API Key |
-| GET | `/api/v1/orgs/:slug/api-keys` | API Key 列表 |
+| POST | `/api/v1/api-keys` | 创建 API Key |
+| GET | `/api/v1/api-keys` | API Key 列表 |
 | DELETE | `/api/v1/api-keys/:id` | 吊销 API Key |
 
 ### 4.3.2 项目管理 `/api/v1/projects`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/orgs/:slug/projects` | 组织下的项目列表（分页） |
-| POST | `/api/v1/orgs/:slug/projects` | 创建项目 |
+| GET | `/api/v1/projects` | 用户的项目列表（分页） |
+| POST | `/api/v1/projects` | 创建项目 |
 | GET | `/api/v1/projects/:id` | 项目详情 |
 | PUT | `/api/v1/projects/:id` | 更新项目（名称/描述/Git配置等） |
 | DELETE | `/api/v1/projects/:id` | 删除项目（软删除） |
-| GET | `/api/v1/projects/:id/stats` | 项目统计（Issue数/完成率/测试覆盖率等） |
+| GET | `/api/v1/projects/:id/stats` | 项目统计（Issue数/完成率等） |
 | GET | `/api/v1/projects/:id/history` | **项目变更历史** |
 
 **创建/更新项目请求体**：
@@ -151,11 +113,7 @@
     "autoExecute": false,
     "autoCreatePR": true,
     "defaultAITool": "claude-code",
-    "branchNaming": "flowcode/{{issueId}}-{{slug}}",
-    "requireApproval": true,
-    "testRequireApproval": true,
-    "testFramework": "vitest",
-    "testCoverageTarget": 80
+    "branchNaming": "flowcode/{{issueId}}-{{slug}}"
   }
 }
 ```
@@ -164,74 +122,7 @@
 
 > **创建流程**：前端先调用 `POST /api/v1/git/validate-url` 校验 Git 地址可达性 → 获得 `defaultBranch` / `repoId` → 填充完整请求体 → 调用创建项目接口。校验不通过则阻断创建。
 
-### 4.3.3 需求管理 `/api/v1/requirements`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/projects/:pid/requirements` | 需求列表 |
-| POST | `/api/v1/projects/:pid/requirements` | 创建需求 |
-| GET | `/api/v1/requirements/:id` | 需求详情 |
-| PUT | `/api/v1/requirements/:id` | 更新需求 |
-| DELETE | `/api/v1/requirements/:id` | 删除需求 |
-| POST | `/api/v1/requirements/:id/ai-decompose` | **AI 拆解为 Issue 列表**（返回建议，用户确认后提交 convert-to-issues） |
-| POST | `/api/v1/requirements/:id/convert-to-issues` | **确认拆解 → 批量创建 Issue(s)** |
-| PUT | `/api/v1/requirements/:id/status` | 变更需求状态 |
-
-**AI 拆解响应**（`GET/POST .../ai-decompose`）：
-
-```json
-{
-  "code": 0,
-  "data": {
-    "requirementId": "req-abc123",
-    "summary": "该需求可拆解为 4 个独立 Issue：认证中间件、API 接口、前端页面、单元测试",
-    "issues": [
-      {
-        "title": "实现 JWT 认证中间件",
-        "description": "创建 Gin 中间件，解析 JWT token...",
-        "priority": "p0",
-        "category": "feature",
-        "aiToolHint": "claude-code",
-        "reason": "核心阻塞任务，涉及安全逻辑"
-      },
-      {
-        "title": "编写登录/注册 API",
-        "description": "实现 POST /auth/login 和 POST /auth/register...",
-        "priority": "p0",
-        "category": "feature",
-        "aiToolHint": "codex",
-        "reason": "依赖 Issue 1 的中间件，但可并行开发"
-      }
-    ]
-  },
-  "message": "ok"
-}
-```
-
-**拆解为 Issue 请求体**（`POST .../convert-to-issues`，用户确认后提交）：
-
-```json
-{
-  "issues": [
-    {
-      "title": "实现用户登录接口 POST /api/v1/auth/login",
-      "description": "使用 JWT 方案，支持邮箱+密码登录...",
-      "priority": "p0",
-      "category": "feature",
-      "aiTool": "claude-code"
-    },
-    {
-      "title": "编写登录接口单元测试",
-      "description": "覆盖正常登录、密码错误、用户不存在等场景",
-      "priority": "p1",
-      "category": "feature",
-      "aiTool": "claude-code"
-    }
-  ]
-}
-```
-
-### 4.3.4 Issue 管理 `/api/v1/issues`
+### 4.3.3 Issue 管理 `/api/v1/issues`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -240,20 +131,17 @@
 | GET | `/api/v1/issues/:id` | Issue 详情（含分析结果、执行计划、执行日志摘要） |
 | PUT | `/api/v1/issues/:id` | 更新 Issue |
 | DELETE | `/api/v1/issues/:id` | 删除 Issue |
-| POST | `/api/v1/issues/:id/approve` | **管理员审核通过（执行前必须，审批后可生成执行计划）** |
-| POST | `/api/v1/issues/:id/reject` | **管理员驳回（附原因）** |
 | POST | `/api/v1/issues/:id/plan` | **生成/重新生成执行计划（须先完成分析）** |
-| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（须 approved；若无计划则先生成计划）** |
+| POST | `/api/v1/issues/:id/execute` | **触发 AI 执行（若无计划则先生成计划）** |
 | POST | `/api/v1/issues/:id/continue` | **基于原计划继续 vibe coding** |
 | POST | `/api/v1/issues/:id/cancel` | 取消执行 |
-| POST | `/api/v1/issues/:id/retry` | **重试执行**（从 failed/cancelled/done 回到 approved） |
-| POST | `/api/v1/issues/:id/skip` | **跳过执行**（opencode 判定无需代码变更时，从 approved 直接到 done） |
+| POST | `/api/v1/issues/:id/retry` | **重试执行**（从 failed/cancelled/done 回到 draft） |
+| POST | `/api/v1/issues/:id/skip` | **跳过执行**（opencode 判定无需代码变更时，直接到 done） |
 | POST | `/api/v1/issues/:id/pause` | **暂停执行**（running → paused） |
 | POST | `/api/v1/issues/:id/resume` | **恢复执行**（paused → running） |
 | POST | `/api/v1/issues/:id/deploy` | **标记已部署**（pr_created → deployed） |
-| POST | `/api/v1/issues/:id/fast-exec` | **管理员快速执行**（跳过排队，approved → queued） |
-| POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/rejected/pr_created 均可关闭） |
-| POST | `/api/v1/issues/:id/reopen` | **重新打开**（支持从 closed/rejected/cancelled/done/deployed/pr_created 重开；先进入 `reopened`，再自动回到 `approved`） |
+| POST | `/api/v1/issues/:id/close` | **关闭 Issue**（done/failed/cancelled/deployed/pr_created 均可关闭） |
+| POST | `/api/v1/issues/:id/reopen` | **重新打开**（支持从 closed/cancelled/done/deployed/pr_created 重开，回到 draft） |
 | GET | `/api/v1/issues/:id/logs` | 获取执行日志列表 |
 | PUT | `/api/v1/issues/:id/priority` | 调整优先级 |
 | PUT | `/api/v1/issues/:id/category` | 调整分类 |
@@ -661,16 +549,7 @@
 }
 ```
 
-### 4.3.7 监控管理 `/api/v1/monitor`
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/monitor/:projectKey/events` | **接收监控事件**（公开接口） |
-| GET | `/api/v1/projects/:pid/monitor/events` | 查看监控事件列表 |
-| GET | `/api/v1/projects/:pid/monitor/stats` | 监控统计（错误趋势等） |
-| POST | `/api/v1/monitor/events/:id/convert` | 事件转 Issue |
-
-### 4.3.8 AI 工具配置 `/api/v1/ai-tools`
+### 4.3.7 AI 工具配置 `/api/v1/ai-tools`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
