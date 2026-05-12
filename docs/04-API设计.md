@@ -622,7 +622,6 @@ AI 工具使用方式：
 | `{API_URL}` | config.yaml apiUrl | `https://flowcode.mycompany.com` |
 | `{API_KEY}` | config.yaml apiKey | `fc_sk_proj_abc123xyz` |
 | `{PROJECT_ID}` | config.yaml projectId | `proj-abc123` |
-| `{ORG_ID}` | 已废弃 | — |
 
 **单个 Skill 文件示例** (`issue-create.md`)：
 

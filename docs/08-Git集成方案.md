@@ -606,7 +606,7 @@ type GitProvider interface {
     // ── 分支操作 ──
     CreateBranch(ctx context.Context, opts BranchOptions) error
 
-    // ── PR/MR 操作 ──
+    // ── PR 操作 ──
     CreatePR(ctx context.Context, opts PROptions) (*PRResult, error)
     GetPR(ctx context.Context, repoID string, prNumber int) (*PRResult, error)
     ListPRs(ctx context.Context, repoID string, status string) ([]*PRResult, error)
@@ -663,7 +663,7 @@ type WebhookEvent struct {
 }
 ```
 
-> Issue 的创建/查询/更新由 flowcode 自身管理，仅支持从 Git 平台**单向导入**。Git 平台负责 PR/MR 生命周期 + Webhook 事件。
+> Issue 的创建/查询/更新由 flowcode 自身管理，仅支持从 Git 平台**单向导入**。Git 平台负责 PR 生命周期 + Webhook 事件。
 
 ## 8.7 GitHub Provider（go-github SDK）
 
@@ -902,7 +902,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 }
 ```
 
-## 8.12 认证方式
+## 8.10 认证方式
 
 | 平台 | 推荐方式 | 配置方式 |
 |------|---------|---------|
@@ -911,7 +911,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 
 凭证在数据库中 AES-256-GCM 加密存储。加密密钥通过环境变量 `FLOWCODE_ENCRYPTION_KEY` 注入。
 
-## 8.12b Issue 单向导入（手动）
+## 8.10b Issue 单向导入（手动）
 
 > ⚠️ **仅手动导入，不做自动同步**。导入由用户在 Web 控制台点击按钮或执行 CLI 命令触发，不监听 Git 平台 Webhook、不设定时任务。导入后 Issue 由 flowcode 独立管理，不回写 Git 平台。
 
@@ -1058,7 +1058,7 @@ flowcode project import-issues --state all
 > - 导入不自动触发 opencode 前置分析与执行计划生成（避免大量调用），可手动批量触发
 
 
-## 8.13 安全考虑
+## 8.11 安全考虑
 
 1. **最小权限原则**：Git PAT 仅需 `repo` 和 `pull_requests` 权限
 2. **凭证加密**：数据库存储加密，日志脱敏
