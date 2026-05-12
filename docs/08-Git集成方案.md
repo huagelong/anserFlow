@@ -2,9 +2,9 @@
 
 ## 8.1 概述
 
-flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接外部 Git 平台（GitHub / GitLab / Gitea）。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动在对应平台创建分支、提交代码、发起 Pull Request / Merge Request。
+flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接 GitHub。系统支持从远程仓库拉取代码（HTTP / SSH），供 AI 工具在 Docker 沙盒中执行编码任务。AI 编码完成后，系统自动创建分支、提交代码、发起 Pull Request。
 
-> **职责边界**：Issue 由 flowcode 独立管理，不在 Git 平台创建。Git 平台仅负责 PR/MR 生命周期 + Webhook 事件回调。Issue 单向导入为**纯手动操作**（Web 控制台按钮 / CLI 命令），不做自动同步。所有三个平台 SDK（go-github / go-gitlab / go-gitea）均为必需依赖。
+> **职责边界**：Issue 由 flowcode 独立管理，不在 Git 平台创建。Git 平台仅负责 PR 生命周期 + Webhook 事件回调。Issue 单向导入为**纯手动操作**（Web 控制台按钮 / CLI 命令），不做自动同步。
 
 ### 8.1b Git SDK 配置清单
 
@@ -24,7 +24,7 @@ flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接外部
 | 配置项 | HTTP 模式 | SSH 模式 | 说明 |
 |--------|:--------:|:--------:|------|
 | `name` | ✅ | ✅ | 凭证名称，如 "生产仓库"、"GitLab 备份" |
-| `provider` | ✅ | ✅ | `github` / `gitlab` / `gitea` |
+| `provider` | ✅ | ✅ | `github` |
 | `authMethod` | `http` | `ssh` | 认证方式 |
 | `accessToken` | ✅ | — | PAT 或 OAuth Token，AES-256-GCM 加密存储 |
 | `tokenType` | `pat` / `oauth` | — | Token 类型 |
@@ -39,21 +39,17 @@ flowcode 不内置 Git 托管，而是通过 **GitProvider 接口** 对接外部
 // internal/adapter/git/factory.go
 
 const (
-    ProviderGitHub = "github"  // go-github SDK，无需 baseURL
-    ProviderGitLab = "gitlab"  // go-gitlab SDK，支持自建实例 baseURL
-    ProviderGitea  = "gitea"   // go-gitea SDK，支持自建实例 baseURL
+    ProviderGitHub = "github"  // go-github SDK
 )
 
 func NewGitProvider(pt ProviderType, accessToken, baseURL string) (GitProvider, error)
 ```
 
-| 平台 | SDK | baseURL 必填 | 示例 |
-|------|-----|:---:|------|
-| GitHub | go-github | 否 | `NewGitHubProvider("ghp_xxx")` |
-| GitLab | go-gitlab | 自建时必填 | `NewGitLabProvider("glpat-xxx", "https://gitlab.example.com")` |
-| Gitea | go-gitea | 自建时必填 | `NewGiteaProvider("token", "https://gitea.example.com")` |
+| 平台 | SDK | 示例 |
+|------|-----|------|
+| GitHub | go-github | `NewGitHubProvider("ghp_xxx")` |
 
-> GitHub 始终使用 `api.github.com`；GitLab/Gitea 的 SaaS 版（gitlab.com / gitea.com）baseURL 传空字符串即可，SDK 自动使用默认 API 端点。
+> GitHub 始终使用 `api.github.com`。
 
 #### 配置方式
 
@@ -85,10 +81,10 @@ curl -X POST /api/v1/projects/proj_1/git/connect \
 curl -X POST /api/v1/projects/proj_1/git/connect \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "name": "公司 GitLab",
+    "name": "GitHub SSH",
     "authMethod": "ssh",
     "sshPrivateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----",
-    "provider": "gitlab"
+    "provider": "github"
   }'
 
 # 查看凭证列表
@@ -114,7 +110,7 @@ curl -X DELETE /api/v1/projects/proj_1/git/credentials/cred_1 \
                 ▼
         项目创建成功
                 │
-Issue 进入编码阶段 (approved → 分析完成 → 计划完成 → running)
+Issue 进入编码阶段 (分析完成 → 计划完成 → running)
         │
         ▼
 ┌───────────────────────────────┐
@@ -143,23 +139,23 @@ Issue 进入编码阶段 (approved → 分析完成 → 计划完成 → running
 └──────────┬────────┘
            │
            ▼
-┌───────────────────┐      ┌───────────────────┐
-│   GitHub API      │      │   Gitea API       │
-│   (github.com)    │      │   (self-hosted)   │
-└───────────────────┘      └───────────────────┘
-           │                        │
-           ▼                        ▼
-     PR Created               PR Created
-           │                        │
-           ▼                        ▼
+┌───────────────────┐
+│   GitHub API      │
+│   (github.com)    │
+└───────────────────┘
+           │
+           ▼
+     PR Created
+           │
+           ▼
 ┌───────────────────────────────────────────┐
-│         Webhook 回调 flowcode                          │
-│  - PR merged  → issue 触发 deploy → close             │
-│  - PR closed  → issue 触发 reopen → reopened → approved │
+│         Webhook 回调 flowcode              │
+│  - PR merged  → issue 触发 deploy → close │
+│  - PR closed  → issue 触发 reopen → draft │
 └───────────────────────────────────────────┘
 ```
 
-> **说明**：上图仅以 GitHub / Gitea 为例展示，GitLab 走同一套 `GitProvider + Webhook` 链路。
+> **说明**：上图展示 GitHub 集成全流程。
 
 ## 8.2b Git URL 可用性校验
 
@@ -302,7 +298,7 @@ type ValidateError struct {
 | `github.com/user/repo` | `https://github.com/user/repo.git` | `git@github.com:user/repo.git` |
 | `https://github.com/user/repo.git` | 不变 | — |
 | `git@github.com:user/repo.git` | — | 不变 |
-| `https://gitea.example.com/owner/repo` | `https://gitea.example.com/owner/repo.git` | `git@gitea.example.com:owner/repo.git` |
+
 
 ### 校验时机与缓存
 
@@ -414,7 +410,7 @@ func (d *DockerSandbox) CommitAndPush(ctx context.Context, sb *Sandbox, issue *m
 
 ## 8.2d SSH 密钥管理
 
-SSH 协议适用于自托管 Gitea/GitLab 及无法使用 PAT 的场景。
+SSH 协议适用于无法使用 PAT 的场景。
 
 ### 密钥格式要求
 
@@ -529,7 +525,7 @@ Ref: https://flowcode.local/projects/xxx/issues/abc123
 | 概念 | 管理方 | 说明 |
 |------|--------|------|
 | **Issue** | flowcode | 需求录入、优先级、分类、状态流转均在 flowcode 内部 |
-| **PR / MR** | Git 平台 | 代码审查、合并、讨论在 GitHub/GitLab/Gitea 上 |
+| **PR** | GitHub | 代码审查、合并、讨论在 GitHub 上 |
 | **关联** | flowcode | PR URL 写入 Issue.prUrl；平台 PR body 中引用 flowcode Issue 链接 |
 
 ### 触发条件
@@ -598,7 +594,7 @@ func BuildPRBody(issue *model.Issue, log *model.ExecutionLog) string {
 
 ## 8.6 GitProvider 统一接口
 
-所有 Git 平台的 PR/MR 操作通过统一接口抽象，三个平台均为必需依赖：
+GitHub 的 PR 操作通过统一接口抽象：
 
 ```go
 // internal/adapter/git/provider.go
@@ -656,8 +652,8 @@ type PRResult struct {
 }
 
 type WebhookEvent struct {
-    Platform    string  // github / gitea / gitlab
-    Event       string  // pull_request / merge_request
+    Platform    string  // github
+    Event       string  // pull_request
     Action      string  // opened / closed / merged / updated
     RepoFullName string
     PRNumber    int
@@ -818,319 +814,7 @@ func toPRResult(pr *github.PullRequest) *PRResult {
 }
 ```
 
-## 8.8 GitLab Provider（go-gitlab SDK）
-
-GitLab 的概念叫 Merge Request (MR)，接口适配为统一的 PR 语义：
-
-```go
-// internal/adapter/git/gitlab.go
-
-import "github.com/xanzy/go-gitlab"
-
-type GitLabProvider struct {
-    client   *gitlab.Client
-    baseURL  string   // 自建 GitLab 地址
-}
-
-func NewGitLabProvider(accessToken, baseURL string) *GitLabProvider {
-    opts := []gitlab.ClientOptionFunc{}
-    if baseURL != "" {
-        opts = append(opts, gitlab.WithBaseURL(baseURL))
-    }
-    client, _ := gitlab.NewClient(accessToken, opts...)
-    return &GitLabProvider{client: client, baseURL: baseURL}
-}
-
-func (p *GitLabProvider) ValidateCredentials(ctx context.Context, _, _ string) error {
-    _, _, err := p.client.Users.CurrentUser()
-    return err
-}
-
-func (p *GitLabProvider) CreateBranch(ctx context.Context, opts BranchOptions) error {
-    pid := getProjectID(ctx)
-    _, _, err := p.client.Branches.CreateBranch(pid, &gitlab.CreateBranchOptions{
-        Branch: gitlab.Ptr(opts.Name),
-        Ref:    gitlab.Ptr(opts.BaseBranch),
-    })
-    return err
-}
-
-// ── MR 操作（适配为 PR 语义）──
-
-func (p *GitLabProvider) CreatePR(ctx context.Context, opts PROptions) (*PRResult, error) {
-    pid := getProjectID(ctx)
-    mr, _, err := p.client.MergeRequests.CreateMergeRequest(pid, &gitlab.CreateMergeRequestOptions{
-        Title:              gitlab.Ptr(opts.Title),
-        Description:        gitlab.Ptr(opts.Body),
-        SourceBranch:       gitlab.Ptr(opts.HeadBranch),
-        TargetBranch:       gitlab.Ptr(opts.BaseBranch),
-        RemoveSourceBranch: gitlab.Ptr(true),
-        Labels:             &opts.Labels,
-        AssigneeIDs:        toAssigneeIDs(opts.Reviewers),
-    })
-    if err != nil {
-        return nil, err
-    }
-    return &PRResult{
-        ID:     int64(mr.IID),
-        Number: mr.IID,
-        URL:    mr.WebURL,
-        Title:  mr.Title,
-        Status: mr.State,
-        Merged: mr.State == "merged",
-        CreatedAt: *mr.CreatedAt,
-        UpdatedAt: *mr.UpdatedAt,
-    }, nil
-}
-
-func (p *GitLabProvider) GetPR(ctx context.Context, repoID string, mrIID int) (*PRResult, error) {
-    pid := getProjectID(ctx)
-    mr, _, err := p.client.MergeRequests.GetMergeRequest(pid, mrIID, nil)
-    if err != nil {
-        return nil, err
-    }
-    return &PRResult{
-        ID:     int64(mr.IID),
-        Number: mr.IID,
-        URL:    mr.WebURL,
-        Title:  mr.Title,
-        Status: mr.State,
-        Merged: mr.State == "merged",
-        CreatedAt: *mr.CreatedAt,
-        UpdatedAt: *mr.UpdatedAt,
-    }, nil
-}
-
-func (p *GitLabProvider) ListPRs(ctx context.Context, repoID string, status string) ([]*PRResult, error) {
-    pid := getProjectID(ctx)
-    mrs, _, err := p.client.MergeRequests.ListProjectMergeRequests(pid,
-        &gitlab.ListProjectMergeRequestsOptions{State: gitlab.Ptr(status)})
-    if err != nil {
-        return nil, err
-    }
-    var results []*PRResult
-    for _, mr := range mrs {
-        results = append(results, &PRResult{
-            ID:     int64(mr.IID),
-            Number: mr.IID,
-            URL:    mr.WebURL,
-            Title:  mr.Title,
-            Status: mr.State,
-            Merged: mr.State == "merged",
-            CreatedAt: *mr.CreatedAt,
-            UpdatedAt: *mr.UpdatedAt,
-        })
-    }
-    return results, nil
-}
-
-func (p *GitLabProvider) MergePR(ctx context.Context, repoID string, mrIID int, method string) error {
-    pid := getProjectID(ctx)
-    _, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, mrIID,
-        &gitlab.AcceptMergeRequestOptions{
-            MergeWhenPipelineSucceeds: gitlab.Ptr(true),
-            Squash:                    gitlab.Ptr(method == "squash"),
-        })
-    return err
-}
-
-// ── Webhook ──
-
-func (p *GitLabProvider) RegisterWebhook(ctx context.Context, repoID, callbackURL, secret string) error {
-    pid := getProjectID(ctx)
-    _, _, err := p.client.Projects.AddProjectHook(pid, &gitlab.AddProjectHookOptions{
-        URL:                 gitlab.Ptr(callbackURL),
-        Token:               gitlab.Ptr(secret),
-        MergeRequestsEvents: gitlab.Ptr(true),
-        PushEvents:          gitlab.Ptr(false),
-    })
-    return err
-}
-
-func (p *GitLabProvider) UnregisterWebhook(ctx context.Context, repoID string, webhookID int64) error {
-    pid := getProjectID(ctx)
-    _, err := p.client.Projects.DeleteProjectHook(pid, int(webhookID))
-    return err
-}
-
-func (p *GitLabProvider) ParseWebhookPayload(r *http.Request) (*WebhookEvent, error) {
-    payload, _ := io.ReadAll(r.Body)
-    event, err := gitlab.ParseWebhook(gitlab.EventType(r.Header.Get("X-Gitlab-Event")), payload)
-    if err != nil {
-        return nil, err
-    }
-    if mrEvent, ok := event.(*gitlab.MergeEvent); ok {
-        return &WebhookEvent{
-            Platform:     "gitlab",
-            Event:        "merge_request",
-            Action:       mrEvent.ObjectAttributes.Action,
-            RepoFullName: mrEvent.Project.PathWithNamespace,
-            PRNumber:     mrEvent.ObjectAttributes.IID,
-            PRMerged:     mrEvent.ObjectAttributes.State == "merged",
-            HeadRef:      mrEvent.ObjectAttributes.SourceBranch,
-        }, nil
-    }
-    return nil, fmt.Errorf("unsupported event")
-}
-```
-
-## 8.9 Gitea Provider（go-gitea SDK）
-
-```go
-// internal/adapter/git/gitea.go
-
-import "code.gitea.io/sdk/gitea"
-
-type GiteaProvider struct {
-    client  *gitea.Client
-    baseURL string
-}
-
-func NewGiteaProvider(accessToken, baseURL string) *GiteaProvider {
-    client, _ := gitea.NewClient(baseURL,
-        gitea.SetToken(accessToken),
-        gitea.SetHTTPClient(&http.Client{Timeout: 30 * time.Second}),
-    )
-    return &GiteaProvider{client: client, baseURL: baseURL}
-}
-
-func (p *GiteaProvider) ValidateCredentials(ctx context.Context, _, _ string) error {
-    _, _, err := p.client.GetMyUserInfo()
-    return err
-}
-
-func (p *GiteaProvider) CreateBranch(ctx context.Context, opts BranchOptions) error {
-    owner, repo := parseOwnerRepo(ctx)
-    _, _, err := p.client.CreateBranch(owner, repo, gitea.CreateBranchOption{
-        BranchName:    opts.Name,
-        OldBranchName: opts.BaseBranch,
-    })
-    return err
-}
-
-// ── PR 操作 ──
-
-func (p *GiteaProvider) CreatePR(ctx context.Context, opts PROptions) (*PRResult, error) {
-    owner, repo := parseOwnerRepo(ctx)
-    pr, _, err := p.client.CreatePullRequest(owner, repo, gitea.CreatePullRequestOption{
-        Title: opts.Title,
-        Body:  opts.Body,
-        Head:  opts.HeadBranch,
-        Base:  opts.BaseBranch,
-        Labels: opts.Labels,
-    })
-    if err != nil {
-        return nil, err
-    }
-    return &PRResult{
-        ID:        pr.ID,
-        Number:    int(pr.Index),
-        URL:       pr.HTMLURL,
-        Title:     pr.Title,
-        Status:    string(pr.State),
-        Merged:    pr.HasMerged,
-        Mergeable: pr.Mergeable,
-        CreatedAt: pr.Created,
-        UpdatedAt: pr.Updated,
-    }, nil
-}
-
-func (p *GiteaProvider) GetPR(ctx context.Context, repoID string, prIndex int) (*PRResult, error) {
-    owner, repo := parseOwnerRepo(ctx)
-    pr, _, err := p.client.GetPullRequest(owner, repo, int64(prIndex))
-    if err != nil {
-        return nil, err
-    }
-    return &PRResult{
-        ID:     pr.ID,
-        Number: int(pr.Index),
-        URL:    pr.HTMLURL,
-        Title:  pr.Title,
-        Status: string(pr.State),
-        Merged: pr.HasMerged,
-        CreatedAt: pr.Created,
-        UpdatedAt: pr.Updated,
-    }, nil
-}
-
-func (p *GiteaProvider) ListPRs(ctx context.Context, repoID string, status string) ([]*PRResult, error) {
-    owner, repo := parseOwnerRepo(ctx)
-    prs, _, err := p.client.ListRepoPullRequests(owner, repo,
-        gitea.ListPullRequestsOptions{State: gitea.StateType(status)})
-    if err != nil {
-        return nil, err
-    }
-    var results []*PRResult
-    for _, pr := range prs {
-        results = append(results, &PRResult{
-            ID:     pr.ID,
-            Number: int(pr.Index),
-            URL:    pr.HTMLURL,
-            Title:  pr.Title,
-            Status: string(pr.State),
-            Merged: pr.HasMerged,
-            CreatedAt: pr.Created,
-            UpdatedAt: pr.Updated,
-        })
-    }
-    return results, nil
-}
-
-func (p *GiteaProvider) MergePR(ctx context.Context, repoID string, prIndex int, method string) error {
-    owner, repo := parseOwnerRepo(ctx)
-    _, _, err := p.client.MergePullRequest(owner, repo, int64(prIndex),
-        gitea.MergePullRequestOption{
-            Style:   gitea.MergeStyle(method),
-            Title:   "auto-merged by flowcode",
-        })
-    return err
-}
-
-// ── Webhook ──
-
-func (p *GiteaProvider) RegisterWebhook(ctx context.Context, repoID, callbackURL, secret string) error {
-    owner, repo := parseOwnerRepo(ctx)
-    _, _, err := p.client.CreateRepoHook(owner, repo, gitea.CreateHookOption{
-        Type:   "gitea",
-        Config: map[string]string{
-            "url":          callbackURL,
-            "content_type": "json",
-            "secret":       secret,
-        },
-        Events: []string{"pull_request"},
-        Active: true,
-    })
-    return err
-}
-
-func (p *GiteaProvider) UnregisterWebhook(ctx context.Context, repoID string, webhookID int64) error {
-    owner, repo := parseOwnerRepo(ctx)
-    _, err := p.client.DeleteRepoHook(owner, repo, webhookID)
-    return err
-}
-
-func (p *GiteaProvider) ParseWebhookPayload(r *http.Request) (*WebhookEvent, error) {
-    payload, _ := io.ReadAll(r.Body)
-    event, err := gitea.ParseWebhook(gitea.HookEvent(r.Header.Get("X-Gitea-Event")), payload)
-    if err != nil {
-        return nil, err
-    }
-    if prEvent, ok := event.(*gitea.PullRequestPayload); ok {
-        return &WebhookEvent{
-            Platform:     "gitea",
-            Event:        "pull_request",
-            Action:       string(prEvent.Action),
-            RepoFullName: prEvent.Repository.FullName,
-            PRNumber:     int(prEvent.Index),
-            PRMerged:     prEvent.PullRequest.HasMerged,
-            HeadRef:      prEvent.PullRequest.Head.Name,
-        }, nil
-    }
-    return nil, fmt.Errorf("unsupported event")
-}
-```
-
-## 8.10 GitProvider 工厂
+## 8.8 GitProvider 工厂
 
 ```go
 // internal/adapter/git/factory.go
@@ -1139,34 +823,24 @@ type ProviderType string
 
 const (
     ProviderGitHub ProviderType = "github"
-    ProviderGitLab ProviderType = "gitlab"
-    ProviderGitea  ProviderType = "gitea"
 )
 
 func NewGitProvider(pt ProviderType, accessToken, baseURL string) (GitProvider, error) {
     switch pt {
     case ProviderGitHub:
         return NewGitHubProvider(accessToken), nil
-    case ProviderGitLab:
-        return NewGitLabProvider(accessToken, baseURL), nil
-    case ProviderGitea:
-        return NewGiteaProvider(accessToken, baseURL), nil
     default:
         return nil, fmt.Errorf("unsupported provider: %s", pt)
     }
 }
 ```
 
-## 8.11 Webhook 统一路由
+## 8.9 Webhook 路由
 
-Git 平台的 Webhook 用于感知 PR 合并/关闭事件：
-
-### 多 Provider 路由
+GitHub 的 Webhook 用于感知 PR 合并/关闭事件：
 
 ```
 POST /api/v1/git/webhook/github  ← GitHub 回调
-POST /api/v1/git/webhook/gitlab  ← GitLab 回调
-POST /api/v1/git/webhook/gitea   ← Gitea 回调
 ```
 
 ### 统一处理器
@@ -1223,7 +897,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
     issue, _ := h.svc.FindIssueByRepoAndBranch(ctx, event.RepoFullName, event.HeadRef)
     if issue != nil {
         h.issueSvc.Transition(ctx, issue.ID, "reopen")
-        h.issueSvc.Transition(ctx, issue.ID, "reopen_to_approved")
+        // Issue 重新进入 draft 状态，可重新提交
     }
 }
 ```
@@ -1233,8 +907,6 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 | 平台 | 推荐方式 | 配置方式 |
 |------|---------|---------|
 | GitHub | Fine-grained PAT | Settings > Developer settings > PAT |
-| GitLab | Personal Access Token | User Settings > Access Tokens |
-| Gitea | Access Token | Settings > Applications > Generate Token |
 | GitHub (OAuth) | flowcode OAuth App | 后续版本支持 |
 
 凭证在数据库中 AES-256-GCM 加密存储。加密密钥通过环境变量 `FLOWCODE_ENCRYPTION_KEY` 注入。
@@ -1243,7 +915,7 @@ func (h *GitHandler) onPRClosedWithoutMerge(ctx context.Context, event *WebhookE
 
 > ⚠️ **仅手动导入，不做自动同步**。导入由用户在 Web 控制台点击按钮或执行 CLI 命令触发，不监听 Git 平台 Webhook、不设定时任务。导入后 Issue 由 flowcode 独立管理，不回写 Git 平台。
 
-从 Git 平台（GitHub / GitLab / Gitea）将已有 Issue 单向导入 flowcode。
+从 GitHub 将已有 Issue 单向导入 flowcode。
 
 ### 平台接口方法
 
@@ -1286,7 +958,7 @@ type RemoteIssue struct {
 | Labels | tags | 全部保留为 JSON 数组 |
 | Assignee | assigneeId | 按用户名/邮箱匹配本地用户，未匹配则为空 |
 | URL | sourceIssueUrl | 原始链接 |
-| — | sourcePlatform | `github` / `gitlab` / `gitea` |
+| — | sourcePlatform | `github` |
 | CreatedAt | createdAt | 保留原始时间 |
 
 ### 去重策略
@@ -1384,15 +1056,15 @@ flowcode project import-issues --state all
 > - 导入前需先配置 Git 凭证并绑定到项目
 > - Issue 标签中的分类关键词命中规则时自动设置 category，未命中则留空由后续 AI 分类
 > - 导入不自动触发 opencode 前置分析与执行计划生成（避免大量调用），可手动批量触发
-> - GitLab 的 Issue 在 SDK 中对应 `gitlab.Issue`（非 MR），Gitea 同理
+
 
 ## 8.13 安全考虑
 
 1. **最小权限原则**：Git PAT 仅需 `repo` 和 `pull_requests` 权限
 2. **凭证加密**：数据库存储加密，日志脱敏
-3. **操作审计**：所有 Git 操作自动写入 `audit_logs` 表（action=`git.*`），可追溯
+3. **操作日志**：所有 Git 操作自动写入日志，可追溯
 4. **分支保护**：AI 创建的分支带有 `flowcode/` 前缀，不触碰 `main`/`master`
-5. **可回滚**：PR 关闭不合并时，Issue 触发 `reopen`，随后经 `reopened` 自动回到 `approved` 入口
+5. **可回滚**：PR 关闭不合并时，Issue 触发 `reopen`，可重新分析和计划
 6. **SSH 密钥安全**：
    - 私钥仅存储在数据库中（AES-256-GCM 加密），使用后立即清理临时文件
    - `GIT_TERMINAL_PROMPT=0` 禁止任何交互式密码输入
@@ -1400,5 +1072,5 @@ flowcode project import-issues --state all
 7. **Git URL 安全**：
    - 仅允许 HTTP/HTTPS 和 SSH 协议，禁止 `file://`、`git://` 等
    - 校验时设置 15 秒超时，防止 SSRF 和内网探测
-   - URL 白名单域名校验（可选：限制仅允许 github.com / gitea.example.com 等）
+   - URL 白名单域名校验（可选：限制仅允许 github.com 等）
 8. **沙盒隔离**：Clone 的代码仅存在于容器/临时目录，Issue 完成后清理
