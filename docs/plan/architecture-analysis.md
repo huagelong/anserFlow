@@ -213,6 +213,12 @@ anserflow migrate
   --config  config.yaml 路径
   --dry-run 仅打印 SQL 不执行（默认 false）
   # 基于 GORM AutoMigrate，自动同步所有表结构
+
+# 版本升级（下载最新版本并替换当前二进制）
+anserflow upgrade
+  --channel  更新通道（stable/beta，默认 stable）
+  --dry-run  仅检查新版本不执行升级（默认 false）
+  # 自动检测最新版本 → 下载 → 校验 → 替换 → 重启
 ```
 
 ```go
@@ -256,6 +262,17 @@ var migrateCmd = &cobra.Command{
     Run: func(cmd *cobra.Command, args []string) {
         dryRun, _ := cmd.Flags().GetBool("dry-run")
         runMigrate(cfg, dryRun)
+    },
+}
+
+// cmd/upgrade.go
+var upgradeCmd = &cobra.Command{
+    Use:   "upgrade",
+    Short: "下载并安装最新版本",
+    Run: func(cmd *cobra.Command, args []string) {
+        channel, _ := cmd.Flags().GetString("channel")
+        dryRun, _ := cmd.Flags().GetBool("dry-run")
+        runUpgrade(channel, dryRun)
     },
 }
 ```
@@ -305,7 +322,8 @@ anserflow/
 │   ├── server.go
 │   ├── worker.go
 │   ├── init.go
-│   └── migrate.go          # 数据库自动迁移
+│   ├── migrate.go          # 数据库自动迁移
+│   └── upgrade.go          # 版本升级
 ├── internal/               # 业务逻辑
 │   ├── handler/            # Gin Handler
 │   ├── service/            # 业务服务
