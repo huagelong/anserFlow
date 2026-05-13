@@ -54,6 +54,7 @@
 | **Docker SDK** | Agent 编码沙箱隔离，资源限制、自动清理 |
 | **shadcn/ui** | 无捆绑、可定制、基于 Radix 的可访问组件 |
 | **Tauri 2.x** | 比 Electron 轻量、Rust 内核、支持移动端 |
+| **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
 
 ---
 
@@ -446,30 +447,7 @@ Asynq 核心特性：
 
 ## 六、AI Agent 框架：Eino + 自研封装
 
-### 6.1 为什么选 Eino
-
-2025-2026 年 Go AI Agent 三大框架对比：
-
-| 维度 | **Eino** (字节) | ADK-Go (Google) | LangChainGo |
-|------|:--:|:--:|:--:|
-| GitHub Stars | 12k+ | ~3k | 8k+ |
-| 多Agent编排 | ✅ Graph/Workflow | ✅ A2A 协议 | ⚠️ 基础 |
-| 流式支持 | ✅ 原生 | ✅ | ✅ |
-| 中断/恢复 | ✅ Checkpoint | ❌ | ❌ |
-| 中文社区 | ✅ 强 | ❌ 弱 | ⚠️ 一般 |
-| 厂商锁定 | 无 | Google Cloud | 无 |
-| 微服务契合度 | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
-| 适合本项目 | ✅ **最佳** | ⚠️ Google 绑定 | ❌ 抽象层过重 |
-
-Eino 与本项目需求的高度吻合点：
-
-1. **多 Agent 协作** → Eino 的 `Graph`/`Workflow` 编排天然支持群聊中的多 Agent 讨论调度
-2. **工具调用** → Eino 的 `Tool` 抽象可直接映射 Skills 系统
-3. **中断/恢复** → Agent 执行被用户打断？Eino 内置 checkpoint 机制
-4. **微服务架构** → Gin 服务天然是微服务，Eino 设计理念契合
-5. **高并发** → 多 Issue 并发执行多 Agent，goroutine + Eino 流式处理相得益彰
-
-### 6.2 架构分层
+### 架构分层
 
 ```
 ┌──────────────────────────────────────────┐
@@ -883,6 +861,49 @@ CREATE TABLE invitation_usages (
 | 使用次数限制 | `max_uses` 控制，0=不限 |
 | 角色预分配 | 受邀进入组织时自动分配角色 |
 | 邮箱验证 | 邮箱邀请时验证邮箱归属 |
+
+### 9.4 邮件服务
+
+邮件发送采用 `gopkg.in/gomail.v2`，通过 SMTP 发送邀请邮件和系统通知。
+
+```go
+import "gopkg.in/gomail.v2"
+
+func SendInviteEmail(to string, inviteLink string) error {
+    m := gomail.NewMessage()
+    m.SetHeader("From", "noreply@anserflow.io")
+    m.SetHeader("To", to)
+    m.SetHeader("Subject", "您被邀请加入 AnserFlow 组织")
+    m.SetBody("text/html", fmt.Sprintf(`
+        <p>点击以下链接接受邀请：</p>
+        <a href="%s">%s</a>
+        <p>链接 7 天内有效</p>
+    `, inviteLink, inviteLink))
+
+    d := gomail.NewDialer("smtp.example.com", 587, "username", "password")
+    return d.DialAndSend(m)
+}
+```
+
+**SMTP 配置**（存储在 config.yaml 中）：
+
+| 配置项 | 说明 | 示例 |
+|--------|------|------|
+| `smtp_host` | SMTP 服务器地址 | `smtp.gmail.com` |
+| `smtp_port` | 端口 | `587` |
+| `smtp_user` | 发件账号 | `noreply@anserflow.io` |
+| `smtp_password` | 授权码/密码 | — |
+| `smtp_from` | 发件人显示名 | `AnserFlow` |
+| `smtp_ssl` | 是否 SSL | `false` (STARTTLS) |
+
+**邮件触发场景**：
+
+| 场景 | 邮件内容 |
+|------|---------|
+| 邮箱邀请 | 含邀请链接，引导注册/登录后自动入组织 |
+| Issue 状态变更 | 当 Issue 从 InReview→Done 或被退回时通知相关人 |
+| Agent 执行完成 | PR 已提交 / 执行失败 通知 |
+| 密码重置 | 密码重置链接 |
 
 ---
 
