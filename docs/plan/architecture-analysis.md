@@ -1262,6 +1262,119 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
 }
 ```
 
+### 7.4 GitHub SDK 集成
+
+Git 操作与 GitHub API 分别使用两套 Go SDK，职责分离：
+
+| SDK | 用途 | 运行位置 | 认证 |
+|------|------|----------|------|
+| **go-git** (`github.com/go-git/go-git/v5`) | `clone` / `commit` / `push` / `checkout` | Docker 沙箱内（Worker） | HTTP Token / SSH 私钥 |
+| **go-github** (`github.com/google/go-github/v68`) | 创建 PR / Issue / Review Comment / 读取仓库信息 | Go 后端（Service 层） | HTTP Personal Access Token |
+
+```
+┌─────────────────────────────────────────────────┐
+│  go-github（GitHub REST API）                    │
+│  ├── PullRequests.Create → 创建 PR              │
+│  ├── Issues.Create / Edit → 操作 Issue          │
+│  ├── PullRequests.CreateReview → 添加 Review    │
+│  └── Repositories.GetContents → 读取文件树      │
+│  运行位置：internal/service/（Gin HTTP 层）      │
+├─────────────────────────────────────────────────┤
+│  go-git（纯 Go Git 实现，无需系统 git 二进制）     │
+│  ├── PlainClone → git clone                     │
+│  ├── Worktree.Add + Commit → git add / commit   │
+│  ├── Push → git push origin                     │
+│  └── Checkout → git checkout -b                 │
+│  运行位置：Docker 沙箱内（Asynq Worker）          │
+└─────────────────────────────────────────────────┘
+```
+
+#### go-github 示例
+
+```go
+import "github.com/google/go-github/v68/github"
+
+client := github.NewClient(nil).WithAuthToken(githubToken)
+
+// 创建 Issue
+issue, _, _ := client.Issues.Create(ctx, owner, repo, &github.IssueRequest{
+    Title:  github.Ptr("实现用户登录页面"),
+    Body:   github.Ptr("需要 JWT + bcrypt 认证"),
+    Labels: &[]string{"frontend", "p1"},
+})
+
+// 创建 Pull Request
+pr, _, _ := client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+    Title: github.Ptr("feat: 用户登录页面"),
+    Head:  github.Ptr("feature/login"),
+    Base:  github.Ptr("main"),
+    Body:  github.Ptr("Closes #" + issueID),
+})
+```
+
+#### go-git 认证示例
+
+**HTTP Token 认证**（对应 `github_auth_type = 'http'`）：
+
+```go
+import (
+    "github.com/go-git/go-git/v5"
+    "github.com/go-git/go-git/v5/plumbing/transport/http"
+)
+
+repo, _ := git.PlainClone("/workspace/repo", false, &git.CloneOptions{
+    URL: "https://github.com/org/repo.git",
+    Auth: &http.BasicAuth{
+        Username: "x-access-token", // 固定值，非真实用户名
+        Password: githubToken,       // ghp_xxxxxxxxxxxx
+    },
+})
+```
+
+**SSH 私钥认证**（对应 `github_auth_type = 'ssh'`）：
+
+```go
+import (
+    "github.com/go-git/go-git/v5"
+    "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+)
+
+publicKeys, _ := ssh.NewPublicKeys("git", []byte(privateKey), passphrase)
+repo, _ := git.PlainClone("/workspace/repo", false, &git.CloneOptions{
+    URL:  "git@github.com:org/repo.git",
+    Auth: publicKeys,
+})
+```
+
+**commit → push**：
+
+```go
+w, _ := repo.Worktree()
+w.Add(".")
+w.Commit("feat: Agent 自动生成的登录页", &git.CommitOptions{
+    Author: &object.Signature{Name: agentName, Email: agentEmail, When: time.Now()},
+})
+repo.Push(&git.PushOptions{Auth: auth})
+```
+
+#### GitHub Token 权限要求
+
+| 权限 | 用途 |
+|------|------|
+| `repo`（全部） | 读写仓库代码 |
+| `issues:write` | 创建/更新 Issue |
+| `pull_requests:write` | 创建 PR |
+
+> Classic Token 授权全部仓库即可；Fine-grained Token 需额外指定具体仓库。
+
+#### Go 模块依赖
+
+```
+# go.mod
+github.com/google/go-github/v68 v68.0.0
+github.com/go-git/go-git/v5 v5.15.0
+```
+
 ---
 
 ## 八、Skills 技能系统
@@ -1811,6 +1924,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.5  
+> 📌 文档版本: v1.6  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
