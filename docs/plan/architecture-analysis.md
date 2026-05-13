@@ -21,6 +21,10 @@
 │ 数据库     MySQL 8.0+                    │
 │ CLI        Cobra                         │
 │ 静态嵌入   embed (Go 1.16+)              │
+│ 配置       Viper                         │
+│ 日志       Zap                           │
+│ 校验       go-playground/validator       │
+│ 权限       Casbin (RBAC)                 │
 ├──────────────────────────────────────────┤
 │ 缓存/广播  Redis                         │
 │ 实时通信   Gorilla WebSocket             │
@@ -33,7 +37,10 @@
 ├──────────────────────────────────────────┤
 │ Skills     手动编写 + ZIP 导入           │
 │ 认证       JWT + OAuth2 (GitHub)         │
+│ 邮件       gomail (SMTP)                 │
 │ 邀请       分享链接 + 邮箱               │
+│ API文档    Swagger (swaggo/swag)         │
+│ 跨域       gin-contrib/cors              │
 └──────────────────────────────────────────┘
 ```
 
@@ -46,6 +53,10 @@
 | **MySQL 8.0+** | 关系型数据、事务支持、稳定可靠 |
 | **Cobra** | Go CLI 标准库，`anserflow server/init` 命令 |
 | **embed** | Go 1.16+ 原生静态文件嵌入，编译为单一可执行文件 |
+| **Viper** | Go 配置管理标准库，支持 YAML/ENV 多源加载 |
+| **Zap** | Uber 开源高性能结构化日志库 |
+| **validator** | Go 结构体校验标准库，API 请求参数校验 |
+| **Casbin** | 灵活的 RBAC/ABAC 权限模型，满足组织角色管理 |
 | **Next.js SPA** | `output: "export"` 模式，产物可直接嵌入 Go 二进制 |
 | **Redis** | 缓存 + WebSocket 分布式 Pub/Sub + Asynq 任务队列，一个组件覆盖三个场景 |
 | **Gorilla WebSocket** | Go 社区最成熟的 WebSocket 库 |
@@ -55,6 +66,118 @@
 | **shadcn/ui** | 无捆绑、可定制、基于 Radix 的可访问组件 |
 | **Tauri 2.x** | 比 Electron 轻量、Rust 内核、支持移动端 |
 | **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
+| **swaggo/swag** | Swagger/OpenAPI 文档自动生成，便于前后端联调 |
+| **gin-contrib/cors** | Gin 官方 CORS 中间件，SPA 跨域支持 |
+
+### 框架补充说明
+
+> 以下为生产级 Gin 项目的标准配套设施，确保系统可维护、可观测、可扩展。
+
+#### Viper — 配置管理
+
+`github.com/spf13/viper` 统一管理 `config.yaml`，支持环境变量覆盖（如 `DB_HOST`、`REDIS_ADDR` 覆盖配置文件值），生产环境敏感信息通过环境变量注入。
+
+```go
+viper.SetConfigName("config")
+viper.AddConfigPath(".")
+viper.AutomaticEnv() // ENV 自动覆盖
+viper.ReadInConfig()
+```
+
+#### Zap — 结构化日志
+
+`go.uber.org/zap` 替代标准库 `log`，支持 JSON 格式输出、日志分级（Debug/Info/Warn/Error）、按时间/大小自动切割。GORM 可直接接入 Zap 作为日志后端：
+
+```go
+logger, _ := zap.NewProduction()
+db, _ := gorm.Open(mysql.Open(dsn), &gorm.Config{
+    Logger: logger.New(gormLogger.Info, &gormLogger.Config{LogLevel: gormLogger.Info}),
+})
+```
+
+#### go-playground/validator — 请求校验
+
+Gin 原生集成了 `github.com/go-playground/validator`，通过 struct tag 声明校验规则：
+
+```go
+type CreateIssueReq struct {
+    Title       string `json:"title" binding:"required,min=1,max=256"`
+    Priority    string `json:"priority" binding:"required,oneof=p0 p1 p2 p3 p4"`
+    ProjectID   uint   `json:"project_id" binding:"required"`
+}
+```
+
+#### Casbin — 权限控制
+
+`github.com/casbin/casbin` 实现 RBAC，支持组织级角色（owner/admin/member）和资源级权限（项目/Issue/Agent）。策略模型存储在 MySQL 中，运行时动态加载：
+
+```ini
+[request_definition]
+r = sub, obj, act
+[policy_definition]
+p = sub, obj, act
+[role_definition]
+g = _, _
+[policy_effect]
+e = some(where (p.eft == allow))
+[matchers]
+m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && regexMatch(r.act, p.act)
+```
+
+#### Swagger — API 文档
+
+`github.com/swaggo/swag` + `github.com/swaggo/gin-swagger`，通过代码注解自动生成 OpenAPI 3.0 文档，开发环境访问 `/swagger/index.html`：
+
+```go
+// @title           AnserFlow API
+// @version         1.0
+// @host            localhost:8080
+// @BasePath        /api
+func main() { /* ... */ }
+```
+
+#### CORS — 跨域支持
+
+`github.com/gin-contrib/cors` 允许 SPA 前端和 Tauri WebView 跨域访问 API：
+
+```go
+r.Use(cors.New(cors.Config{
+    AllowOrigins: []string{"http://localhost:3000", "tauri://localhost"},
+    AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+    AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
+}))
+```
+
+#### 优雅关闭
+
+Go 标准库 `signal` + `http.Server.Shutdown`，确保收到 SIGINT/SIGTERM 时完成进行中的请求再退出：
+
+```go
+srv := &http.Server{Addr: ":8080", Handler: r}
+go srv.ListenAndServe()
+
+quit := make(chan os.Signal, 1)
+signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+<-quit
+
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+srv.Shutdown(ctx)
+```
+
+#### 健康检查
+
+`/api/health` 端点返回数据库、Redis 连通性，供 K8s/Docker 探活：
+
+```go
+r.GET("/api/health", func(c *gin.Context) {
+    c.JSON(200, gin.H{
+        "status": "ok",
+        "db":     checkDB(),
+        "redis":  checkRedis(),
+    })
+})
+```
 
 ---
 
@@ -1095,6 +1218,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.1  
+> 📌 文档版本: v1.2  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
