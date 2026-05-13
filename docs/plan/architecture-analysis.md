@@ -392,9 +392,288 @@ src/
 | **Prettier** + `prettier-plugin-tailwindcss` | 代码格式化 + Tailwind 类名排序 |
 | **TypeScript strict** | `tsconfig.json` 启用 `strict: true` |
 
+### Tauri 桌面端补充说明
+
+> Tauri 2.x 负责将 Next.js SPA 打包为桌面应用（Windows/macOS/Linux）+ 移动端（Android/iOS）。以下为 Tauri 项目核心架构、安全模型、插件体系和分发流程。
+
+#### 进程模型
+
+Tauri 采用多进程架构，遵循最小权限原则：
+
+```
+┌─────────────────────────────────┐
+│  Core 进程 (Rust)                │
+│  ├── 唯一拥有 OS 完整访问权限     │
+│  ├── 窗口管理 / 系统托盘          │
+│  ├── IPC 消息路由与拦截           │
+│  ├── 全局状态管理                 │
+│  └── 插件调度                    │
+├─────────────────────────────────┤
+│  WebView 进程 (JS/TS)            │
+│  ├── 渲染 Next.js SPA            │
+│  ├── 通过 IPC 调用 Core 能力      │
+│  └── 受 CSP + Capabilities 限制  │
+└─────────────────────────────────┘
+```
+
+- **Core 进程**：Rust 编写，管理窗口、托盘、通知，路由所有 IPC 消息
+- **WebView 进程**：操作系统原生 WebView（Windows: Edge WebView2, macOS: WKWebView, Linux: webkitgtk）
+- **安全隔离**：前端无法直接访问 OS，必须通过 Capabilities 声明的命令才能调用 Core 能力
+
+#### 项目结构
+
+```
+anserflow/
+├── frontend/                   # Next.js SPA（同现有结构）
+│   └── dist/                   # 构建产物 → 被 Tauri 加载
+├── src-tauri/                  # Tauri Rust 项目
+│   ├── Cargo.toml              # Rust 依赖
+│   ├── tauri.conf.json         # Tauri 核心配置
+│   ├── capabilities/
+│   │   └── default.json        # 权限声明
+│   ├── icons/                  # 应用图标（多平台）
+│   ├── src/
+│   │   ├── main.rs             # 桌面入口
+│   │   ├── lib.rs              # 核心逻辑 + 移动端入口
+│   │   └── commands.rs         # IPC 命令定义
+│   └── build.rs
+└── package.json                # 前端依赖 + Tauri CLI
+```
+
+#### 安全模型：Capabilities
+
+Tauri v2 采用声明式权限系统，`capabilities/default.json` 精确控制前端可调用的能力：
+
+```json
+{
+  "identifier": "default",
+  "description": "默认权限集",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "notification:default",
+    "dialog:default",
+    "clipboard-manager:default",
+    "updater:default",
+    "process:default",
+    "deep-link:default"
+  ]
+}
+```
+
+| 能力 | 用途 |
+|------|------|
+| `core:default` | 窗口操作、应用事件 |
+| `shell:allow-open` | 用系统默认程序打开 URL/文件 |
+| `notification:default` | 系统原生通知 |
+| `dialog:default` | 原生文件选择/保存对话框 |
+| `clipboard-manager:default` | 读写剪贴板 |
+| `updater:default` | 自动更新 |
+| `process:default` | 进程管理（重启） |
+| `deep-link:default` | 自定义协议深度链接 |
+
+#### IPC 通信
+
+前端通过 `@tauri-apps/api` 调用 Rust 端命令，采用异步消息传递：
+
+```rust
+// src-tauri/src/commands.rs
+#[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+async fn get_system_info() -> Result<SystemInfo, String> {
+    // 获取 OS 信息
+    Ok(SystemInfo { os: std::env::consts::OS.to_string() })
+}
+```
+
+```ts
+// 前端调用
+import { invoke } from '@tauri-apps/api/core'
+
+const version = await invoke<string>('get_app_version')
+const sysInfo = await invoke<SystemInfo>('get_system_info')
+```
+
+**核心 IPC 命令**（AnserFlow 场景）：
+
+| 命令 | 功能 |
+|------|------|
+| `get_app_version` | 获取应用版本 |
+| `open_url` | 用系统浏览器打开外部链接 |
+| `show_notification` | 发送系统通知 |
+| `get_system_info` | 获取 OS 信息 |
+| `restart_app` | 更新后重启应用 |
+
+#### Tauri 配置
+
+`tauri.conf.json` 核心配置：
+
+```json
+{
+  "productName": "AnserFlow",
+  "version": "0.1.0",
+  "identifier": "io.anserflow.app",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "AnserFlow",
+      "width": 1280,
+      "height": 800,
+      "minWidth": 900,
+      "minHeight": 600,
+      "resizable": true,
+      "center": true
+    }],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:8080 ws://localhost:8080"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["anserflow"]
+      }
+    }
+  }
+}
+```
+
+#### 插件体系
+
+AnserFlow 需要用到的 Tauri 官方插件：
+
+| 插件 | 场景 |
+|------|------|
+| **notification** | Issue 状态变更 / Agent 执行完成 / @提及 系统通知 |
+| **shell** | 用系统默认浏览器打开 GitHub PR 链接 |
+| **dialog** | 文件选择（Skills ZIP 导入） |
+| **clipboard-manager** | 复制邀请链接 |
+| **updater** | 应用内自动更新 |
+| **process** | 更新完成后重启应用 |
+| **window-state** | 记忆窗口大小和位置 |
+| **single-instance** | 防止重复启动 |
+| **deep-link** | `anserflow://invite/xxx` 协议处理邀请 |
+| **fs** | 文件系统访问（Skills ZIP 解压） |
+| **store** | 持久化键值存储（本地设置缓存） |
+| **logging** | Rust 端日志输出 |
+
+安装示例：
+
+```bash
+cargo tauri add notification
+cargo tauri add updater
+cargo tauri add deep-link
+```
+
+#### 深度链接
+
+通过 `anserflow://` 自定义协议处理邀请链接，用户点击 `anserflow://invite/abc123` 时自动打开桌面应用并跳转到接受邀请页面：
+
+```rust
+// src-tauri/src/lib.rs
+use tauri_plugin_deep_link::DeepLinkExt;
+
+app.listen_deep_link(|url| {
+    if let Some(token) = url.path().strip_prefix("/invite/") {
+        // 通知前端跳转到邀请页面
+        app.emit("deep-link-invite", token).unwrap();
+    }
+});
+```
+
+```ts
+// 前端监听
+import { listen } from '@tauri-apps/api/event'
+
+listen('deep-link-invite', (event) => {
+  router.push(`/invite/${event.payload}`)
+})
+```
+
+#### 自动更新
+
+Tauri updater 插件支持从静态 JSON 或动态服务获取更新，更新流程：
+
+```
+应用启动 → 检查更新 API → 发现新版本
+  → 下载安装包（MSI/DMG/AppImage）
+  → 校验签名
+  → 提示用户重启
+  → process::restart() 应用新版本
+```
+
+```json
+// 更新服务器返回 JSON
+{
+  "version": "0.2.0",
+  "notes": "新增 Skills ZIP 导入功能",
+  "platforms": {
+    "windows-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_x64.msi.zip" },
+    "darwin-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_x64.dmg" },
+    "linux-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_amd64.AppImage.tar.gz" }
+  }
+}
+```
+
+#### 打包与分发
+
+| 平台 | 格式 | 说明 |
+|------|------|------|
+| **Windows** | MSI / NSIS | MSI 支持企业批量部署，NSIS 体积更小 |
+| **macOS** | DMG | 需 Apple Developer 签名 + Notarization |
+| **Linux** | AppImage / deb / rpm | AppImage 通用性最好 |
+| **Android** | APK / AAB | 通过 Tauri Android 插件打包 |
+| **iOS** | IPA | 需 Apple Developer 账号 |
+
+```bash
+# 三平台交叉编译
+cargo tauri build --target x86_64-pc-windows-msvc
+cargo tauri build --target x86_64-apple-darwin
+cargo tauri build --target aarch64-apple-darwin
+cargo tauri build --target x86_64-unknown-linux-gnu
+```
+
+#### Tauri 前端适配
+
+SPA 在 Tauri WebView 中需注意的适配点：
+
+```ts
+// lib/tauri.ts — 环境检测与适配
+import { isTauri } from '@tauri-apps/api/core'
+
+// 根据运行环境切换 API 地址
+export const API_BASE = isTauri()
+  ? 'http://localhost:8080/api'          // 桌面端直连本地后端
+  : process.env.NEXT_PUBLIC_API_BASE     // 浏览器模式使用远程 API
+
+export const WS_URL = isTauri()
+  ? 'ws://localhost:8080/ws'
+  : process.env.NEXT_PUBLIC_WS_URL!
+
+// CSP 适配：Tauri WebView 中 'self' 指向 tauri://localhost
+// 需在 tauri.conf.json 的 CSP 中白名单后端地址
+```
+
 ```mermaid
 graph TD
     A["AnserFlow 平台"] --> B["用户与权限"]
+    A --> C["Agent 管理"]
     A --> C["Agent 管理"]
     A --> D["群聊协作"]
     A --> E["项目管理"]
@@ -1427,6 +1706,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.3  
+> 📌 文档版本: v1.4  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
