@@ -673,6 +673,382 @@ export const WS_URL = isTauri()
 // 需在 tauri.conf.json 的 CSP 中白名单后端地址
 ```
 
+#### Rust 最小学习路径
+
+AnserFlow 桌面端 Rust 代码量极少，核心仅三个文件，每个都可以按模板修改：
+
+| 文件 | 行数 | 内容 | Rust 知识点 |
+|------|------|------|------------|
+| `main.rs` | ~10 | 入口（固定模板） | 无，复制粘贴 |
+| `lib.rs` | ~20 | 插件注册 + 初始化 | 宏调用、Result |
+| `commands.rs` | ~40 | IPC 命令 | 函数声明、字符串操作 |
+
+**对比**：Go vs Rust 在桌面端职责中的对应关系：
+
+```
+Go 概念          →  Rust 概念
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+func cmd()       →  fn cmd()
+string           →  String
+map[string]T     →  HashMap<String, T>
+err != nil       →  match / ? 操作符
+struct{}         →  struct{}
+go mod           →  Cargo.toml
+```
+
+> **结论**：不需要学 Rust。参考 AI 生成 + 模板修改即可完成桌面端开发。
+
+#### lib.rs 完整示例
+
+将所有插件在 `lib.rs` 中一次性注册，AnserFlow 桌面端的完整 Rust 骨架：
+
+```rust
+// src-tauri/src/lib.rs
+use tauri_plugin_deep_link::DeepLinkExt;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        // ── 插件注册 ──
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 重复启动 → 激活已有窗口
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(
+            tauri_plugin_updater::Builder::new().build()
+        )
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("anserflow".to_string()),
+                    },
+                ))
+                .max_file_size(5_000_000)  // 5MB
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .build(),
+        )
+        // ── 深度链接 ──
+        .setup(|app| {
+            #[cfg(desktop)]
+            {
+                app.listen_deep_link(|url| {
+                    if let Some(token) = url.path().strip_prefix("/invite/") {
+                        app.emit("deep-link-invite", token).unwrap();
+                    }
+                });
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::get_system_info,
+            commands::open_url,
+            commands::restart_app,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+```rust
+// src-tauri/src/commands.rs — IPC 命令
+use tauri::Manager;
+
+#[tauri::command]
+fn get_system_info() -> Result<String, String> {
+    Ok(format!(
+        "{{ \"os\": \"{}\", \"arch\": \"{}\" }}",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    ))
+}
+
+#[tauri::command]
+fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    tauri_plugin_shell::ShellExt::shell(&app)
+        .open(&url, None)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+```
+
+#### 通知插件实战
+
+AnserFlow 关键通知场景的 TypeScript 封装：
+
+```ts
+// desktop/src/lib/notifications.ts
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+  registerActionTypes,
+  onAction,
+  createChannel,
+  Importance,
+} from '@tauri-apps/plugin-notification'
+
+// 初始化：申请权限 + 注册频道
+async function initNotifications() {
+  const granted = await isPermissionGranted()
+  if (!granted) {
+    const perm = await requestPermission()
+    if (perm !== 'granted') return
+  }
+
+  // 注册通知频道（Android 必需，其他平台兼容）
+  await createChannel({
+    id: 'issues',
+    name: 'Issue 通知',
+    description: 'Issue 状态变更、@提及、分配',
+    importance: Importance.High,
+    visibility: 1, // Private
+  })
+
+  await createChannel({
+    id: 'agent',
+    name: 'Agent 通知',
+    description: 'Agent 执行完成通知',
+    importance: Importance.Default,
+  })
+
+  // 注册带操作的 Issue 通知
+  await registerActionTypes([{
+    id: 'issue-actions',
+    actions: [
+      { id: 'view', title: '查看详情', foreground: true },
+      { id: 'close', title: '关闭 Issue', foreground: false },
+    ],
+  }])
+}
+
+// 监听通知操作
+onAction((action) => {
+  if (action.actionId === 'view') {
+    // 导航到 Issue 详情页
+    window.location.hash = `/projects/${action.payload?.projectId}/issues/${action.payload?.issueId}`
+  }
+  if (action.actionId === 'close') {
+    // 调用 API 关闭 Issue
+    fetch(`/api/issues/${action.payload?.issueId}/close`, { method: 'POST' })
+  }
+})
+
+// 场景函数
+export async function notifyIssueAssigned(title: string, issueUrl: string) {
+  await sendNotification({
+    title: '📋 新 Issue 分配',
+    body: title,
+    channelId: 'issues',
+    actionTypeId: 'issue-actions',
+  })
+}
+
+export async function notifyAgentComplete(agentName: string) {
+  await sendNotification({
+    title: '✅ Agent 执行完成',
+    body: `${agentName} 已完成任务`,
+    channelId: 'agent',
+  })
+}
+
+@tauri-apps/plugin-notification
+export async function notifyMention(who: string, message: string) {
+  await sendNotification({
+    title: `💬 ${who} 提到了你`,
+    body: message,
+    channelId: 'issues',
+  })
+}
+```
+
+#### Store 插件实战
+
+用 tauri-plugin-store 持久化本地设置（窗口尺寸、主题、API 地址等），比 localStorage 更可靠：
+
+```ts
+// desktop/src/lib/local-settings.ts
+import { load } from '@tauri-apps/plugin-store'
+
+interface LocalSettings {
+  theme: 'light' | 'dark' | 'system'
+  apiBase: string          // 后端 API 地址
+  lastProjectId?: string
+  windowBounds?: { x: number; y: number; width: number; height: number }
+}
+
+const DEFAULT: LocalSettings = {
+  theme: 'system',
+  apiBase: 'http://localhost:8080/api',
+}
+
+let _store: Awaited<ReturnType<typeof load>> | null = null
+
+async function getStore() {
+  if (!_store) {
+    _store = await load('settings.json', { autoSave: true })
+  }
+  return _store
+}
+
+export async function getSettings(): Promise<LocalSettings> {
+  const store = await getStore()
+  const val = await store.get<LocalSettings>('settings')
+  return { ...DEFAULT, ...val }
+}
+
+export async function updateSettings(patch: Partial<LocalSettings>) {
+  const store = await getStore()
+  const current = await getSettings()
+  await store.set('settings', { ...current, ...patch })
+  // autoSave: true 会自动持久化
+}
+```
+
+#### Logging 插件实战
+
+生产环境日志落到文件，便于排查问题：
+
+```ts
+// desktop/src/lib/logger.ts
+import { info, warn, error, attachConsole } from '@tauri-apps/plugin-log'
+
+// 开发时：前端 console → Rust 日志系统
+export function setupLogger() {
+  attachConsole() // 将 Rust 日志打印到 WebView console
+
+  // 将 console.log/warn/error 转发到 Rust 日志文件
+  const forward = (fnName: 'log' | 'warn' | 'error', logger: (msg: string) => Promise<void>) => {
+    const orig = console[fnName]
+    console[fnName] = (...args: any[]) => {
+      orig(...args)
+      logger(args.map(String).join(' '))
+    }
+  }
+  forward('log', info)
+  forward('warn', warn)
+  forward('error', error)
+}
+
+// 调用日志
+// info('用户登录成功', { userId: 123 })
+// error('API 请求失败', { url: '/api/issues', status: 500 })
+```
+
+#### CI/CD：GitHub Actions 跨平台构建
+
+使用 `tauri-action` 一键构建四平台产物并上传：
+
+```yaml
+# .github/workflows/desktop-release.yml
+name: Desktop Release
+on:
+  push:
+    tags: ['desktop-v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: macos-13
+            target: x86_64-apple-darwin
+          - platform: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with: { targets: '${{ matrix.target }}' }
+
+      - name: Build Frontend & Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        with:
+          projectPath: 'desktop'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'AnserFlow Desktop ${{ github.ref_name }}'
+          releaseBody: 'See CHANGELOG.md'
+          includeUpdaterJson: true
+```
+
+> macOS 签名与公证需要 Apple Developer 账号，在 Actions secrets 中配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`。
+
+#### WebDriver E2E 测试
+
+Tauri 内置 WebDriver 支持，可编写 Selenium/WebdriverIO 脚本测试桌面应用：
+
+```bash
+# 安装 tauri-driver
+cargo install tauri-driver
+
+# 启动测试
+tauri-driver &
+cargo tauri dev &  # 或 cargo tauri build --debug
+npx wdio run wdio.conf.ts
+```
+
+```ts
+// wdio.conf.ts
+const wdioOptions = {
+  hostname: 'localhost',
+  port: 4444,
+  path: '/',
+  capabilities: [{
+    'tauri:options': {
+      application: './src-tauri/target/debug/anserflow-desktop',
+    },
+  }],
+}
+```
+
+> 适合对关键流程（登录、创建 Issue、接受邀请）做自动化回归。
+
+#### 推荐插件分级
+
+| 优先级 | 插件 | 原因 |
+|--------|------|------|
+| 🔴 必须 | window-state | 窗口尺寸记忆，用户体验基础 |
+| 🔴 必须 | single-instance | 防止多开导致的状态冲突 |
+| 🔴 必须 | notification | 核心功能（Issue / Agent 通知） |
+| 🔴 必须 | shell | 打开 GitHub PR 链接 |
+| 🔴 必须 | updater | 自动更新分发 |
+| 🟡 重要 | store | 持久化本地设置 |
+| 🟡 重要 | logging | 生产排查日志 |
+| 🟡 重要 | deep-link | 邀请链接直接打开桌面端 |
+| 🟡 重要 | dialog | Skills ZIP 导入 |
+| 🟢 可选 | clipboard-manager | 复制邀请链接 |
+| 🟢 可选 | fs | 文件系统操作 |
+| 🟢 可选 | process | 更新后重启 |
+
 ```mermaid
 graph TD
     A["AnserFlow 平台"] --> B["用户与权限"]
@@ -1995,6 +2371,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.8  
+> 📌 文档版本: v1.9  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
