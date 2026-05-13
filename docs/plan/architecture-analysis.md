@@ -422,22 +422,25 @@ Tauri 采用多进程架构，遵循最小权限原则：
 
 #### 项目结构
 
+Tauri 项目位于 `desktop/src-tauri/`，与 `desktop/package.json` 同级，符合 Tauri 默认约定：
+
 ```
-anserflow/
-├── frontend/                   # Next.js SPA（同现有结构）
-│   └── dist/                   # 构建产物 → 被 Tauri 加载
-├── src-tauri/                  # Tauri Rust 项目
-│   ├── Cargo.toml              # Rust 依赖
-│   ├── tauri.conf.json         # Tauri 核心配置
-│   ├── capabilities/
-│   │   └── default.json        # 权限声明
-│   ├── icons/                  # 应用图标（多平台）
-│   ├── src/
-│   │   ├── main.rs             # 桌面入口
-│   │   ├── lib.rs              # 核心逻辑 + 移动端入口
-│   │   └── commands.rs         # IPC 命令定义
-│   └── build.rs
-└── package.json                # 前端依赖 + Tauri CLI
+desktop/                       # 桌面客户端根目录
+├── package.json               # Next.js + Tauri CLI 依赖
+├── next.config.js
+├── src/                       # Next.js 源码
+├── dist/                      # 构建产物 → frontendDist: "../dist"
+└── src-tauri/                 # Tauri Rust 项目
+    ├── Cargo.toml             # Rust 依赖
+    ├── tauri.conf.json        # Tauri 核心配置
+    ├── capabilities/
+    │   └── default.json       # 权限声明
+    ├── icons/                 # 应用图标（多平台）
+    ├── src/
+    │   ├── main.rs            # 桌面入口
+    │   ├── lib.rs             # 核心逻辑 + 移动端入口
+    │   └── commands.rs        # IPC 命令定义
+    └── build.rs
 ```
 
 #### 安全模型：Capabilities
@@ -925,34 +928,136 @@ cd backend && go build -o anserflow    # dist/ 被 go:embed 打入二进制
 ./anserflow server  # 启动，访问 http://localhost:8080
 ```
 
-### 4.5 项目目录结构
+### 4.5 项目目录结构（Monorepo）
+
+Gin 后端、两套 Next.js 前端（后台管理 + 桌面客户端）、Tauri 放在同一个仓库。
 
 ```
 anserflow/
-├── cmd/                    # CLI 入口（Cobra）
-│   ├── root.go
-│   ├── server.go
-│   ├── worker.go
-│   ├── init.go
-│   ├── migrate.go          # 数据库自动迁移
-│   └── upgrade.go          # 版本升级
-├── internal/               # 业务逻辑
-│   ├── handler/            # Gin Handler
-│   ├── service/            # 业务服务
-│   ├── model/              # GORM Model
-│   ├── middleware/         # Gin 中间件
-│   ├── ws/                 # WebSocket Hub
-│   ├── agent/              # Agent 编排（Eino 封装）
-│   ├── sandbox/            # Docker 沙箱
-│   └── invite/             # 邀请服务
-├── config/                 # 配置加载
-├── frontend/               # Next.js SPA 项目
-│   └── dist/               # 构建产物（被 embed）
-├── embed.go                # //go:embed frontend/dist/*
-├── main.go                 # 入口
+├── cmd/                        # Go CLI 入口（Cobra）
+│   ├── root.go                 #   根命令注册
+│   ├── server.go               #   anserflow server
+│   ├── worker.go               #   anserflow worker
+│   ├── init.go                 #   anserflow init
+│   ├── migrate.go              #   anserflow migrate
+│   └── upgrade.go              #   anserflow upgrade
+├── internal/                   # Go 业务逻辑
+│   ├── handler/                #   Gin Handler（API 路由）
+│   ├── service/                #   业务服务层
+│   ├── model/                  #   GORM Model
+│   ├── middleware/             #   Gin 中间件（JWT / CORS / Casbin）
+│   ├── ws/                     #   WebSocket Hub
+│   ├── agent/                  #   Agent 编排（Eino 封装）
+│   ├── sandbox/                #   Docker 沙箱
+│   └── invite/                 #   邀请服务
+├── config/                     # Go 配置加载（Viper）
+├── admin/                      # ① 后台管理 Next.js → 浏览器访问，嵌入 Go 二进制
+│   ├── package.json            #   Next.js 依赖
+│   ├── next.config.js          #   output: "export"
+│   ├── tsconfig.json
+│   ├── src/                    #   Next.js 源码
+│   │   ├── app/                #     /login /dashboard /agents /projects ...
+│   │   ├── components/         #     共享 UI 组件
+│   │   ├── features/           #     业务模块
+│   │   ├── hooks/              #     自定义 Hook
+│   │   ├── stores/             #     Zustand Store
+│   │   ├── lib/                #     工具函数 & API Client
+│   │   └── types/              #     TypeScript 类型
+│   └── dist/                   #   构建产物 → //go:embed admin/dist/*
+├── desktop/                    # ② 桌面客户端 Next.js → Tauri 加载
+│   ├── package.json            #   Next.js + Tauri CLI 依赖
+│   ├── next.config.js          #   output: "export"
+│   ├── tsconfig.json
+│   ├── src/                    #   Next.js 源码（客户端视角）
+│   │   ├── app/                #     /dashboard /projects/:id /chat ...
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── hooks/
+│   │   ├── stores/
+│   │   ├── lib/
+│   │   │   └── tauri.ts        #     isTauri() 环境检测
+│   │   └── types/
+│   ├── dist/                   #   构建产物 → Tauri frontendDist
+│   └── src-tauri/              #   Tauri Rust 项目
+│       ├── Cargo.toml
+│       ├── tauri.conf.json     #     frontendDist: "../dist"
+│       ├── capabilities/
+│       │   └── default.json
+│       ├── icons/
+│       └── src/
+│           ├── main.rs         #     桌面入口
+│           ├── lib.rs          #     核心 + 移动端入口
+│           └── commands.rs     #     IPC 命令
+├── packages/                   # ③ 共享包（后续从 admin/desktop 提取）
+│   └── shared-ui/              #   公共 UI 组件 / 类型 / lib
+├── embed.go                    # //go:embed admin/dist/*
+├── main.go                     # Go 入口
 ├── go.mod
-└── go.sum
+├── go.sum
+├── config.yaml                 # 运行配置
+└── Makefile                    # 构建脚本
 ```
+
+**三种产物、两个前端入口**：
+
+| 产物 | 前端 | 用户 | 部署方式 |
+|------|------|------|----------|
+| `anserflow` 二进制 | `admin/` 嵌入 | 管理员/团队负责人（浏览器） | 服务器部署 |
+| Tauri 安装包 | `desktop/` 打包 | 普通成员/被邀请者（桌面） | MSI/DMG/AppImage |
+| 移动端 | `desktop/` + Tauri mobile | 移动用户 | APK/IPA |
+
+**`admin/` vs `desktop/` 职责划分**：
+
+| | `admin/` 后台管理 | `desktop/` 桌面客户端 |
+|------|------|------|
+| 访问方式 | 浏览器 `http://host:8080` | Tauri 原生窗口 |
+| 嵌入 Go | ✅ `//go:embed admin/dist/*` | ❌ 由 Tauri 加载 |
+| 目标用户 | 管理员、组织负责人 | 普通成员、被邀请者 |
+| 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | 项目看板 / Issue 列表 / 群聊 / 个人工作台 |
+| 路由前缀 | `/login` `/dashboard` `/agents` `/projects` `/skills` | `/dashboard` `/projects/:id` `/chat` |
+| API 地址 | 同源 `/api/*`（无跨域） | `http://localhost:8080/api/*`（跨域 + CORS） |
+
+**开发运行**：
+
+```bash
+# ====== 后台管理开发 ======
+终端1: go run main.go server                        # Gin :8080
+终端2: cd admin && npm run dev                      # Next.js :3000
+#     浏览器打开 http://localhost:3000
+
+# ====== 桌面端开发 ======
+终端1: go run main.go server                        # Gin :8080
+终端2: cd desktop && npm run dev                    # Next.js :3001
+终端3: cd desktop && cargo tauri dev                # Tauri 窗口加载 :3001
+```
+
+**构建流程**：
+
+```bash
+# ====== 纯 Web 部署 ======
+cd admin    && npm run build        # → admin/dist/
+go build -o anserflow               # 嵌入 admin/dist/
+./anserflow server                  # 浏览器访问 :8080
+
+# ====== 桌面端打包 ======
+cd desktop  && npm run build        # → desktop/dist/
+cd desktop  && cargo tauri build    # → MSI/DMG/AppImage
+```
+
+**路由分发**：Go 后端根据路径前缀区分两套前端（暂不实施，先只嵌入 admin/）：
+
+```go
+// 后续可扩展：同时嵌入两个 SPA，按路径前缀分发
+//go:embed admin/dist
+var adminFiles embed.FS
+//go:embed desktop/dist
+var desktopFiles embed.FS
+
+// /admin/* → admin SPA
+// /*       → desktop SPA（或反过来）
+```
+
+> 💡 后期可从 `admin/` 和 `desktop/` 中提取公共 UI 组件/类型/API Client 到 `packages/shared-ui/`，减少重复代码。
 
 ---
 
@@ -1706,6 +1811,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.4  
+> 📌 文档版本: v1.5  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
