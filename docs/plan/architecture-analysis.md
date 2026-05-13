@@ -1375,6 +1375,41 @@ github.com/google/go-github/v68 v68.0.0
 github.com/go-git/go-git/v5 v5.15.0
 ```
 
+#### 多平台扩展设计
+
+后期支持 Gitea / GitLab / Gitee 等平台，通过接口抽象实现：
+
+```
+┌──────────────────────────────────────────────┐
+│  internal/git/                                │
+│  ├── provider.go        GitProvider 接口定义  │
+│  ├── github.go          GitHub 实现           │
+│  ├── gitea.go           Gitea 实现            │
+│  └── gitlab.go          GitLab 实现           │
+└──────────────────────────────────────────────┘
+```
+
+```go
+// internal/git/provider.go — 平台无关接口
+type GitProvider interface {
+    CreateIssue(ctx, repo, title, body string, labels []string) (issueID string, err error)
+    CreatePR(ctx, repo, title, head, base, body string) (prURL string, err error)
+    GetRepoInfo(ctx, repo string) (*RepoInfo, error)
+    ListRepos(ctx) ([]RepoInfo, error)
+}
+```
+
+`go-git` 层无需任何改动 — 它只做 `clone/commit/push`，协议层（HTTP/SSH）与平台无关。只有 REST API 层需要为每个平台实现 `GitProvider` 接口。
+
+| 平台 | Go SDK | 备注 |
+|------|--------|------|
+| **GitHub** | `go-github/v68` | 已实现 |
+| **Gitea** | `code.gitea.io/sdk/gitea` | API 兼容 GitHub，迁移成本低 |
+| **GitLab** | `github.com/xanzy/go-gitlab` | API 结构不同，独立实现 |
+| **Gitee** | REST API（无官方 Go SDK） | 可基于 `net/http` 封装 |
+
+> 数据模型已预留 `git_platform` 字段，创建项目时指定平台类型，后续根据平台字段路由到对应的 `GitProvider` 实现。
+
 ---
 
 ## 八、Skills 技能系统
@@ -1543,10 +1578,11 @@ CREATE TABLE projects (
     org_id BIGINT NOT NULL,
     name VARCHAR(128) NOT NULL,
     description TEXT,
-    github_repo_url VARCHAR(512),
-    github_repo_name VARCHAR(256),
-    github_auth_type ENUM('http','ssh') DEFAULT 'http',  -- 授权方式
-    github_auth_credential VARCHAR(1024),                -- HTTP:Token / SSH:私钥路径或内容
+    git_platform ENUM('github','gitea','gitlab','gitee') DEFAULT 'github',  -- Git 平台
+    git_repo_url VARCHAR(512),                                               -- 仓库地址
+    git_repo_name VARCHAR(256),                                              -- 仓库名（org/repo）
+    git_auth_type ENUM('http','ssh') DEFAULT 'http',                         -- 授权方式
+    git_auth_credential VARCHAR(1024),                                       -- HTTP:Token / SSH:私钥内容
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id),
@@ -1924,6 +1960,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.6  
+> 📌 文档版本: v1.7  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
