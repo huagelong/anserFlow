@@ -13,7 +13,10 @@
 ```
 ┌──────────────────────────────────────────┐
 │ 前端       Next.js 14 SPA (static export)│
-│           shadcn/ui                      │
+│           shadcn/ui + Tailwind CSS        │
+│           TanStack Query (数据请求)       │
+│           Zustand (客户端状态)            │
+│           React Hook Form + Zod (表单)    │
 │           Tauri 2.x (桌面+移动端)         │
 ├──────────────────────────────────────────┤
 │ 后端框架   Gin                           │
@@ -63,6 +66,16 @@
 | **Asynq** | Go 原生、基于 Redis、支持重试/超时/优先级/死信队列，零额外运维 |
 | **Eino** | 字节跳动开源、12k+ Stars、Graph/Workflow 多 Agent 编排、流式原生支持、中文社区强 |
 | **Docker SDK** | Agent 编码沙箱隔离，资源限制、自动清理 |
+| **TanStack Query** | 服务端状态管理，自动缓存/重取/去重，SPA 模式完美兼容 |
+| **Zustand** | 极轻量客户端状态管理（侧栏、弹窗、看板拖拽状态） |
+| **React Hook Form + Zod** | 高性能表单 + 声明式校验，与 shadcn/ui 深度集成 |
+| **TanStack Table** | 无头表格库，Issue 列表/Agent 列表/成员表格 |
+| **Recharts** | 图表库，Dashboard 数据可视化 |
+| **next-themes** | 暗色/亮色主题切换，与 Tailwind CSS 原生配合 |
+| **Framer Motion** | 动效库，页面过渡、看板拖拽动画 |
+| **Sonner** | 轻量 Toast 通知，操作反馈 |
+| **date-fns** | 日期处理，轻量 tree-shakable |
+| **lucide-react** | 图标库，与 shadcn/ui 配套 |
 | **shadcn/ui** | 无捆绑、可定制、基于 Radix 的可访问组件 |
 | **Tauri 2.x** | 比 Electron 轻量、Rust 内核、支持移动端 |
 | **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
@@ -179,9 +192,205 @@ r.GET("/api/health", func(c *gin.Context) {
 })
 ```
 
----
+### 前端框架补充说明
 
-## 三、核心功能矩阵
+> 以下为 Next.js SPA 生产级项目标准配套设施，覆盖状态管理、数据请求、表单、动效、主题等核心能力。
+
+#### TanStack Query — 服务端状态管理
+
+`@tanstack/react-query` 负责所有 API 数据请求，提供自动缓存、后台刷新、请求去重、乐观更新。SPA 模式下完全运行在客户端：
+
+```tsx
+// hooks/use-issues.ts
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+export function useIssues(projectId: number) {
+  return useQuery({
+    queryKey: ['issues', projectId],
+    queryFn: () => fetch(`/api/projects/${projectId}/issues`).then(r => r.json()),
+    staleTime: 30 * 1000,  // 30s 内不重新请求
+  })
+}
+
+export function useCreateIssue() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateIssueReq) =>
+      fetch('/api/issues', { method: 'POST', body: JSON.stringify(data) }).then(r => r.json()),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['issues', vars.project_id] })
+    },
+  })
+}
+```
+
+#### Zustand — 客户端状态管理
+
+`zustand` 管理纯客户端状态：侧栏展开/收起、弹窗开关、看板拖拽状态、WebSocket 连接状态等。极简 API，无 Provider 包裹：
+
+```tsx
+// stores/sidebar.ts
+import { create } from 'zustand'
+
+export const useSidebar = create<SidebarState>((set) => ({
+  isOpen: true,
+  toggle: () => set((s) => ({ isOpen: !s.isOpen })),
+}))
+```
+
+#### React Hook Form + Zod — 表单与校验
+
+`react-hook-form` 提供高性能非受控表单，`zod` 声明式 schema 校验，与 shadcn/ui 的 `<Form />` 组件深度集成：
+
+```tsx
+// components/agent-form.tsx
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const agentSchema = z.object({
+  name: z.string().min(1, '名称不能为空').max(64),
+  role_label: z.enum(['CEO', 'CTO', 'Frontend', 'Backend', 'DevOps']),
+  system_prompt: z.string().min(10, '人设描述至少 10 个字符'),
+})
+
+type AgentFormData = z.infer<typeof agentSchema>
+
+export function AgentForm() {
+  const form = useForm<AgentFormData>({ resolver: zodResolver(agentSchema) })
+  // ...
+}
+```
+
+#### TanStack Table — 数据表格
+
+`@tanstack/react-table` 无头表格库，配合 shadcn/ui 的 `<DataTable />` 组件实现排序、筛选、分页、行选择：
+
+```tsx
+// features/issues/components/issue-table.tsx
+const columns: ColumnDef<Issue>[] = [
+  { accessorKey: 'title', header: '标题' },
+  { accessorKey: 'status', header: '状态' },
+  { accessorKey: 'priority', header: '优先级' },
+]
+
+<DataTable columns={columns} data={issues} />
+```
+
+#### next-themes — 主题切换
+
+`next-themes` 提供暗色/亮色主题切换，与 Tailwind CSS `dark:` 前缀原生配合，支持系统偏好跟随：
+
+```tsx
+import { useTheme } from 'next-themes'
+
+<Button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+  <Sun className="dark:hidden" />
+  <Moon className="hidden dark:block" />
+</Button>
+```
+
+#### Framer Motion — 动效
+
+`framer-motion` 提供页面过渡动画、看板卡片拖拽、模态框弹出动效：
+
+```tsx
+import { motion, AnimatePresence } from 'framer-motion'
+
+<AnimatePresence>
+  {isOpen && (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+      <Modal />
+    </motion.div>
+  )}
+</AnimatePresence>
+```
+
+#### Sonner — Toast 通知
+
+`sonner` 替代传统 toast 库，支持 Promise 状态、富文本、自定义样式：
+
+```tsx
+import { toast } from 'sonner'
+
+toast.promise(createAgent(data), {
+  loading: '创建 Agent 中...',
+  success: 'Agent 创建成功',
+  error: '创建失败',
+})
+```
+
+#### 日期处理
+
+`date-fns` 纯函数日期工具，tree-shakable，按需导入：
+
+```tsx
+import { format, formatDistanceToNow } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
+
+format(new Date(), 'yyyy-MM-dd HH:mm')
+formatDistanceToNow(issue.created_at, { locale: zhCN, addSuffix: true }) // "3 小时前"
+```
+
+#### 环境变量管理
+
+Next.js SPA 模式下，`NEXT_PUBLIC_` 前缀变量在构建时内联，敏感信息必须保留在后端：
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_BASE=http://localhost:8080/api
+NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
+```
+
+#### 前端目录结构
+
+采用 features 模块化架构，按业务功能组织代码：
+
+```
+src/
+├── app/                        # Next.js App Router（路由层）
+│   ├── layout.tsx              # 根布局（Provider 包裹）
+│   ├── page.tsx                # Dashboard
+│   ├── agents/                 # Agent 管理页
+│   ├── projects/               # 项目 & Issue 页
+│   └── groups/                 # 群组 & 群聊页
+├── components/                 # 共享 UI 组件
+│   ├── ui/                     # shadcn/ui 基础组件
+│   └── layout/                 # 布局组件（Sidebar/Navbar）
+├── features/                   # 业务功能模块
+│   ├── agents/
+│   │   ├── api/               # API 请求 & mutation
+│   │   ├── components/        # Agent 卡片/表单/列表
+│   │   └── schemas/           # Zod 校验 schema
+│   ├── issues/
+│   ├── projects/
+│   ├── chat/                  # 群聊 WebSocket 通信
+│   └── dashboard/             # 仪表盘图表
+├── hooks/                      # 自定义 Hook
+├── stores/                     # Zustand Store
+├── lib/                        # 工具函数 & API client
+│   ├── api.ts                 # 统一 fetch 封装
+│   └── ws.ts                  # WebSocket 客户端
+└── types/                      # TypeScript 类型定义
+```
+
+#### 代码质量工具
+
+```json
+{
+  "scripts": {
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit"
+  }
+}
+```
+
+| 工具 | 用途 |
+|------|------|
+| **ESLint** + `@next/eslint-plugin` | 代码规范检查 |
+| **Prettier** + `prettier-plugin-tailwindcss` | 代码格式化 + Tailwind 类名排序 |
+| **TypeScript strict** | `tsconfig.json` 启用 `strict: true` |
 
 ```mermaid
 graph TD
@@ -1218,6 +1427,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.2  
+> 📌 文档版本: v1.3  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
