@@ -4368,7 +4368,7 @@
                           "id": "H6fCP",
                           "name": "titleSub",
                           "fill": "$regular-text",
-                          "content": "flowcode-app · 15 个 Issue · 覆盖完整 FSM 生命周期",
+                          "content": "flowcode-app · 打开 15 · 待回答 2",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -4457,7 +4457,7 @@
                   "id": "nlEZX",
                   "name": "Toolbar",
                   "width": "fill_container",
-                  "height": 40,
+                  "height": 48,
                   "fill": "$surface",
                   "cornerRadius": 4,
                   "stroke": {
@@ -4578,6 +4578,64 @@
                           "name": "catFilterText",
                           "fill": "$regular-text",
                           "content": "分类 ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AI_TOOL_FLT",
+                      "name": "aiToolFilter",
+                      "height": 28,
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$border"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "AI_TOOL_FLT_TXT",
+                          "name": "aiToolFilterText",
+                          "fill": "$regular-text",
+                          "content": "AI 工具 ▾",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SRC_FLT",
+                      "name": "sourceFilter",
+                      "height": 28,
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$border"
+                      },
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SRC_FLT_TXT",
+                          "name": "sourceFilterText",
+                          "fill": "$regular-text",
+                          "content": "来源 ▾",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -6658,14 +6716,8 @@
                   "name": "Nav-Dashboard",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "#1F2937",
+                  "fill": "#111827",
                   "cornerRadius": 4,
-                  "stroke": {
-                    "thickness": {
-                      "left": 3
-                    },
-                    "fill": "$primary"
-                  },
                   "gap": 8,
                   "padding": [
                     0,
@@ -6701,8 +6753,14 @@
                   "name": "Nav-Issue",
                   "width": "fill_container",
                   "height": 40,
-                  "fill": "#111827",
+                  "fill": "#1F2937",
                   "cornerRadius": 4,
+                  "stroke": {
+                    "thickness": {
+                      "left": 3
+                    },
+                    "fill": "$primary"
+                  },
                   "gap": 8,
                   "padding": [
                     0,
@@ -7087,6 +7145,31 @@
                         },
                         {
                           "type": "frame",
+                          "id": "EDT_BTN",
+                          "name": "editTitleBtn",
+                          "layoutPosition": "absolute",
+                          "x": 640,
+                          "y": 2,
+                          "width": 32,
+                          "height": 32,
+                          "cornerRadius": 4,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "EDT_BTN_TXT",
+                              "name": "editIcon",
+                              "fill": "$secondary-text",
+                              "content": "✏️",
+                              "fontFamily": "Inter",
+                              "fontSize": 16,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "vEhqR",
                           "name": "headerMeta",
                           "gap": 8,
@@ -7161,6 +7244,31 @@
                                   "name": "hCatText",
                                   "fill": "$info",
                                   "content": "缺陷",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "H_SRC",
+                              "name": "hSource",
+                              "height": 22,
+                              "fill": "$info-light",
+                              "cornerRadius": 999,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "H_SRC_TXT",
+                                  "name": "hSourceText",
+                                  "fill": "$info",
+                                  "content": "flowcode",
                                   "fontFamily": "Inter",
                                   "fontSize": 12,
                                   "fontWeight": "500"
@@ -7405,7 +7513,7 @@
                                   "id": "W430W7",
                                   "name": "TabPanel-Overview",
                                   "width": 376,
-                                  "height": 112,
+                                  "height": 160,
                                   "fill": "$surface",
                                   "cornerRadius": 4,
                                   "stroke": {
@@ -7437,6 +7545,117 @@
                                       "fontFamily": "Inter",
                                       "fontSize": 12,
                                       "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "OV_RS",
+                                      "name": "OverviewReq",
+                                      "gap": 4,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "OV_RS_LBL",
+                                          "name": "reqLabel",
+                                          "fill": "$secondary-text",
+                                          "content": "关联需求:",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "OV_RS_VAL",
+                                          "name": "reqLink",
+                                          "fill": "$primary",
+                                          "content": "REQ-12 移动端适配",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "OV_TAG",
+                                      "name": "OverviewTags",
+                                      "gap": 4,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "frame",
+                                          "id": "OV_TAG_UI",
+                                          "name": "tagUI",
+                                          "height": 20,
+                                          "fill": "$primary-light",
+                                          "cornerRadius": 999,
+                                          "padding": [0, 6],
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "text",
+                                              "id": "OV_TAG_UI_TXT",
+                                              "name": "tagUIText",
+                                              "fill": "$primary",
+                                              "content": "UI",
+                                              "fontFamily": "Inter",
+                                              "fontSize": 11,
+                                              "fontWeight": "500"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "frame",
+                                          "id": "OV_TAG_MB",
+                                          "name": "tagMobile",
+                                          "height": 20,
+                                          "fill": "$info-light",
+                                          "cornerRadius": 999,
+                                          "padding": [0, 6],
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "text",
+                                              "id": "OV_TAG_MB_TXT",
+                                              "name": "tagMobileText",
+                                              "fill": "$info",
+                                              "content": "移动端",
+                                              "fontFamily": "Inter",
+                                              "fontSize": 11,
+                                              "fontWeight": "500"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "OV_ASG",
+                                      "name": "OverviewAssignee",
+                                      "gap": 4,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "OV_ASG_LBL",
+                                          "name": "assigneeLabel",
+                                          "fill": "$secondary-text",
+                                          "content": "指派人:",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "OV_ASG_VAL",
+                                          "name": "assigneeName",
+                                          "fill": "$regular-text",
+                                          "content": "张三",
+                                          "fontFamily": "Inter",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
                                     }
                                   ]
                                 },
@@ -7526,6 +7745,16 @@
                                       "content": "1. 检查 Login.vue 布局\n2. 添加 max-width 与断点规则\n3. 更新移动端回归用例",
                                       "fontFamily": "Inter",
                                       "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "PLN_TIM",
+                                      "name": "PlanTime",
+                                      "fill": "$secondary-text",
+                                      "content": "生成于 2026-05-12 14:08",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
                                       "fontWeight": "normal"
                                     },
                                     {
@@ -7922,6 +8151,88 @@
                                   "fontFamily": "Inter",
                                   "fontSize": 13,
                                   "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "GIT_SUM",
+                          "name": "GitSummaryCard",
+                          "width": "fill_container",
+                          "fill": "$surface",
+                          "cornerRadius": 4,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "$border"
+                          },
+                          "layout": "vertical",
+                          "gap": 10,
+                          "padding": 16,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GIT_SUM_TTL",
+                              "name": "gitSummaryTitle",
+                              "fill": "$primary-text",
+                              "content": "PR / Git",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GIT_SUM_BR",
+                              "name": "gitBranch",
+                              "fill": "$regular-text",
+                              "content": "分支: flowcode/fix-login-layout",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GIT_SUM_SHA",
+                              "name": "gitCommit",
+                              "fill": "$secondary-text",
+                              "content": "SHA: a1b2c3d",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GIT_SUM_PR",
+                              "name": "gitPRLink",
+                              "fill": "$primary",
+                              "content": "PR: #128 → github.com/user/repo/pull/128",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "GIT_SUM_BADGE",
+                              "name": "prStatusBadge",
+                              "height": 22,
+                              "fill": "$primary-light",
+                              "cornerRadius": 999,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "GIT_SUM_BADGE_TXT",
+                                  "name": "prStatusText",
+                                  "fill": "$primary",
+                                  "content": "等待合并",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
                                 }
                               ]
                             }
