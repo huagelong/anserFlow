@@ -611,27 +611,202 @@ listen('deep-link-invite', (event) => {
 
 #### 自动更新
 
-Tauri updater 插件支持从静态 JSON 或动态服务获取更新，更新流程：
+> 核心插件：`tauri-plugin-updater`。支持从 GitHub Releases 静态 JSON 或自定义服务器获取更新。
 
+##### 密钥生成（一次性）
+
+Tauri 更新必须签名校验，需要一对公私钥：
+
+```bash
+# 生成密钥对（保存到安全位置，私钥绝不可泄露）
+npm run tauri signer generate -w ~/.tauri/anserflow.key
+# 输出：
+#   ~/.tauri/anserflow.key      ← 私钥（机密，配置到 CI secrets）
+#   ~/.tauri/anserflow.key.pub  ← 公钥（写入 tauri.conf.json）
 ```
-应用启动 → 检查更新 API → 发现新版本
-  → 下载安装包（MSI/DMG/AppImage）
-  → 校验签名
-  → 提示用户重启
-  → process::restart() 应用新版本
-```
+
+##### tauri.conf.json 配置
 
 ```json
-// 更新服务器返回 JSON
 {
-  "version": "0.2.0",
-  "notes": "新增 Skills ZIP 导入功能",
-  "platforms": {
-    "windows-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_x64.msi.zip" },
-    "darwin-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_x64.dmg" },
-    "linux-x86_64": { "signature": "...", "url": "https://dl.anserflow.io/v0.2.0/AnserFlow_0.2.0_amd64.AppImage.tar.gz" }
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6I...",
+      "endpoints": [
+        "https://github.com/anserflow/anserflow/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
+```
+
+| 配置项 | 说明 |
+|--------|------|
+| `pubkey` | 公钥内容（不是文件路径），用于校验安装包签名 |
+| `endpoints` | 更新检查 URL 列表，依次尝试直到返回 2xx |
+| `installMode` | Windows 安装模式：`passive`（静默进度条 / 默认）、`basicUi`（用户交互）、`quiet`（完全静默） |
+| `createUpdaterArtifacts` | `true` 时构建自动生成 `.sig` 签名文件 |
+
+URL 支持动态变量：`{{current_version}}`、`{{target}}` (win/mac/linux)、`{{arch}}` (x86_64/aarch64)。
+
+##### GitHub Actions 自动发布
+
+构建时设置私钥环境变量，Tauri 自动生成签名 + `latest.json`：
+
+```yaml
+# .github/workflows/desktop-release.yml（关键步骤）
+- name: Build & Release
+  uses: tauri-apps/tauri-action@v0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+  with:
+    projectPath: 'desktop'
+    tagName: 'desktop-v__VERSION__'
+    releaseName: 'AnserFlow Desktop v__VERSION__'
+    releaseBody: 'See CHANGELOG.md'
+    includeUpdaterJson: true    # ← 自动生成 latest.json 并上传
+    releaseDraft: true
+```
+
+**CI Secrets 需配置**：
+
+| Secret | 说明 |
+|--------|------|
+| `TAURI_PRIVATE_KEY` | 私钥内容或路径 |
+| `TAURI_KEY_PASSWORD` | 生成密钥时设置的密码 |
+| `APPLE_CERTIFICATE` | macOS 签名证书（base64） |
+| `APPLE_CERTIFICATE_PASSWORD` | 证书密码 |
+| `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` | macOS 公证 |
+
+##### 更新服务器方案对比
+
+| 方案 | 优点 | 缺点 | 推荐场景 |
+|------|------|------|----------|
+| **GitHub Releases 静态 JSON** | 零成本、自动生成 `latest.json` | 国内下载慢 | ✅ AnserFlow 首选 |
+| **GitHub Releases + CDN 代理** | 零成本、国内加速 | 需配置加速域名 | 国内用户多的项目 |
+| **自建 Go 更新 API** | 完全可控、灰度发布 | 需维护服务器 | 企业级分发 |
+| **S3 / OSS 静态 JSON** | CDN 加速、高可用 | 需手动上传 | 有云服务预算的项目 |
+
+> AnserFlow 推荐方案：GitHub Releases 托管 `latest.json`，国内用户走 CDN 代理（如 `gh.anserflow.cn`）。
+
+##### 前端更新检查
+
+应用启动时自动检查更新，有则弹窗提示，用户确认后下载安装并重启：
+
+```ts
+// desktop/src/lib/updater.ts
+import { check } from '@tauri-apps/plugin-updater'
+import { ask, message } from '@tauri-apps/plugin-dialog'
+import { relaunch } from '@tauri-apps/plugin-process'
+
+/**
+ * 检查并执行应用更新
+ * @param onUserClick 是否由用户手动触发（手动触发时无更新也弹提示）
+ */
+export async function checkForUpdates(onUserClick = false) {
+  try {
+    const update = await check()
+
+    if (!update) {
+      if (onUserClick) {
+        await message('已是最新版本 🎉', {
+          title: '检查更新',
+          kind: 'info',
+        })
+      }
+      return
+    }
+
+    // 有新版本 → 弹窗确认
+    const yes = await ask(
+      `发现新版本 v${update.version}\n\n${update.body || ''}`,
+      {
+        title: '更新可用',
+        kind: 'info',
+        okLabel: '立即更新',
+        cancelLabel: '稍后',
+      },
+    )
+
+    if (yes) {
+      // 下载 + 安装 + 重启
+      await update.downloadAndInstall()
+      await relaunch()
+    }
+  } catch (e) {
+    console.error('更新检查失败:', e)
+  }
+}
+```
+
+```tsx
+// 应用入口调用
+import { useEffect } from 'react'
+import { checkForUpdates } from '@/lib/updater'
+
+useEffect(() => {
+  checkForUpdates() // 启动时静默检查
+}, [])
+```
+
+##### 更新流程全貌
+
+```mermaid
+graph TD
+    A[应用启动] --> B[check 请求 latest.json]
+    B --> C{版本号 > 当前?}
+    C -->|否| D[无操作]
+    C -->|是| E[弹窗: 发现新版本 vX.Y.Z]
+    E --> F{用户选择}
+    F -->|稍后| G[关闭]
+    F -->|立即更新| H[downloadAndInstall]
+    H --> I[下载安装包]
+    I --> J[校验 .sig 签名]
+    J --> K[安装（passive 静默）]
+    K --> L[relaunch 重启]
+    L --> M[运行新版本]
+```
+
+##### Capabilities 权限
+
+更新所需的权限声明：
+
+```json
+// src-tauri/capabilities/default.json
+{
+  "permissions": [
+    "updater:default",
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "dialog:default",
+    "dialog:allow-ask",
+    "dialog:allow-message",
+    "process:allow-restart"
+  ]
+}
+```
+
+##### 调试技巧
+
+```bash
+# 本地测试更新流程（不发布 Release）
+# 1. 修改 version
+cargo set-version 0.2.0 --path desktop/src-tauri/Cargo.toml
+
+# 2. 构建并手动启动一个本地静态服务器提供 latest.json
+cargo tauri build
+npx serve target/release/bundle
+
+# 3. 在 tauri.conf.json 临时指向本地
+# "endpoints": ["http://localhost:3000/latest.json"]
 ```
 
 #### 打包与分发
@@ -2371,6 +2546,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v1.9  
+> 📌 文档版本: v2.0  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
