@@ -3612,6 +3612,7 @@ CREATE TABLE agents (
     runtime_config JSON,               -- API Key、模型等
     enabled TINYINT(1) DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
 
@@ -3626,7 +3627,8 @@ CREATE TABLE skills (
     zip_hash VARCHAR(64),              -- ZIP 的 SHA256
     file_tree JSON,                    -- ZIP 文件树
     enabled TINYINT(1) DEFAULT 1,      -- 全局开关
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Agent-Skill 绑定
@@ -3676,8 +3678,8 @@ CREATE TABLE issues (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
--- Issue 分配
-CREATE TABLE issue_assignees (
+-- Issue 分配（v1: 一个 Issue 仅保留一个当前 assignee）
+CREATE TABLE issue_assignee (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     issue_id BIGINT NOT NULL,
     user_id BIGINT NULL,                -- 自然人
@@ -3902,12 +3904,12 @@ func SendInviteEmail(to string, inviteLink string) error {
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `smtp_host` | SMTP 服务器地址 | `smtp.gmail.com` |
-| `smtp_port` | 端口 | `587` |
-| `smtp_user` | 发件账号 | `noreply@anserflow.io` |
-| `smtp_password` | 授权码/密码 | — |
-| `smtp_from` | 发件人显示名 | `AnserFlow` |
-| `smtp_ssl` | 是否 SSL | `false` (STARTTLS) |
+| `smtp.host` | SMTP 服务器地址 | `smtp.gmail.com` |
+| `smtp.port` | 端口 | `587` |
+| `smtp.username` | 发件账号 | `noreply@anserflow.io` |
+| `smtp.password` | 授权码/密码 | — |
+| `smtp.from` | 发件人显示名 | `"AnserFlow <noreply@anserflow.io>"` |
+| `smtp.ssl` | 是否 SSL | `false` (STARTTLS) |
 
 **邮件触发场景**：
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowCode UI Designer Doc"
+  short_description: "把需求文档整理成给 UI 设计师使用的设计说明文档。"
+  default_prompt: "Use $flowcode_ui 把当前需求文档整理成一份给 UI 设计师使用的设计说明文档，输出路径不要写死。"

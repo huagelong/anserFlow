@@ -1,5 +1,5 @@
 ---
-name: flowcode_ui_designer_doc
+name: flowcode_ui
 description: 将需求文档转化为给 UI 设计师使用的设计说明文档。Use when 用户提到“需求文档转设计文档”“PRD 转 UI 文档”“生成为设计师准备的页面说明/交互说明/视觉交付文档”“把产品需求整理成设计 brief”等场景时务必使用。适用于单个需求文件、多个相关 Markdown 文档或需求目录；输入路径与输出路径必须支持用户指定或自动推断，不能写死为固定目录。
 ---
 
