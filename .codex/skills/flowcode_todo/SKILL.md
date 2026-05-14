@@ -1,19 +1,19 @@
 ---
 name: flowcode_todo
-description: 从项目 Markdown 文档生成 wiki 知识库，并根据 wiki 索引生成 vibe coding 任务计划。Use when Codex 需要执行文档生成 wiki、wiki 生成 todos、或文档生成 wiki 再生成 todos 的综合流程；适用于用户要求拆分文档、生成知识库目录、根据 wiki 索引生成先简单后复杂的任务清单、并要求每个任务链接到对应 wiki 小文档的场景。目录必须支持用户指定或自动推断，不能把 docs、wiki、todos.md 写成唯一固定路径。
+description: 从 wiki 索引生成 vibe coding 任务计划，并在需要时先调用 flowcode_wiki 生成或更新 wiki。Use when Codex 需要根据现有 wiki 生成 todos，或用户给的是 Markdown 文档而目标是“先整理成 wiki 再生成任务计划”的综合流程；适用于要求任务由简单到复杂、每个任务链接到对应 wiki 小文档、且输入输出路径不能写死的场景。
 ---
 
 # Docs Wiki Todo Planner
 
 ## 使用目标
 
-把项目已有 Markdown 文档整理成可检索的 wiki 知识库，并基于 wiki 总目录生成可执行的 vibe coding 任务计划。
+基于 wiki 总目录生成可执行的 vibe coding 任务计划；如果输入还是原始 Markdown 文档，则先调用 `flowcode_wiki` 生成或更新 wiki，再继续生成任务计划。
 
 支持三种模式：
 
-- **生成 wiki**：从源 Markdown 文档目录生成或更新 wiki。
+- **仅生成 wiki**：直接调用 `flowcode_wiki`，本 Skill 不重复实现 wiki 生成细则。
 - **生成 todo list**：从 wiki 索引生成任务计划文档。
-- **综合流程**：先生成 wiki，再基于刚生成的 wiki 生成任务计划。
+- **综合流程**：先调用 `flowcode_wiki` 生成 wiki，再基于刚生成的 wiki 生成任务计划。
 
 必须遵守：
 
@@ -45,33 +45,20 @@ todoOutput      任务计划输出文件
 
 在汇报中说明实际采用的路径。
 
-## 生成 wiki 流程
+## 模式路由
 
-参考 `flowcode_wiki` 的方法，但保持目录通用：
+先判断当前输入属于哪一种：
 
-1. 收集 `sourceDocsDir` 下的 Markdown 文件。
-   - 默认只处理该目录内的 `.md` 文件。
-   - 是否递归处理子目录由用户要求或项目结构决定；不确定时先说明假设。
-2. 按文档标题拆分。
-   - 解析标题时忽略代码块中的 `#`、`##`、`###`。
-   - 不拆断表格、代码块、流程图、连续枚举步骤。
-   - 尽量原样迁移正文，只添加必要导航。
-3. 在 `wikiDir` 下生成：
-   - 总目录 `wikiIndex`。
-   - 每个源文档的主题入口。
-   - 按二级/三级标题拆分的小文档。
-4. 总目录包含：
-   - 快速入口。
-   - 推荐检索路径。
-   - 关系图谱或关系表。
-   - 细分文档树。
-5. 每个小文档按需要添加简短导航：
-   - 来源文档。
-   - 总目录位置。
-   - 上一篇/下一篇。
-   - 相关主题。
+1. 用户只要求生成或更新 wiki。
+   - 直接使用 `flowcode_wiki`。
+   - 不要在本 Skill 内重复描述或实现 wiki 拆分、导航、关系图谱和校验细节。
+2. 用户给了现成 `wikiIndex` 或明确说“根据 wiki 生成 todo”。
+   - 直接进入“生成 todo list 流程”。
+3. 用户给的是原始 Markdown 文档，但目标是任务计划。
+   - 先使用 `flowcode_wiki` 生成或更新 wiki。
+   - 再读取生成后的 `wikiIndex`，进入“生成 todo list 流程”。
 
-关系和推荐路径必须从实际文档标题、编号、链接和语义中推断；不要创造源文档中不存在的主题。
+如果需要调用 `flowcode_wiki`，路径沿用本 Skill 已确定的 `sourceDocsDir`、`wikiDir`、`wikiIndex`，不要重新发明另一套固定目录。
 
 ## 生成 todo list 流程
 
@@ -125,13 +112,6 @@ todoOutput      任务计划输出文件
 
 ## 校验要求
 
-生成或更新 wiki 后检查：
-
-- 源文档目录没有被修改。
-- `wikiIndex` 能到达主题入口和小文档。
-- 小文档相对链接能指向已生成文件。
-- 代码块没有被标题解析误拆。
-
 生成或更新 todo list 后检查：
 
 - 任务层级是从简单到复杂。
@@ -139,6 +119,8 @@ todoOutput      任务计划输出文件
 - 每个任务至少有一个 wiki 链接。
 - todo list 中所有 wiki 链接都能指向真实文件。
 - 任务编号连续，不重复。
+
+如果本次流程包含 wiki 生成或更新，则 wiki 部分的结构与链接校验直接遵循 `flowcode_wiki` 的规则，不要在这里维护第二份校验清单。
 
 如果用户要求"循环检查 N 次"，用同一套确定性检查重复 N 次，并汇报每轮结果，例如：
 
@@ -154,5 +136,6 @@ ROUND=3 LEVELS=... TASKS=... LINKS=... MISSING=...
 
 - 使用的源文档目录、wiki 目录、wiki 索引和 todo 输出文件。
 - 创建或更新了哪些文件。
+- 如果调用了 `flowcode_wiki`，说明是“直接复用 `flowcode_wiki` 完成 wiki 阶段”。
 - 校验结果，尤其是链接缺失数量。
 - 如果无法完成自动校验，明确说明原因和残余风险。
