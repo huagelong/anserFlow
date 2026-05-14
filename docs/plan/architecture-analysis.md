@@ -349,16 +349,19 @@ NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
 
 #### 前端目录结构
 
-采用 features 模块化架构，按业务功能组织代码：
+采用 features 模块化架构，按业务功能组织代码。以下以 `admin/` 包为例，后台运行时通过 `basePath: '/admin'` 暴露为 `/admin/[locale]/*`：
 
 ```
 src/
-├── app/                        # Next.js App Router（路由层）
-│   ├── layout.tsx              # 根布局（Provider 包裹）
-│   ├── page.tsx                # Dashboard
-│   ├── agents/                 # Agent 管理页
-│   ├── projects/               # 项目 & Issue 页
-│   └── groups/                 # 群组 & 群聊页
+├── app/
+│   └── [locale]/               # Next.js App Router（路由层）
+│       ├── layout.tsx          # 根布局（Provider 包裹）
+│       ├── page.tsx            # /admin/zh-CN → 可重定向到 dashboard
+│       ├── login/              # /admin/[locale]/login
+│       ├── dashboard/          # /admin/[locale]/dashboard
+│       ├── agents/             # Agent 管理页
+│       ├── projects/           # 项目 & Issue 页
+│       └── groups/             # 群组 & 群聊页
 ├── components/                 # 共享 UI 组件
 │   ├── ui/                     # shadcn/ui 基础组件
 │   └── layout/                 # 布局组件（Sidebar/Navbar）
@@ -442,6 +445,7 @@ import createNextIntlPlugin from 'next-intl/plugin'
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 const nextConfig = {
+  basePath: '/admin',
   output: 'export',
   distDir: 'dist',
 }
@@ -453,10 +457,9 @@ export default withNextIntl(nextConfig)
 // admin/src/i18n/request.ts
 import { getRequestConfig } from 'next-intl/server'
 
-export default getRequestConfig(async () => {
-  // 静态导出模式：locale 从路径 [locale] 段获取
-  // 开发时可通过 cookie 或浏览器语言推断
-  const locale = 'zh-CN' // 默认，实际由路由参数决定
+export default getRequestConfig(async ({requestLocale}) => {
+  // 静态导出模式：locale 从 /admin/[locale] 路径段获取
+  const locale = (await requestLocale) ?? 'zh-CN'
 
   return {
     locale,
@@ -478,7 +481,7 @@ admin/
 │   └── app/
 │       └── [locale]/        # 路由分段
 │           ├── layout.tsx   # NextIntlClientProvider
-│           ├── page.tsx     # /zh-CN/dashboard 或 /en-US/dashboard
+│           ├── page.tsx     # /admin/zh-CN 或 /admin/en-US
 │           ├── dashboard/
 │           ├── agents/
 │           └── projects/
@@ -944,7 +947,7 @@ const sysInfo = await invoke<SystemInfo>('get_system_info')
       "center": true
     }],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:8080 ws://localhost:8080"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:8080 ws://localhost:8080 https://your-server.example.com wss://your-server.example.com"
     }
   },
   "bundle": {
@@ -962,6 +965,8 @@ const sysInfo = await invoke<SystemInfo>('get_system_info')
   }
 }
 ```
+
+生产构建时将 `your-server.example.com` 替换为实际服务域名；开发环境保留 `localhost:8080` 便于本地联调。
 
 #### 插件体系
 
@@ -1240,15 +1245,23 @@ SPA 在 Tauri WebView 中需注意的适配点：
 ```ts
 // lib/tauri.ts — 环境检测与适配
 import { isTauri } from '@tauri-apps/api/core'
+import { getLocalSettings } from '@/lib/local-settings'
 
-// 根据运行环境切换 API 地址
-export const API_BASE = isTauri()
-  ? 'http://localhost:8080/api'          // 桌面端直连本地后端
-  : process.env.NEXT_PUBLIC_API_BASE     // 浏览器模式使用远程 API
+// 浏览器后台走同源 /api；桌面端读取已配置的远程服务地址
+export async function getApiConfig() {
+  if (!isTauri()) {
+    return {
+      apiBase: process.env.NEXT_PUBLIC_API_BASE!,
+      wsUrl: process.env.NEXT_PUBLIC_WS_URL!,
+    }
+  }
 
-export const WS_URL = isTauri()
-  ? 'ws://localhost:8080/ws'
-  : process.env.NEXT_PUBLIC_WS_URL!
+  const settings = await getLocalSettings()
+  return {
+    apiBase: settings.apiBase,
+    wsUrl: settings.wsUrl,
+  }
+}
 
 // CSP 适配：Tauri WebView 中 'self' 指向 tauri://localhost
 // 需在 tauri.conf.json 的 CSP 中白名单后端地址
@@ -1447,7 +1460,6 @@ export async function notifyAgentComplete(agentName: string) {
   })
 }
 
-@tauri-apps/plugin-notification
 export async function notifyMention(who: string, message: string) {
   await sendNotification({
     title: `💬 ${who} 提到了你`,
@@ -1468,13 +1480,15 @@ import { load } from '@tauri-apps/plugin-store'
 interface LocalSettings {
   theme: 'light' | 'dark' | 'system'
   apiBase: string          // 后端 API 地址
+  wsUrl: string            // WebSocket 地址
   lastProjectId?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
 }
 
 const DEFAULT: LocalSettings = {
   theme: 'system',
-  apiBase: 'http://localhost:8080/api',
+  apiBase: 'https://your-server.example.com/api',
+  wsUrl: 'wss://your-server.example.com/ws',
 }
 
 let _store: Awaited<ReturnType<typeof load>> | null = null
@@ -1591,7 +1605,6 @@ const wdioOptions = {
 ```mermaid
 graph TD
     A["AnserFlow 平台"] --> B["用户与权限"]
-    A --> C["Agent 管理"]
     A --> C["Agent 管理"]
     A --> D["群聊协作"]
     A --> E["项目管理"]
@@ -1974,7 +1987,7 @@ jobs:
 
 ### 4.1 单一可执行文件
 
-整个后端编译为一个独立二进制文件，Next.js SPA 产物通过 Go `embed` 嵌入，零运行时依赖（除配置文件外）。
+整个后端编译为一个独立二进制文件，后台管理 SPA（`admin/dist`）通过 Go `embed` 嵌入，零运行时依赖（除配置文件外）。
 
 ```
 ┌─────────────────────────────────────────┐
@@ -1983,9 +1996,9 @@ jobs:
 │  │  Go 运行时 (Gin + GORM + ...)     │  │
 │  │                                   │  │
 │  │  ┌─────────────────────────────┐  │  │
-│  │  │ embed.FS (//go:embed dist)  │  │  │
+│  │  │ embed.FS (//go:embed admin/dist) │  │  │
 │  │  │ ┌─────────────────────────┐ │  │  │
-│  │  │ │ Next.js SPA 构建产物     │ │  │  │
+│  │  │ │ admin SPA 构建产物       │ │  │  │
 │  │  │ │ index.html + JS + CSS   │ │  │  │
 │  │  │ └─────────────────────────┘ │  │  │
 │  │  └─────────────────────────────┘  │  │
@@ -1993,7 +2006,7 @@ jobs:
 │  │  Gin 路由:                        │  │
 │  │  /api/*    → 后端 API             │  │
 │  │  /ws       → WebSocket            │  │
-│  │  /*        → SPA index.html       │  │
+│  │  /admin/*  → admin SPA            │  │
 │  └───────────────────────────────────┘  │
 └─────────────────────────────────────────┘
 ```
@@ -2001,8 +2014,8 @@ jobs:
 **关键实现**：
 
 ```go
-//go:embed dist
-var spaFiles embed.FS
+//go:embed admin/dist
+var adminFiles embed.FS
 
 func main() {
     r := gin.Default()
@@ -2014,13 +2027,17 @@ func main() {
     // WebSocket
     r.GET("/ws", handleWebSocket)
 
-    // SPA 静态文件（嵌入）
-    spa, _ := fs.Sub(spaFiles, "dist")
-    r.StaticFS("/", http.FS(spa))
-    // 对于 SPA 路由，所有非 API 路径返回 index.html
+    // admin SPA 静态文件（嵌入）
+    adminFS, _ := fs.Sub(adminFiles, "admin/dist")
+    r.StaticFS("/admin", http.FS(adminFS))
+    // 对于 admin SPA 路由，所有 /admin 下的非静态路径返回 index.html
     r.NoRoute(func(c *gin.Context) {
-        data, _ := spaFiles.ReadFile("dist/index.html")
-        c.Data(http.StatusOK, "text/html", data)
+        if strings.HasPrefix(c.Request.URL.Path, "/admin") {
+            data, _ := adminFiles.ReadFile("admin/dist/index.html")
+            c.Data(http.StatusOK, "text/html", data)
+            return
+        }
+        c.Status(http.StatusNotFound)
     })
 
     r.Run(":8080")
@@ -2140,12 +2157,13 @@ var upgradeCmd = &cobra.Command{
 
 ### 4.4 Next.js SPA 模式
 
-Next.js 使用静态导出模式，不依赖 Node.js 服务端：
+后台管理前端（`admin/`）使用静态导出模式，不依赖 Node.js 服务端：
 
 ```js
-// next.config.js
+// admin/next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: '/admin',      // 后台统一挂载到 /admin
   output: 'export',        // 关键：SPA 静态导出
   distDir: 'dist',         // 输出目录
   images: {
@@ -2171,7 +2189,7 @@ go build -o anserflow                 # admin/dist/ 被 go:embed 打入二进制
 
 # 3. 部署：单个文件即可
 ./anserflow init    # 首次运行初始化
-./anserflow server  # 启动，访问 http://localhost:8080
+./anserflow server  # 启动，访问 http://localhost:8080/admin/zh-CN/dashboard
 ```
 
 ### 4.5 项目目录结构（Monorepo）
@@ -2288,12 +2306,12 @@ anserflow/
 
 | | `admin/` 后台管理 | `desktop/` 桌面客户端 |
 |------|------|------|
-| 访问方式 | 浏览器 `http://host:8080` | Tauri 原生窗口 |
+| 访问方式 | 浏览器 `http://host:8080/admin/zh-CN/dashboard` | Tauri 原生窗口 |
 | 嵌入 Go | ✅ `//go:embed admin/dist/*` | ❌ 由 Tauri 加载 |
 | 目标用户 | 管理员、组织负责人 | 普通成员、被邀请者 |
 | 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | 项目看板 / Issue 列表 / 群聊 / 个人工作台 |
-| 路由前缀 | `/login` `/dashboard` `/agents` `/projects` `/skills` | `/dashboard` `/projects/:id` `/chat` |
-| API 地址 | 同源 `/api/*`（无跨域） | `http://localhost:8080/api/*`（跨域 + CORS） |
+| 路由前缀 | `/admin/[locale]/*` | `/dashboard` `/projects/:id` `/chat` `/invite/:token` |
+| API 地址 | 同源 `/api/*`（无跨域） | 配置的远程 `https://<server>/api/*`；开发环境可指向 `http://localhost:8080/api/*` |
 
 **开发运行**：
 
@@ -2344,7 +2362,7 @@ var desktopFiles embed.FS
 
 ## 五、分布式架构设计
 
-### 4.1 WebSocket 分布式方案
+### 5.1 WebSocket 分布式方案
 
 ```
                     ┌─────────────┐
@@ -2364,7 +2382,7 @@ var desktopFiles embed.FS
 
 **Go 库**：`github.com/gorilla/websocket` + `github.com/redis/go-redis/v9`
 
-### 4.2 任务队列方案
+### 5.2 任务队列方案
 
 选用 **Asynq**（https://github.com/hibiken/asynq），基于 Redis 的分布式任务队列：
 
@@ -2408,7 +2426,7 @@ Asynq 核心特性：
 | 定时任务 | 延迟执行（Agent 启动冷却期） |
 | Web UI | Asynqmon 可视化管理面板 |
 
-### 4.3 整体分布式拓扑
+### 5.3 整体分布式拓扑
 
 ```
                     ┌──────────────┐
@@ -2911,10 +2929,11 @@ CREATE TABLE issue_assignees (
     user_id BIGINT NULL,                -- 自然人
     agent_id BIGINT NULL,               -- Agent
     assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY (issue_id),              -- v1: 一个 Issue 仅保留一个当前 assignee
     FOREIGN KEY (issue_id) REFERENCES issues(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (agent_id) REFERENCES agents(id),
-    CHECK (user_id IS NOT NULL OR agent_id IS NOT NULL)
+    CHECK ((user_id IS NULL) <> (agent_id IS NULL))
 );
 
 -- 群组
@@ -3137,7 +3156,7 @@ sequenceDiagram
 ### 11.1 管理后台
 
 ```
-/admin
+/admin/[locale]
 ├── /login                    登录页
 ├── /dashboard                仪表盘
 ├── /organizations            组织管理
@@ -3156,15 +3175,17 @@ sequenceDiagram
 │   └── /[id]/issues          Issue 看板
 ├── /groups                   群组
 │   └── /[id]/chat            群聊界面
-├── /invite/:token            接受邀请（分享链接）
 └── /settings                 全局设置
 ```
+
+公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接和桌面端 deep link 最终都落到该页面。
 
 ### 11.2 客户端（Tauri）
 
 PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 - **WebView 内嵌** Next.js 构建产物
+- **核心路由**：`/dashboard`、`/projects/:id`、`/chat`、`/invite/:token`
 - **原生能力**：系统通知、文件系统、Git 代理（Tauri Command）
 - **分阶段交付**：先桌面端，移动端作为 Phase 2
 
@@ -3176,7 +3197,7 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 | 编号 | 任务 | 验收标准 |
 |------|------|----------|
-| T01 | Go 项目初始化（Gin + GORM） | `go run main.go` 启动成功 |
+| T01 | Go 项目初始化（Gin + GORM） | `go run main.go server` 启动成功 |
 | T02 | Next.js 项目初始化（shadcn/ui） | `npm run dev` 启动成功 |
 | T03 | MySQL 表结构创建 + GORM AutoMigrate | 所有表自动创建 |
 | T04 | 用户注册/登录（JWT + bcrypt） | Postman 测试通过 |

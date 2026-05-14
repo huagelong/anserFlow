@@ -75,8 +75,8 @@ RUN npm install -g \
 # 创建非 root 用户运行 Agent 代码
 RUN addgroup -g 1000 sandbox && \
     adduser -D -u 1000 -G sandbox sandbox && \
-    # 限制 sudo
-    chmod 700 /usr/local/bin/* /usr/bin/*
+    # 移除其他用户的写权限（保留执行权限，确保 sandbox 用户可运行命令）
+    chmod -R go-w /usr/local/bin /usr/bin
 
 # ── 工作目录 ──
 WORKDIR /workspace
