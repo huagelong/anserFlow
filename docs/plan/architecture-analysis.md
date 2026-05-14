@@ -17,6 +17,7 @@
 │           TanStack Query (数据请求)       │
 │           Zustand (客户端状态)            │
 │           React Hook Form + Zod (表单)    │
+│           next-intl (国际化)              │
 │           Tauri 2.x (桌面+移动端)         │
 ├──────────────────────────────────────────┤
 │ 后端框架   Gin                           │
@@ -42,6 +43,8 @@
 │ 认证       JWT + OAuth2 (GitHub)         │
 │ 邮件       gomail (SMTP)                 │
 │ 邀请       分享链接 + 邮箱               │
+│ 国际化     next-intl (前端)               │
+│           go-i18n (后端)                  │
 │ API文档    Swagger (swaggo/swag)         │
 │ 跨域       gin-contrib/cors              │
 └──────────────────────────────────────────┘
@@ -72,6 +75,7 @@
 | **TanStack Table** | 无头表格库，Issue 列表/Agent 列表/成员表格 |
 | **Recharts** | 图表库，Dashboard 数据可视化 |
 | **next-themes** | 暗色/亮色主题切换，与 Tailwind CSS 原生配合 |
+| **next-intl** | Next.js App Router 原生 i18n、静态导出兼容、TypeScript 类型安全、ICU 消息格式 |
 | **Framer Motion** | 动效库，页面过渡、看板拖拽动画 |
 | **Sonner** | 轻量 Toast 通知，操作反馈 |
 | **date-fns** | 日期处理，轻量 tree-shakable |
@@ -81,6 +85,7 @@
 | **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
 | **swaggo/swag** | Swagger/OpenAPI 文档自动生成，便于前后端联调 |
 | **gin-contrib/cors** | Gin 官方 CORS 中间件，SPA 跨域支持 |
+| **go-i18n** | Go 标准 i18n 库，CLI 管理翻译文件，复数规则支持，用于邮件模板和 API 错误消息 |
 
 ### 框架补充说明
 
@@ -391,6 +396,407 @@ src/
 | **ESLint** + `@next/eslint-plugin` | 代码规范检查 |
 | **Prettier** + `prettier-plugin-tailwindcss` | 代码格式化 + Tailwind 类名排序 |
 | **TypeScript strict** | `tsconfig.json` 启用 `strict: true` |
+
+### 国际化（i18n）
+
+> AnserFlow 面向全球用户，前端 UI + 后端邮件模板 + API 错误消息均需多语言支持。首期支持中文（zh-CN）和英文（en-US），架构预留扩展。
+
+#### 整体架构
+
+```
+┌──────────────────────────────────────────────┐
+│ 前端 (next-intl)                              │
+│ ├── admin/messages/   ← 后台管理翻译           │
+│ ├── desktop/messages/ ← 桌面端翻译             │
+│ └── packages/shared-ui/messages/ ← 公共翻译    │
+├──────────────────────────────────────────────┤
+│ 后端 (go-i18n)                                │
+│ ├── 邮件模板 i18n   → 邀请/通知邮件双语         │
+│ └── API 错误码映射  → 前端根据 locale 展示      │
+└──────────────────────────────────────────────┘
+```
+
+**设计原则**：
+
+| 原则 | 说明 |
+|------|------|
+| 前端驱动 | UI 文案由前端 `next-intl` 管理，Next.js `[locale]` 路由分发 |
+| 后端错误码 | API 返回国际化错误码（如 `ERR_ISSUE_NOT_FOUND`），前端映射为当前语言文案 |
+| 邮件双语 | 邀请邮件根据用户语言偏好发送中/英文版本 |
+| 翻译共享 | 公共 UI（按钮、表单校验提示）抽取到 `packages/shared-ui/messages/` 复用 |
+
+#### 前端：next-intl
+
+> `next-intl` 是 Next.js App Router 最主流的 i18n 库，原生支持 `output: "export"` 静态导出模式。
+
+##### 安装与配置
+
+```bash
+npm install next-intl
+```
+
+```ts
+// admin/next.config.ts
+import createNextIntlPlugin from 'next-intl/plugin'
+
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
+
+const nextConfig = {
+  output: 'export',
+  distDir: 'dist',
+}
+
+export default withNextIntl(nextConfig)
+```
+
+```ts
+// admin/src/i18n/request.ts
+import { getRequestConfig } from 'next-intl/server'
+
+export default getRequestConfig(async () => {
+  // 静态导出模式：locale 从路径 [locale] 段获取
+  // 开发时可通过 cookie 或浏览器语言推断
+  const locale = 'zh-CN' // 默认，实际由路由参数决定
+
+  return {
+    locale,
+    messages: (await import(`../../messages/${locale}.json`)).default,
+  }
+})
+```
+
+##### 目录结构
+
+```
+admin/
+├── messages/
+│   ├── zh-CN.json          # 后台管理 - 中文
+│   └── en-US.json          # 后台管理 - 英文
+├── src/
+│   ├── i18n/
+│   │   └── request.ts      # next-intl 配置
+│   └── app/
+│       └── [locale]/        # 路由分段
+│           ├── layout.tsx   # NextIntlClientProvider
+│           ├── page.tsx     # /zh-CN/dashboard 或 /en-US/dashboard
+│           ├── dashboard/
+│           ├── agents/
+│           └── projects/
+
+desktop/
+├── messages/               # 桌面端翻译（同上结构）
+
+packages/shared-ui/
+├── messages/               # 公共翻译（按钮、校验提示等）
+│   ├── zh-CN.json
+│   └── en-US.json
+```
+
+##### 翻译文件示例
+
+```json
+// admin/messages/zh-CN.json
+{
+  "Nav": {
+    "dashboard": "仪表盘",
+    "agents": "智能体",
+    "projects": "项目",
+    "skills": "技能",
+    "settings": "设置"
+  },
+  "Issue": {
+    "title": "Issue 标题",
+    "status": "状态",
+    "priority": "优先级",
+    "assignee": "负责人",
+    "create": "创建 Issue",
+    "noResults": "暂无 Issue"
+  },
+  "Common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "confirm": "确认",
+    "loading": "加载中...",
+    "error": "出错了"
+  }
+}
+```
+
+```json
+// admin/messages/en-US.json
+{
+  "Nav": {
+    "dashboard": "Dashboard",
+    "agents": "Agents",
+    "projects": "Projects",
+    "skills": "Skills",
+    "settings": "Settings"
+  },
+  "Issue": {
+    "title": "Issue Title",
+    "status": "Status",
+    "priority": "Priority",
+    "assignee": "Assignee",
+    "create": "Create Issue",
+    "noResults": "No Issues"
+  },
+  "Common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "error": "Something went wrong"
+  }
+}
+```
+
+##### 组件使用
+
+```tsx
+// admin/src/app/[locale]/dashboard/page.tsx
+import { useTranslations } from 'next-intl'
+
+export default function DashboardPage() {
+  const t = useTranslations('Nav')
+  const tIssue = useTranslations('Issue')
+
+  return (
+    <div>
+      <h1>{t('dashboard')}</h1>           {/* "仪表盘" 或 "Dashboard" */}
+      <span>{tIssue('noResults')}</span>  {/* "暂无 Issue" 或 "No Issues" */}
+    </div>
+  )
+}
+```
+
+##### 日期/数字本地化
+
+```tsx
+import { useFormatter } from 'next-intl'
+
+const format = useFormatter()
+
+// 日期
+format.dateTime(issue.createdAt, {
+  year: 'numeric', month: 'long', day: 'numeric'
+})
+// zh-CN → "2026年5月13日"
+// en-US → "May 13, 2026"
+
+// 相对时间
+format.relativeTime(issue.createdAt)
+// zh-CN → "3小时前"
+// en-US → "3 hours ago"
+```
+
+##### 语言切换
+
+```tsx
+// 语言切换组件
+import { useRouter, usePathname } from 'next/navigation'
+
+export function LanguageSwitcher() {
+  const router = useRouter()
+  const pathname = usePathname()
+
+  const switchTo = (locale: string) => {
+    // /zh-CN/dashboard → /en-US/dashboard
+    const newPath = pathname.replace(/^\/[a-z]{2}-[A-Z]{2}/, `/${locale}`)
+    router.push(newPath)
+  }
+
+  return (
+    <select onChange={(e) => switchTo(e.target.value)}>
+      <option value="zh-CN">中文</option>
+      <option value="en-US">English</option>
+    </select>
+  )
+}
+```
+
+#### 后端：go-i18n
+
+> `github.com/nicksnyder/go-i18n` 是 Go 社区标准 i18n 库，支持 JSON/TOML/YAML 翻译文件、CLI 工具管理、复数规则。
+
+##### 安装
+
+```bash
+go get github.com/nicksnyder/go-i18n/v2
+go install github.com/nicksnyder/go-i18n/v2/goi18n@latest
+```
+
+##### 翻译文件
+
+```json
+// internal/i18n/active.zh-CN.json
+{
+  "email_invite_subject": {
+    "other": "{{.Inviter}} 邀请你加入 AnserFlow"
+  },
+  "email_invite_body": {
+    "other": "你好 {{.Name}}，\n\n{{.Inviter}} 邀请你加入组织「{{.OrgName}}」。\n点击以下链接接受邀请：\n{{.Link}}"
+  },
+  "err_issue_not_found": {
+    "other": "Issue 不存在"
+  },
+  "err_permission_denied": {
+    "other": "权限不足"
+  }
+}
+```
+
+```json
+// internal/i18n/active.en-US.json
+{
+  "email_invite_subject": {
+    "other": "{{.Inviter}} has invited you to AnserFlow"
+  },
+  "email_invite_body": {
+    "other": "Hi {{.Name}},\n\n{{.Inviter}} has invited you to join the organization \"{{.OrgName}}\".\nClick the link below to accept:\n{{.Link}}"
+  },
+  "err_issue_not_found": {
+    "other": "Issue not found"
+  },
+  "err_permission_denied": {
+    "other": "Permission denied"
+  }
+}
+```
+
+##### Go 代码集成
+
+```go
+// internal/i18n/i18n.go
+package i18n
+
+import (
+    "encoding/json"
+    "github.com/BurntSushi/toml"
+    "github.com/nicksnyder/go-i18n/v2/i18n"
+    "golang.org/x/text/language"
+)
+
+var bundle *i18n.Bundle
+var localizers map[string]*i18n.Localizer
+
+func Init() {
+    bundle = i18n.NewBundle(language.Chinese)
+    bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
+    bundle.RegisterUnmarshalFunc("toml", toml.Unmarshal)
+
+    // 加载翻译文件
+    bundle.MustLoadMessageFile("internal/i18n/active.zh-CN.json")
+    bundle.MustLoadMessageFile("internal/i18n/active.en-US.json")
+
+    localizers = map[string]*i18n.Localizer{
+        "zh-CN": i18n.NewLocalizer(bundle, "zh-CN"),
+        "en-US": i18n.NewLocalizer(bundle, "en-US"),
+    }
+}
+
+// T 根据语言获取翻译
+func T(locale, msgID string, data map[string]interface{}) string {
+    loc, ok := localizers[locale]
+    if !ok {
+        loc = localizers["zh-CN"] // 默认中文
+    }
+    cfg := &i18n.LocalizeConfig{MessageID: msgID}
+    if data != nil {
+        cfg.TemplateData = data
+    }
+    str, err := loc.Localize(cfg)
+    if err != nil {
+        return msgID
+    }
+    return str
+}
+```
+
+##### 邮件模板使用
+
+```go
+// 发送邀请邮件 — 根据用户语言偏好选模板
+subject := i18n.T(user.Locale, "email_invite_subject", map[string]interface{}{
+    "Inviter": inviter.Name,
+})
+body := i18n.T(user.Locale, "email_invite_body", map[string]interface{}{
+    "Name":    user.Name,
+    "Inviter": inviter.Name,
+    "OrgName": org.Name,
+    "Link":    inviteURL,
+})
+
+m := gomail.NewMessage()
+m.SetHeader("Subject", subject)
+m.SetBody("text/plain", body)
+// ... 发送
+```
+
+##### API 错误码映射
+
+后端返回错误码，前端根据 locale 映射为本地化消息：
+
+```go
+// Go 后端 — 返回错误码而非文案
+c.JSON(404, gin.H{
+    "code":    "ERR_ISSUE_NOT_FOUND",
+    "message": "Issue not found",  // 开发用英文，前端会覆盖
+})
+```
+
+```ts
+// 前端 — 根据 locale 映射错误码
+import { useTranslations } from 'next-intl'
+
+const t = useTranslations('Errors')
+
+// 后端返回 { code: "ERR_ISSUE_NOT_FOUND" }
+// → 前端根据当前 locale 展示 "Issue 不存在" 或 "Issue not found"
+t(`errors.${response.code}`)
+```
+
+#### 语言偏好存储
+
+用户语言偏好存储在数据库 `users` 表中：
+
+```sql
+ALTER TABLE users ADD COLUMN locale VARCHAR(10) DEFAULT 'zh-CN';
+```
+
+前端首次访问时检测优先级：
+
+```ts
+// 语言检测优先级
+// 1. 已登录用户 → users.locale
+// 2. 未登录 → 浏览器 navigator.language
+// 3. 默认 → zh-CN
+function detectLocale(): string {
+  const userLocale = getStoredUserLocale()  // 已登录用户设置
+  if (userLocale) return userLocale
+
+  const browserLang = navigator.language     // 浏览器语言
+  if (browserLang.startsWith('zh')) return 'zh-CN'
+  if (browserLang.startsWith('en')) return 'en-US'
+
+  return 'zh-CN'  // 默认
+}
+```
+
+#### 翻译管理
+
+| 阶段 | 方式 |
+|------|------|
+| 开发期 | 手动编辑 JSON 文件 |
+| 提效 | `goi18n merge` 命令合并新增翻译 key |
+| 规模化 | 接入 Crowdin/Lokalise 翻译管理平台 |
+
+```bash
+# Go 后端翻译管理
+goi18n extract           # 从 Go 源码提取待翻译消息 → translate.zh-CN.json
+goi18n merge active.*.json translate.*.json  # 合并新增 key
+```
 
 ### Tauri 桌面端补充说明
 
@@ -2546,6 +2952,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v2.0  
+> 📌 文档版本: v2.1  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
