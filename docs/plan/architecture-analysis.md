@@ -197,6 +197,55 @@ r.GET("/api/health", func(c *gin.Context) {
 })
 ```
 
+#### OAuth2 — 第三方登录（GitHub）
+
+AnserFlow 支持 GitHub OAuth 登录，降低注册门槛。前端 `login` 页面提供「GitHub 登录」按钮，跳转到 GitHub 授权页；回调后后端完成账号创建/绑定并返回 JWT。
+
+```
+用户点击 GitHub 登录
+        │
+        ▼
+GET /api/auth/github/login  → 302 跳转 GitHub
+        │
+        ▼
+用户授权 → GitHub 回调 GET /api/auth/github/callback?code=xxx
+        │
+        ▼
+后端：code → access_token → 获取 GitHub 用户信息
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│ github_id 已存在?                        │
+│  ├── 是 → 直接生成 JWT，登录成功         │
+│  └── 否 → 已登录用户？（绑定）            │
+│           ├── 是 → 绑定 github_id 到账户 │
+│           └── 否 → 自动注册新用户         │
+└─────────────────────────────────────────┘
+        │
+        ▼
+返回 JWT → 前端存储 → 跳转到 /admin/[locale]/dashboard
+```
+
+**非 GitHub 用户的注册兼容**：支持传统邮箱+密码注册（通过 `/api/auth/register` / `/api/auth/login`），与 OAuth 用户共用 `users` 表，`password_hash` 为 NULL 表示仅 OAuth 登录。
+
+```go
+// internal/handler/auth.go
+func (h *AuthHandler) GitHubCallback(c *gin.Context) {
+    code := c.Query("code")
+    // 1. code → access_token
+    token, _ := h.oauth.Exchange(ctx, code)
+    // 2. access_token → GitHub user info
+    ghUser, _ := h.oauth.GetUser(ctx, token)
+    // 3. 查找或创建用户
+    user := h.userRepo.FindOrCreateByGitHub(ghUser)
+    // 4. 生成 JWT
+    jwtToken, _ := h.jwtService.Generate(user.ID)
+    // 5. 重定向到前端（URL 参数携带 JWT）
+    c.Redirect(http.StatusFound,
+        fmt.Sprintf("/admin/zh-CN/dashboard?token=%s", jwtToken))
+}
+```
+
 ### 前端框架补充说明
 
 > 以下为 Next.js SPA 生产级项目标准配套设施，覆盖状态管理、数据请求、表单、动效、主题等核心能力。
@@ -1652,6 +1701,127 @@ graph TD
 
 ---
 
+### 完整配置文件 (config.yaml)
+
+> AnserFlow 运行时所有配置集中在 `config.yaml`，由 Viper 加载。生产环境敏感字段（数据库密码、API Key 等）可通过环境变量覆盖。
+
+```yaml
+# config.yaml — AnserFlow 完整配置
+server:
+  port: 8080
+  mode: release                  # debug | release | test
+  read_timeout: 30s
+  write_timeout: 30s
+
+database:
+  driver: mysql
+  host: 127.0.0.1
+  port: 3306
+  database: anserflow
+  username: root
+  password: ${DB_PASSWORD}       # 优先从环境变量读取
+  charset: utf8mb4
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 3600s
+  log_level: warn               # silent | error | warn | info
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 50
+
+jwt:
+  secret: ${JWT_SECRET}
+  expire_hours: 720              # 30 天
+  issuer: anserflow
+
+oauth2:
+  github:
+    client_id: ${GITHUB_CLIENT_ID}
+    client_secret: ${GITHUB_CLIENT_SECRET}
+    redirect_url: http://localhost:8080/api/auth/github/callback
+    scopes: ["user:email"]
+
+cors:
+  allow_origins:
+    - http://localhost:3000
+    - http://localhost:3001
+    - tauri://localhost
+  allow_methods: ["GET","POST","PUT","DELETE","OPTIONS"]
+  allow_headers: ["Origin","Content-Type","Authorization"]
+
+log:
+  level: info                    # debug | info | warn | error
+  format: json                   # json | console
+  output: stdout                 # stdout | file
+  file_path: ./logs/anserflow.log
+  max_size: 100                  # MB, 单文件最大
+  max_backups: 10                # 保留旧文件数
+  max_age: 30                    # 天, 保留天数
+  compress: true
+
+asynq:
+  concurrency: 10                # Worker 并发数
+  queues:
+    critical: 6                  # P0 优先级权重
+    default: 3                   # P1
+    low: 1                       # P2+
+  retry:
+    max_retry: 3
+    min_backoff: 5s
+    max_backoff: 5m
+  timeout: 1800s                 # 单任务最长 30 分钟
+
+llm:
+  provider: openai               # openai | anthropic | local
+  api_key: ${LLM_API_KEY}
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  max_tokens: 4096
+  temperature: 0.7
+  timeout: 120s
+  rate_limit:                    # 令牌桶限流
+    capacity: 100                # 每分钟最大请求数
+    refill_rate: 1.67            # 令牌补充速率/秒
+
+sandbox:
+  image: ghcr.io/anserflow/sandbox:latest
+  memory: 512                    # MB
+  cpu: 2                         # cores
+  disk: 1024                     # MB
+  timeout: 1800s                 # 30 分钟
+  network: restricted            # restricted (白名单) | none (无网络) | host
+  allowed_domains:               # 网络白名单（仅 restricted 模式生效）
+    - github.com
+    - api.github.com
+    - api.openai.com
+
+smtp:
+  host: smtp.example.com
+  port: 587
+  username: noreply@anserflow.io
+  password: ${SMTP_PASSWORD}
+  from: "AnserFlow <noreply@anserflow.io>"
+  ssl: false                     # false = STARTTLS
+
+invite:
+  link_base_url: http://localhost:8080
+  default_expire_hours: 168      # 7 天
+  max_uses_default: 0            # 0 = 不限
+
+upgrade:
+  channel: stable                # stable | beta
+  endpoint: https://github.com/anserflow/anserflow/releases/latest/download
+  check_interval: 24h
+```
+
+> **环境变量覆盖规则**：Viper 以 `DB_PASSWORD` 覆盖 `database.password`，`LLM_API_KEY` 覆盖 `llm.api_key`。生产环境所有 `${VAR}` 占位符必须通过环境变量注入。
+
+---
+
 ## 三、GitHub Flow 与 CI/CD
 
 ### 3.1 GitHub Flow 分支策略
@@ -2382,6 +2552,46 @@ var desktopFiles embed.FS
 
 **Go 库**：`github.com/gorilla/websocket` + `github.com/redis/go-redis/v9`
 
+**消息协议**：所有 WebSocket 通信统一采用 JSON 信封格式：
+
+```json
+{
+  "type": "string",       // 消息类型（见下表）
+  "seq": 12345,           // 消息序号（客户端递增，用于去重/重放检测）
+  "ts": 1715678900,       // 服务端时间戳（Unix 秒）
+  "group_id": 42,         // 群组 ID（群聊消息必填）
+  "sender": {
+    "type": "user|agent",
+    "id": 1,
+    "name": "张三",
+    "avatar_url": "..."
+  },
+  "content": {},           // 消息体（字段见下表）
+  "error": null            // 错误信息（仅 type:error）
+}
+```
+
+| type | 说明 | content 关键字段 |
+|------|------|-----------------|
+| `message` | 普通聊天消息 | `text: string` |
+| `annotation` | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` |
+| `plan` | 方案产出（`/plan` 指令触发） | `issues: [{title, status, priority, assignee}]` |
+| `system` | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` |
+| `ping` | 心跳请求（客户端每 30s 发送） | 无 |
+| `pong` | 心跳响应 | 无 |
+| `typing` | 正在输入状态 | `is_typing: bool` |
+| `plan_ack` | 方案确认/拒绝 | `plan_id: string`, `accepted: bool` |
+| `error` | 错误响应 | `error.code: string`, `error.message: string` |
+
+**心跳与重连**：
+
+- 客户端每 30s 发送 `ping`，服务端回复 `pong`
+- 90s 内未收到任何消息视为断连，服务端主动关闭连接
+- 客户端重连采用指数退避：`1s → 2s → 4s → 8s → 16s → 32s (max)`
+- 重连后客户端发送 `seq` 字段为上次收到的最后序号，服务端据此推送遗漏消息
+
+**消息持久化**：所有 `message` / `system` / `annotation` / `plan` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
+
 ### 5.2 任务队列方案
 
 选用 **Asynq**（https://github.com/hibiken/asynq），基于 Redis 的分布式任务队列：
@@ -2482,6 +2692,158 @@ Asynq 核心特性：
 └──────────────────────────────────────────┘
 ```
 
+### Eino 初始化与配置
+
+Eino 使用 `config.yaml` 中 `llm` 配置段统一管理多 Agent 的模型连接：
+
+```go
+// internal/agent/eino_init.go
+package agent
+
+import (
+    "github.com/cloudwego/eino/components/model"
+    "github.com/cloudwego/eino/schema"
+    "github.com/cloudwego/eino-ext/components/model/openai"
+)
+
+var chatModel model.ChatModel
+
+func InitEino(cfg *config.LLMConfig) error {
+    var err error
+    chatModel, err = openai.NewChatModel(context.Background(), &openai.ChatModelConfig{
+        APIKey:      cfg.APIKey,
+        BaseURL:     cfg.BaseURL,
+        Model:       cfg.DefaultModel,
+        MaxTokens:   cfg.MaxTokens,
+        Temperature: &cfg.Temperature,
+        Timeout:     cfg.Timeout,
+    })
+    return err
+}
+
+// GetChatModel 返回初始化的模型实例（单例）
+func GetChatModel() model.ChatModel { return chatModel }
+```
+
+### Agent 运行时配置
+
+`agents.runtime_config` JSON 字段存储每个 Agent 的个性化 LLM 配置，创建 Agent 时从 `config.yaml` 继承默认值、支持覆盖：
+
+```json
+{
+  "llm": {
+    "model": "gpt-4o",
+    "max_tokens": 4096,
+    "temperature": 0.8,
+    "api_key_ref": "${AGENT_LLM_KEY}"    // 引用环境变量
+  },
+  "opencode": {
+    "allowed_tools": ["read","write","bash","glob"],
+    "max_iterations": 20,
+    "thinking": true
+  },
+  "skills": ["frontend-design", "react-best-practices"]
+}
+```
+
+### ChatModel 调用示例
+
+```go
+// internal/agent/group_discuss.go — Agent 参与群聊讨论
+func (o *GroupOrchestrator) InvokeAgent(
+    ctx context.Context,
+    agent *model.Agent,
+    messages []*schema.Message,  // 群聊历史上下文
+) (*schema.Message, error) {
+    // 1. 构建 System Prompt（Agent 人设 + 绑定的 Skills）
+    systemPrompt := o.buildSystemPrompt(agent)
+
+    // 2. 追加当前讨论上下文
+    chatInput := append([]*schema.Message{
+        schema.SystemMessage(systemPrompt),
+    }, messages...)
+
+    // 3. 调用 LLM（带 Token 用量回调）
+    resp, err := GetChatModel().Generate(ctx, chatInput,
+        model.WithCallbacks(&callbacks.Handler{
+            OnEnd: func(ctx context.Context, info *callbacks.RunInfo, output model.CallbackOutput) context.Context {
+                // 记录 Token 用量
+                o.tokenTracker.Record(agent.ID, output.TokenUsage)
+                return ctx
+            },
+        }),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("agent invoke failed: %w", err)
+    }
+    return resp, nil
+}
+```
+
+### Tool / Skill 抽象
+
+```go
+// internal/agent/skill_loader.go — Skills 加载为 Eino Tool
+type SkillLoader struct {
+    skillRepo *repository.SkillRepo
+}
+
+func (sl *SkillLoader) LoadAsTools(
+    ctx context.Context,
+    agentID uint,
+) ([]tool.InvokableTool, error) {
+    skills, err := sl.skillRepo.FindEnabledByAgent(ctx, agentID)
+    if err != nil {
+        return nil, err
+    }
+    tools := make([]tool.InvokableTool, 0, len(skills))
+    for _, skill := range skills {
+        // 每个 Skill 注册为一个 Eino Tool
+        tools = append(tools, &SkillTool{
+            name:        skill.Name,
+            description: skill.Description,
+            definition:  skill.Definition, // Markdown 正文
+            handler: func(ctx context.Context, input string) (string, error) {
+                // 将 Skill 定义注入 System Prompt 让 LLM 遵循
+                return fmt.Sprintf(
+                    "Skill '%s' loaded. Instructions:\n%s",
+                    skill.Name, skill.Definition,
+                ), nil
+            },
+        })
+    }
+    return tools, nil
+}
+```
+
+### Token 用量与成本追踪
+
+```go
+// internal/agent/token_tracker.go
+type TokenTracker struct {
+    redis *redis.Client
+}
+
+// Record 记录单次调用用量（按 Agent + 日期聚合）
+func (t *TokenTracker) Record(agentID uint, usage *schema.TokenUsage) {
+    key := fmt.Sprintf("tokens:agent:%d:date:%s", agentID, time.Now().Format("2006-01-02"))
+    t.redis.HIncrBy(ctx, key, "prompt_tokens", int64(usage.PromptTokens))
+    t.redis.HIncrBy(ctx, key, "completion_tokens", int64(usage.CompletionTokens))
+    t.redis.Expire(ctx, key, 30*24*time.Hour) // 保留 30 天
+}
+
+// GetDailyUsage 获取指定日期用量
+func (t *TokenTracker) GetDailyUsage(
+    agentID uint, date string,
+) (prompt, completion int64, err error) {
+    key := fmt.Sprintf("tokens:agent:%d:date:%s", agentID, date)
+    cmd := t.redis.HMGet(ctx, key, "prompt_tokens", "completion_tokens")
+    // ...
+}
+```
+
+> **LLM API Key 安全模型**：`api_key_ref` 字段通过 `${VAR}` 引用环境变量而非直接存明文；Agent 执行时 Worker 从环境变量读取后通过环境变量注入 Docker 沙箱，不落盘。
+
 ---
 
 ## 七、Docker 沙箱方案
@@ -2544,6 +2906,54 @@ docker images anserflow/sandbox:latest
 ```
 
 > `docker/sandbox/.dockerignore` 已排除 `node_modules/`、`.git/`、`dist/` 等，确保构建上下文最小。
+
+**Dockerfile**（`docker/sandbox/Dockerfile`）：
+
+```dockerfile
+FROM alpine:3.21
+
+RUN apk add --no-cache \
+    nodejs npm \
+    python3 py3-pip \
+    git \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
+
+RUN adduser -D -u 1000 sandbox
+
+# opencode CLI（Agent 运行时）
+RUN npm install -g @anthropic-ai/claude-code 2>/dev/null || true
+
+WORKDIR /workspace
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+USER sandbox
+
+ENTRYPOINT ["/entrypoint.sh"]
+```
+
+```bash
+# entrypoint.sh — 沙箱入口脚本
+# 由 Worker 传入环境变量控制行为：
+#   GIT_REPO_URL / GIT_BRANCH / GITHUB_TOKEN → git clone
+#   AGENT_CONFIG_JSON                   → Agent 运行时配置
+#   TASK_JSON                            → 编码任务描述
+```
+
+```dockerfile
+# .dockerignore
+node_modules/
+.git/
+dist/
+.next/
+*.log
+.DS_Store
+```
+
+> 预估镜像大小约 120MB（含 Node.js + Python + Git，不含 opencode CLI）。
 
 ### 7.3 Go Docker SDK
 
@@ -3339,11 +3749,90 @@ CREATE TABLE invitation_usages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     invitation_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
+    assigned_role ENUM('admin','member') NOT NULL,   -- 接受邀请时赋予的角色（快照）
     used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (invitation_id) REFERENCES invitations(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
+
+-- Todo 任务（拆解后的可执行单元）
+CREATE TABLE todos (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    project_id BIGINT NOT NULL,
+    parent_id BIGINT NULL,              -- 子任务
+    title VARCHAR(256) NOT NULL,
+    description TEXT,
+    status ENUM('todo','in_progress','done','blocked') DEFAULT 'todo',
+    priority ENUM('p0','p1','p2','p3','p4') DEFAULT 'p2',
+    assigned_agent_id BIGINT NULL,      -- 分配给 Agent
+    assigned_user_id BIGINT NULL,       -- 分配给自然人
+    estimated_hours DECIMAL(5,1),
+    depends_on JSON NULL,               -- 依赖的 Todo ID 列表: [1, 3]
+    acceptance_criteria TEXT,           -- 验收标准
+    source ENUM('manual','agent_breakdown','import') DEFAULT 'manual',  -- 来源
+    linked_issue_id BIGINT NULL,        -- 关联的 Issue（双向同步）
+    created_by BIGINT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (parent_id) REFERENCES todos(id),
+    FOREIGN KEY (assigned_agent_id) REFERENCES agents(id),
+    FOREIGN KEY (assigned_user_id) REFERENCES users(id),
+    FOREIGN KEY (linked_issue_id) REFERENCES issues(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- 审计日志
+CREATE TABLE audit_logs (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    org_id BIGINT NOT NULL,
+    user_id BIGINT NULL,                -- 操作人（NULL 表示系统操作）
+    action VARCHAR(64) NOT NULL,        -- 操作类型: issue.create / agent.update / member.invite
+    resource_type VARCHAR(32) NOT NULL, -- 资源类型: issue / agent / project / member / skill
+    resource_id BIGINT NOT NULL,        -- 资源 ID
+    detail JSON,                        -- 变更详情（旧值/新值）
+    ip VARCHAR(45),                     -- 操作 IP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_org_time (org_id, created_at),
+    INDEX idx_action (action),
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 通知
+CREATE TABLE notifications (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    org_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,            -- 接收人
+    type VARCHAR(32) NOT NULL,          -- issue_assigned / agent_completed / mention / invite
+    title VARCHAR(256) NOT NULL,
+    body TEXT,
+    resource_type VARCHAR(32),          -- 关联资源类型
+    resource_id BIGINT,                 -- 关联资源 ID
+    is_read TINYINT(1) DEFAULT 0,       -- 已读状态
+    is_pushed TINYINT(1) DEFAULT 0,     -- 是否已推送（WS/原生/邮件）
+    push_channel ENUM('websocket','native','email','none') DEFAULT 'none',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_read (user_id, is_read, created_at),
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 用户偏好设置
+CREATE TABLE user_settings (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL UNIQUE,
+    locale VARCHAR(10) DEFAULT 'zh-CN',
+    theme ENUM('light','dark','system') DEFAULT 'system',
+    notify_issue_assigned TINYINT(1) DEFAULT 1,
+    notify_agent_completed TINYINT(1) DEFAULT 1,
+    notify_mention TINYINT(1) DEFAULT 1,
+    notify_invite TINYINT(1) DEFAULT 1,
+    notify_email TINYINT(1) DEFAULT 1,  -- 同时发送邮件通知
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 
 ### 9.3 邀请机制说明
 
@@ -3428,6 +3917,110 @@ func SendInviteEmail(to string, inviteLink string) error {
 | Issue 状态变更 | 当 Issue 从 InReview→Done 或被退回时通知相关人 |
 | Agent 执行完成 | PR 已提交 / 执行失败 通知 |
 | 密码重置 | 密码重置链接 |
+
+### 9.5 API 路由总览
+
+所有 API 挂载在 `/api` 下，需要认证的端点由 JWT 中间件保护（标注 `🔒`），敏感操作额外受 Casbin RBAC 约束（标注 `🔐`）。
+
+```
+/api
+├── /health                                GET  → 健康检查
+│
+├── /auth                                  认证模块
+│   ├── /register                          POST → 邮箱注册
+│   ├── /login                             POST → 邮箱登录 → JWT
+│   ├── /github/login                      GET  → GitHub OAuth 入口
+│   ├── /github/callback                   GET  → GitHub OAuth 回调
+│   └── /me                                GET  → 🔒 当前用户信息
+│
+├── /orgs                                  组织模块（🔒）
+│   ├── /                                  GET  → 我加入的组织列表
+│   ├── /                                  POST → 创建组织
+│   ├── /:org_id                           GET  → 组织详情
+│   ├── /:org_id                           PUT  → 🔐 更新组织
+│   ├── /:org_id                           DELETE → 🔐 删除组织
+│   ├── /:org_id/my-role                   GET  → 当前用户角色
+│   ├── /:org_id/members                   GET  → 成员列表
+│   ├── /:org_id/members/invite            POST → 🔐 邀请成员
+│   ├── /:org_id/members/:user_id          DELETE → 🔐 移除成员
+│   ├── /:org_id/members/:user_id/role     PUT  → 🔐 修改角色
+│   └── /:org_id/settings                  GET/PUT → 🔐 组织设置
+│
+├── /invitations                           邀请模块
+│   ├── /                                  POST → 🔒 创建邀请（link/email）
+│   ├── /:token                            GET  → 查看邀请详情
+│   └── /:token/accept                     POST → 🔒 接受邀请
+│
+├── /orgs/:org_id/projects                项目管理（🔒）
+│   ├── /                                  GET  → 项目列表
+│   ├── /                                  POST → 🔐 创建项目
+│   ├── /:project_id                       GET  → 项目详情
+│   ├── /:project_id                       PUT  → 🔐 更新项目
+│   ├── /:project_id                       DELETE → 🔐 删除项目
+│   │
+│   ├── /:project_id/issues               Issue 管理
+│   │   ├── /                              GET  → Issue 列表
+│   │   ├── /                              POST → 🔒 创建 Issue
+│   │   ├── /:issue_id                     GET  → Issue 详情
+│   │   ├── /:issue_id                     PUT  → 🔒 更新 Issue
+│   │   ├── /:issue_id                     DELETE → 🔐 删除 Issue
+│   │   ├── /:issue_id/status              PUT  → 🔒 状态流转
+│   │   ├── /:issue_id/assign              PUT  → 🔐 分配/更改负责人
+│   │   └── /:issue_id/children            GET  → 子 Issue 列表
+│   │
+│   ├── /:project_id/todos                Todo 管理
+│   │   ├── /                              GET  → Todo 列表
+│   │   ├── /                              POST → 🔐 创建 Todo
+│   │   ├── /:todo_id                      PUT  → 🔒 更新 Todo
+│   │   ├── /:todo_id                      DELETE → 🔐 删除 Todo
+│   │   └── /:todo_id/status               PUT  → 🔒 状态变更
+│   │
+│   └── /:project_id/groups               项目群组
+│       ├── /                              GET  → 群组列表
+│       └── /                              POST → 🔐 创建群组
+│
+├── /orgs/:org_id/agents                   Agent 管理（🔒）
+│   ├── /                                  GET  → Agent 列表
+│   ├── /                                  POST → 🔐 创建 Agent
+│   ├── /:agent_id                         GET  → Agent 详情
+│   ├── /:agent_id                         PUT  → 🔐 更新 Agent
+│   ├── /:agent_id                         DELETE → 🔐 删除 Agent
+│   ├── /:agent_id/enable                  PUT  → 🔐 启用/禁用
+│   ├── /:agent_id/skills                  GET  → 已绑定 Skills
+│   ├── /:agent_id/skills                  PUT  → 🔐 更新 Skills 绑定
+│   └── /:agent_id/logs                    GET  → 执行日志
+│
+├── /orgs/:org_id/skills                   Skills 管理（🔒）
+│   ├── /                                  GET  → Skills 列表
+│   ├── /                                  POST → 🔐 创建 Skill
+│   ├── /:skill_id                         GET  → Skill 详情
+│   ├── /:skill_id                         PUT  → 🔐 更新 Skill
+│   ├── /:skill_id                         DELETE → 🔐 删除 Skill
+│   ├── /:skill_id/enable                  PUT  → 🔐 启用/禁用
+│   └── /import/zip                        POST → 🔐 ZIP 导入
+│
+├── /groups/:group_id                      群组模块（🔒）
+│   ├── /                                  GET  → 群组信息
+│   ├── /members                           GET  → 成员列表
+│   ├── /members                           POST → 🔐 添加成员
+│   ├── /members/:id                       DELETE → 🔐 移除成员
+│   ├── /messages                          GET  → 历史消息（分页）
+│   └── /messages                          POST → 发送消息
+│
+├── /notifications                         通知模块（🔒）
+│   ├── /                                  GET  → 通知列表（分页）
+│   ├── /unread-count                      GET  → 未读数
+│   ├── /:id/read                          PUT  → 标记已读
+│   └── /read-all                          PUT  → 全部已读
+│
+├── /audit-logs                            审计日志（🔒 🔐）
+│   └── /                                  GET  → 按 org + 时间筛选
+│
+└── /ws                                    WebSocket（认证参数化）
+    └── ?token=xxx&group_id=42             → 群聊连接
+```
+
+> **图例**：无标注 = 公开端点 | `🔒` = 需 JWT 认证 | `🔐` = 需 JWT + Casbin RBAC
 
 ---
 
@@ -3585,6 +4178,39 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 | T27 | 管理后台完整 UI | 所有页面可交互 |
 | T28 | 性能优化 + 压力测试 | 100 并发 WS 连接稳定 |
 
+### 测试策略
+
+测试贯穿全部四个阶段，不在单独阶段集中编写：
+
+| 层级 | 框架 | 目标 | 触发时机 |
+|------|------|------|----------|
+| **Go 单元测试** | `testing` + `testify` | Service / Model 层覆盖率 > 70% | 每次 `go test`（CI PR） |
+| **Go 集成测试** | `testing` + `testcontainers-go` | MySQL/Redis 真实交互（Handler + DB 层） | PR + main push |
+| **前端组件测试** | Vitest + Testing Library | 核心组件（AgentForm / IssueCard / TodoKanban） | PR |
+| **E2E 测试** | Playwright | 关键流程：注册→登录→创建Agent→创建Issue→状态流转→邀请 | main push / 发布前 |
+| **WebSocket 测试** | `gorilla/websocket` 客户端 + testify | 消息格式 / 心跳 / 重连 / 分布式 Pub/Sub | PR |
+| **Tauri E2E** | WebDriver (tauri-driver) | 登录 / Issue 创建 / 邀请接受 | desktop-release 前 |
+| **压力测试** | k6 / vegeta | WS 并发连接 > 100、API QPS > 500 | L4 阶段 |
+| **合约测试** | Pact (可选) | 前后端 API 契约一致性 | Phase 2 |
+
+> **CI 集成**：`ci.yml` 已涵盖 Go test + lint + build 和 Next.js type-check + lint + build。测试在 CI 中自动运行，失败阻断合并。
+
+### 数据库迁移策略
+
+GORM AutoMigrate 仅处理正向迁移（创建表/添加列）。需要回滚时采用：
+
+| 场景 | 方案 |
+|------|------|
+| **本地开发** | `anserflow migrate --dry-run` 预览 SQL → 手动执行回滚 DDL |
+| **生产发布** | 每次 `anserflow migrate` 前自动生成备份 SQL（`data/migrations/YYYYMMDDHHMMSS_before.sql`） |
+| **紧急回滚** | 执行对应时间的备份 SQL 恢复表结构 |
+| **长期方案** | Phase 2 引入 `golang-migrate/migrate`，支持 `up`/`down` 版本化迁移 |
+
+```bash
+# 迁移前自动备份
+anserflow migrate --backup    # → data/migrations/20260514120000_before.sql
+```
+
 ---
 
 ## 十三、风险与建议
@@ -3690,7 +4316,7 @@ graph TD
 
 ### 15.2 任务计划
 
-当前任务计划按 L1-L7 静态拆分。以下扩展增强智能化与闭环能力。
+当前任务计划按 L1-L4 静态拆分。以下扩展增强智能化与闭环能力。
 
 #### 15.2.1 Agent 驱动的智能拆分
 
@@ -3791,7 +4417,7 @@ type ExecutionStrategy interface {
 
 ```
 视图模式:
-├── 列表视图    L1-L7 层级排列
+├── 列表视图    L1-L4 层级排列
 ├── 看板视图    backlog → todo → in_progress → done 泳道
 ├── 时间线      甘特图展示起止时间和依赖
 ├── 人员视图    按 Agent/自然人分组
@@ -3812,6 +4438,6 @@ const columns = [
 
 ---
 
-> 📌 文档版本: v2.5  
+> 📌 文档版本: v2.6  
 > 📅 更新日期: 2026-05-14  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
