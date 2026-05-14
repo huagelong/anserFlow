@@ -524,8 +524,8 @@ const sysInfo = await invoke<SystemInfo>('get_system_info')
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:3000",
-    "frontendDist": "../frontend/dist"
+    "devUrl": "http://localhost:3001",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [{
@@ -1468,11 +1468,11 @@ const nextConfig = {
 **构建流程**：
 
 ```bash
-# 1. 构建前端 SPA
-cd frontend && npm run build    # → dist/ 目录
+# 1. 构建 admin SPA（后台管理）
+npm run build -w @anserflow/admin    # → admin/dist/
 
-# 2. Go embed 嵌入前端产物
-cd backend && go build -o anserflow    # dist/ 被 go:embed 打入二进制
+# 2. Go embed 嵌入 admin 产物
+go build -o anserflow                 # admin/dist/ 被 go:embed 打入二进制
 
 # 3. 部署：单个文件即可
 ./anserflow init    # 首次运行初始化
