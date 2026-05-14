@@ -1316,6 +1316,46 @@ export async function getApiConfig() {
 // 需在 tauri.conf.json 的 CSP 中白名单后端地址
 ```
 
+**桌面端组织上下文**：桌面端路由为 `/projects/:id`、`/chat` 等扁平路径（无 org_id 前缀），但 API 路由需要 `org_id`。桌面端通过以下机制建立组织上下文：
+
+```ts
+// desktop/src/lib/org-context.ts — 桌面端组织选择与缓存
+import { getSettings, updateSettings } from '@/lib/local-settings'
+import { invoke } from '@tauri-apps/api/core'
+
+export async function getCurrentOrgId(): Promise<string> {
+  const settings = await getSettings()
+  // 如果已有缓存，直接使用
+  if (settings.lastOrgId) return settings.lastOrgId
+
+  // 否则从 API 获取用户加入的第一个组织
+  const orgs = await fetch(`${settings.apiBase}/api/orgs`).then(r => r.json())
+  if (orgs.length === 0) throw new Error('未加入任何组织')
+  
+  await updateSettings({ lastOrgId: orgs[0].id })
+  return orgs[0].id
+}
+
+// API 调用时自动注入 org_id
+export async function apiFetch(path: string, init?: RequestInit) {
+  const orgId = await getCurrentOrgId()
+  const url = path.startsWith('/api/orgs/')
+    ? path  // 已包含 org_id
+    : path.replace('/api/', `/api/orgs/${orgId}/`)
+  return fetch(url, init)
+}
+```
+
+桌面 UI 提供组织切换组件，切换时更新 `lastOrgId` 并刷新所有数据：
+
+```tsx
+// desktop/src/components/org-switcher.tsx
+const { data: orgs } = useQuery({ queryKey: ['orgs'], queryFn: fetchOrgs })
+<Select onValueChange={setCurrentOrgId}>
+  {orgs?.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+</Select>
+```
+
 #### Rust 最小学习路径
 
 AnserFlow 桌面端 Rust 代码量极少，核心仅三个文件，每个都可以按模板修改：
@@ -1595,7 +1635,7 @@ export function setupLogger() {
 
 #### CI/CD：桌面端发布
 
-> 完整工作流见 [三、GitHub Flow 与 CI/CD → 3.6 desktop-release.yml](#36-desktop-releaseyml--桌面端发布)。此处仅列 Tauri 特定注意事项：
+> 完整工作流见「三、GitHub Flow 与 CI/CD → 3.6」节。此处仅列 Tauri 特定注意事项：
 
 | 事项 | 说明 |
 |------|------|
@@ -2114,7 +2154,7 @@ jobs:
 
 ### 3.6 desktop-release.yml — 桌面端发布
 
-> 完整工作流见 [Tauri 自动更新 — GitHub Actions 自动发布](#github-actions-自动发布) 章节。此处摘要关键步骤：
+> 完整工作流见「Tauri 桌面端补充说明 → GitHub Actions 自动发布」章节。此处摘要关键步骤：
 
 | 步骤 | 说明 |
 |------|------|
@@ -2260,6 +2300,7 @@ anserflow worker
 anserflow migrate
   --config  config.yaml 路径
   --dry-run 仅打印 SQL 不执行（默认 false）
+  --backup  迁移前自动生成备份 SQL（默认 true）
   # 基于 GORM AutoMigrate，自动同步所有表结构
 
 # 版本升级（下载最新版本并替换当前二进制）
@@ -2309,7 +2350,8 @@ var migrateCmd = &cobra.Command{
     Short: "数据库自动迁移（GORM AutoMigrate）",
     Run: func(cmd *cobra.Command, args []string) {
         dryRun, _ := cmd.Flags().GetBool("dry-run")
-        runMigrate(cfg, dryRun)
+        backup, _ := cmd.Flags().GetBool("backup")
+        runMigrate(cfg, dryRun, backup)
     },
 }
 
@@ -2741,8 +2783,7 @@ func GetChatModel() model.ChatModel { return chatModel }
     "allowed_tools": ["read","write","bash","glob"],
     "max_iterations": 20,
     "thinking": true
-  },
-  "skills": ["frontend-design", "react-best-practices"]
+  }
 }
 ```
 
@@ -2866,11 +2907,20 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  ├── Volume: /workspace        │  │
 │  │  └── AutoRemove: true          │  │
 │  │                                │  │
-│  │  Step 3: 执行                  │  │
-│  │  ├── git clone 关联仓库        │  │
-│  │  ├── 注入 Agent 配置           │  │
-│  │  ├── 运行 opencode / 自定义CLI │  │
-│  │  └── 监控执行日志              │  │
+│  │  Step 3: 执行（编码闭环）         │  │
+│  │  ├── git clone 关联仓库            │  │
+│  │  ├── 注入 Agent 配置 + Skills       │  │
+│  │  │                                   │  │
+│  │  │  ┌─ 编码循环 (open代码 CLI) ────┐ │  │
+│  │  │  │ ① LLM 读取 Issue 描述        │  │  │
+│  │  │  │ ② LLM 生成代码文件            │  │  │
+│  │  │  │ ③ 写入 /workspace 工作区      │  │  │
+│  │  │  │ ④ 运行测试/lint 验证          │  │  │
+│  │  │  │ ⑤ 失败 → 反馈 LLM → 修正     │  │  │
+│  │  │  │ ⑥ 成功 → 退出循环            │  │  │
+│  │  │  └──────────────────────────────┘ │  │
+│  │  │                                   │  │
+│  │  └── 实时流式输出日志（Worker 监控） │  │
 │  │                                │  │
 │  │  Step 4: 收尾                  │  │
 │  │  ├── git add → commit → push   │  │
@@ -3616,6 +3666,32 @@ CREATE TABLE agents (
     FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
 
+-- Agent 执行日志
+CREATE TABLE agent_logs (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    org_id BIGINT NOT NULL,
+    agent_id BIGINT NOT NULL,
+    issue_id BIGINT NULL,               -- 关联 Issue（非空表示编码执行）
+    group_id BIGINT NULL,               -- 关联群聊（非空表示讨论参与）
+    type ENUM('discuss','execute','system') NOT NULL,  -- 日志类型
+    action VARCHAR(64) NOT NULL,        -- 具体动作: invoke_llm / clone_repo / commit / create_pr / error
+    status ENUM('running','success','failed','timeout') DEFAULT 'running',
+    input JSON,                         -- 输入上下文（prompt / issue 信息）
+    output JSON,                        -- 输出结果
+    error_message TEXT,                 -- 错误信息
+    token_usage JSON,                   -- Token 用量: {prompt_tokens, completion_tokens}
+    duration_ms INT,                    -- 执行耗时（毫秒）
+    started_at DATETIME,
+    finished_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_agent_time (agent_id, created_at),
+    INDEX idx_issue (issue_id),
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (agent_id) REFERENCES agents(id),
+    FOREIGN KEY (issue_id) REFERENCES issues(id),
+    FOREIGN KEY (group_id) REFERENCES groups(id)
+);
+
 -- Skills 定义
 CREATE TABLE skills (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -3756,7 +3832,6 @@ CREATE TABLE invitation_usages (
     FOREIGN KEY (invitation_id) REFERENCES invitations(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
-```
 
 -- Todo 任务（拆解后的可执行单元）
 CREATE TABLE todos (
@@ -3821,11 +3896,10 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- 用户偏好设置
+-- 用户偏好设置（locale 以 users.locale 为准，此处仅存通知/主题等非语言偏好）
 CREATE TABLE user_settings (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL UNIQUE,
-    locale VARCHAR(10) DEFAULT 'zh-CN',
     theme ENUM('light','dark','system') DEFAULT 'system',
     notify_issue_assigned TINYINT(1) DEFAULT 1,
     notify_agent_completed TINYINT(1) DEFAULT 1,
@@ -3835,6 +3909,7 @@ CREATE TABLE user_settings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+```
 
 ### 9.3 邀请机制说明
 
@@ -3942,64 +4017,65 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   ├── /:org_id                           PUT  → 🔐 更新组织
 │   ├── /:org_id                           DELETE → 🔐 删除组织
 │   ├── /:org_id/my-role                   GET  → 当前用户角色
+│   ├── /:org_id/dashboard                 GET  → 仪表盘聚合数据（Issue分布/Agent活跃度/项目概览）
 │   ├── /:org_id/members                   GET  → 成员列表
 │   ├── /:org_id/members/invite            POST → 🔐 邀请成员
 │   ├── /:org_id/members/:user_id          DELETE → 🔐 移除成员
 │   ├── /:org_id/members/:user_id/role     PUT  → 🔐 修改角色
-│   └── /:org_id/settings                  GET/PUT → 🔐 组织设置
-│
-├── /invitations                           邀请模块
-│   ├── /                                  POST → 🔒 创建邀请（link/email）
-│   ├── /:token                            GET  → 查看邀请详情
-│   └── /:token/accept                     POST → 🔒 接受邀请
-│
-├── /orgs/:org_id/projects                项目管理（🔒）
-│   ├── /                                  GET  → 项目列表
-│   ├── /                                  POST → 🔐 创建项目
-│   ├── /:project_id                       GET  → 项目详情
-│   ├── /:project_id                       PUT  → 🔐 更新项目
-│   ├── /:project_id                       DELETE → 🔐 删除项目
 │   │
-│   ├── /:project_id/issues               Issue 管理
-│   │   ├── /                              GET  → Issue 列表
-│   │   ├── /                              POST → 🔒 创建 Issue
-│   │   ├── /:issue_id                     GET  → Issue 详情
-│   │   ├── /:issue_id                     PUT  → 🔒 更新 Issue
-│   │   ├── /:issue_id                     DELETE → 🔐 删除 Issue
-│   │   ├── /:issue_id/status              PUT  → 🔒 状态流转
-│   │   ├── /:issue_id/assign              PUT  → 🔐 分配/更改负责人
-│   │   └── /:issue_id/children            GET  → 子 Issue 列表
+│   ├── /:org_id/invitations              邀请模块（🔒）
+│   │   ├── /                              POST → 🔐 创建邀请（link/email）
+│   │   └── /:token/accept                 POST → 接受邀请
 │   │
-│   ├── /:project_id/todos                Todo 管理
-│   │   ├── /                              GET  → Todo 列表
-│   │   ├── /                              POST → 🔐 创建 Todo
-│   │   ├── /:todo_id                      PUT  → 🔒 更新 Todo
-│   │   ├── /:todo_id                      DELETE → 🔐 删除 Todo
-│   │   └── /:todo_id/status               PUT  → 🔒 状态变更
+│   ├── /:org_id/settings                  GET/PUT → 🔐 组织设置
 │   │
-│   └── /:project_id/groups               项目群组
-│       ├── /                              GET  → 群组列表
-│       └── /                              POST → 🔐 创建群组
-│
-├── /orgs/:org_id/agents                   Agent 管理（🔒）
-│   ├── /                                  GET  → Agent 列表
-│   ├── /                                  POST → 🔐 创建 Agent
-│   ├── /:agent_id                         GET  → Agent 详情
-│   ├── /:agent_id                         PUT  → 🔐 更新 Agent
-│   ├── /:agent_id                         DELETE → 🔐 删除 Agent
-│   ├── /:agent_id/enable                  PUT  → 🔐 启用/禁用
-│   ├── /:agent_id/skills                  GET  → 已绑定 Skills
-│   ├── /:agent_id/skills                  PUT  → 🔐 更新 Skills 绑定
-│   └── /:agent_id/logs                    GET  → 执行日志
-│
-├── /orgs/:org_id/skills                   Skills 管理（🔒）
-│   ├── /                                  GET  → Skills 列表
-│   ├── /                                  POST → 🔐 创建 Skill
-│   ├── /:skill_id                         GET  → Skill 详情
-│   ├── /:skill_id                         PUT  → 🔐 更新 Skill
-│   ├── /:skill_id                         DELETE → 🔐 删除 Skill
-│   ├── /:skill_id/enable                  PUT  → 🔐 启用/禁用
-│   └── /import/zip                        POST → 🔐 ZIP 导入
+│   ├── /:org_id/projects                 项目管理（🔒）
+│   │   ├── /                              GET  → 项目列表
+│   │   ├── /                              POST → 🔐 创建项目
+│   │   ├── /:project_id                   GET  → 项目详情
+│   │   ├── /:project_id                   PUT  → 🔐 更新项目
+│   │   ├── /:project_id                   DELETE → 🔐 删除项目
+│   │   │
+│   │   ├── /:project_id/issues           Issue 管理
+│   │   │   ├── /                          GET  → Issue 列表
+│   │   │   ├── /                          POST → 🔒 创建 Issue
+│   │   │   ├── /:issue_id                 GET  → Issue 详情
+│   │   │   ├── /:issue_id                 PUT  → 🔒 更新 Issue
+│   │   │   ├── /:issue_id                 DELETE → 🔐 删除 Issue
+│   │   │   ├── /:issue_id/status          PUT  → 🔒 状态流转
+│   │   │   ├── /:issue_id/assign          PUT  → 🔐 分配/更改负责人
+│   │   │   └── /:issue_id/children        GET  → 子 Issue 列表
+│   │   │
+│   │   ├── /:project_id/todos            Todo 管理 [远期]
+│   │   │   ├── /                          GET  → Todo 列表
+│   │   │   ├── /                          POST → 🔐 创建 Todo
+│   │   │   ├── /:todo_id                  PUT  → 🔒 更新 Todo
+│   │   │   ├── /:todo_id                  DELETE → 🔐 删除 Todo
+│   │   │   └── /:todo_id/status           PUT  → 🔒 状态变更
+│   │   │
+│   │   └── /:project_id/groups           项目群组
+│   │       ├── /                          GET  → 群组列表
+│   │       └── /                          POST → 🔐 创建群组
+│   │
+│   ├── /:org_id/agents                   Agent 管理（🔒）
+│   │   ├── /                              GET  → Agent 列表
+│   │   ├── /                              POST → 🔐 创建 Agent
+│   │   ├── /:agent_id                     GET  → Agent 详情
+│   │   ├── /:agent_id                     PUT  → 🔐 更新 Agent
+│   │   ├── /:agent_id                     DELETE → 🔐 删除 Agent
+│   │   ├── /:agent_id/enable              PUT  → 🔐 启用/禁用
+│   │   ├── /:agent_id/skills              GET  → 已绑定 Skills
+│   │   ├── /:agent_id/skills              PUT  → 🔐 更新 Skills 绑定
+│   │   └── /:agent_id/logs                GET  → 执行日志（来源: agent_logs 表）
+│   │
+│   └── /:org_id/skills                   Skills 管理（🔒）
+│       ├── /                              GET  → Skills 列表
+│       ├── /                              POST → 🔐 创建 Skill
+│       ├── /:skill_id                     GET  → Skill 详情
+│       ├── /:skill_id                     PUT  → 🔐 更新 Skill
+│       ├── /:skill_id                     DELETE → 🔐 删除 Skill
+│       ├── /:skill_id/enable              PUT  → 🔐 启用/禁用
+│       └── /import/zip                    POST → 🔐 ZIP 导入
 │
 ├── /groups/:group_id                      群组模块（🔒）
 │   ├── /                                  GET  → 群组信息
@@ -4008,6 +4084,12 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   ├── /members/:id                       DELETE → 🔐 移除成员
 │   ├── /messages                          GET  → 历史消息（分页）
 │   └── /messages                          POST → 发送消息
+│
+├── /user                                  当前用户模块（🔒）
+│   └── /settings                          GET/PUT → 个人偏好设置（user_settings 表）
+│
+├── /admin                                 系统管理（🔒 🔐 super_admin only）
+│   └── /settings                          GET/PUT → 全局系统配置（LLM/邮件/存储等）
 │
 ├── /notifications                         通知模块（🔒）
 │   ├── /                                  GET  → 通知列表（分页）
@@ -4020,9 +4102,52 @@ func SendInviteEmail(to string, inviteLink string) error {
 │
 └── /ws                                    WebSocket（认证参数化）
     └── ?token=xxx&group_id=42             → 群聊连接
+
+/invite/:token [公开]                      GET  → 查看邀请详情 → 注册/登录后接受
 ```
 
-> **图例**：无标注 = 公开端点 | `🔒` = 需 JWT 认证 | `🔐` = 需 JWT + Casbin RBAC
+> **图例**：无标注 = 公开端点 | `🔒` = 需 JWT 认证 | `🔐` = 需 JWT + Casbin RBAC | `[远期]` = Phase 2 实施
+
+### 9.6 通知生成与分发
+
+服务端内部通过 `NotificationService` 自动生成通知，非由客户端 API 创建：
+
+```go
+// internal/service/notification_service.go
+type NotificationService struct {
+    repo *repository.NotificationRepo
+    ws   *ws.Hub          // WebSocket 推送
+    smtp *email.Sender    // 邮件推送
+}
+
+// 典型触发场景：Issue 状态变更时自动生成通知
+func (s *NotificationService) NotifyIssueStatusChanged(
+    ctx context.Context,
+    issue *model.Issue,
+    assigneeID uint,
+) {
+    // 1. 写入 notifications 表
+    notif := &model.Notification{
+        OrgID:        issue.Project.OrgID,
+        UserID:       assigneeID,
+        Type:         "issue_status_changed",
+        Title:        fmt.Sprintf("Issue #%d 状态变更为 %s", issue.ID, issue.Status),
+        ResourceType: "issue",
+        ResourceID:   issue.ID,
+    }
+    s.repo.Create(ctx, notif)
+
+    // 2. WebSocket 实时推送
+    s.ws.SendToUser(assigneeID, notif)
+
+    // 3. 邮件通知（根据 user_settings.notify_issue_assigned）
+    if s.shouldEmail(assigneeID, "notify_issue_assigned") {
+        s.smtp.SendIssueNotification(assigneeID, issue)
+    }
+}
+```
+
+触发场景覆盖：Issue 分配/状态变更、Agent 执行完成/失败、群聊 @提及、组织邀请。
 
 ---
 
