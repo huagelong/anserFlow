@@ -1530,58 +1530,16 @@ export function setupLogger() {
 // error('API 请求失败', { url: '/api/issues', status: 500 })
 ```
 
-#### CI/CD：GitHub Actions 跨平台构建
+#### CI/CD：桌面端发布
 
-使用 `tauri-action` 一键构建四平台产物并上传：
+> 完整工作流见 [三、GitHub Flow 与 CI/CD → 3.6 desktop-release.yml](#36-desktop-releaseyml--桌面端发布)。此处仅列 Tauri 特定注意事项：
 
-```yaml
-# .github/workflows/desktop-release.yml
-name: Desktop Release
-on:
-  push:
-    tags: ['desktop-v*']
-
-jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-          - platform: macos-13
-            target: x86_64-apple-darwin
-          - platform: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with: { node-version: '20' }
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with: { targets: '${{ matrix.target }}' }
-
-      - name: Build Frontend & Tauri
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-        with:
-          projectPath: 'desktop'
-          tagName: ${{ github.ref_name }}
-          releaseName: 'AnserFlow Desktop ${{ github.ref_name }}'
-          releaseBody: 'See CHANGELOG.md'
-          includeUpdaterJson: true
-```
-
-> macOS 签名与公证需要 Apple Developer 账号，在 Actions secrets 中配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`、`APPLE_TEAM_ID`。
+| 事项 | 说明 |
+|------|------|
+| 触发标签 | `desktop-v*` |
+| Node.js 版本 | 22（非 20，与根 `package.json` engines 一致） |
+| macOS 签名 | 需 `APPLE_CERTIFICATE` / `APPLE_ID` 等 5 个 secrets |
+| Rust Target | `aarch64-apple-darwin` + `x86_64-apple-darwin` 需分别构建 |
 
 #### WebDriver E2E 测试
 
@@ -1678,6 +1636,337 @@ graph TD
     H --> H3["Skill 启用/禁用(全局+单Agent)"]
     H --> H4["手动编写 + ZIP 导入"]
 ```
+
+---
+
+## 三、GitHub Flow 与 CI/CD
+
+### 3.1 GitHub Flow 分支策略
+
+AnserFlow 采用 GitHub Flow，保持主干可部署、分支短生命周期：
+
+```
+main ─────────────────────────●──────────────────●────  (始终可部署)
+      \                      /                  /
+       feature/xxx ──●──●──●       fix/yyy ──●
+```
+
+| 规则 | 说明 |
+|------|------|
+| `main` 保护 | 禁止直接 push，必须通过 PR 合并 |
+| 功能分支 | `feature/<描述>` / `fix/<描述>` / `docs/<描述>` |
+| PR 要求 | 至少 1 人 Review + CI 全绿 |
+| Commit 规范 | [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)：`feat:` / `fix:` / `docs:` / `refactor:` / `ci:` |
+| 发布标签 | `vX.Y.Z` 触发 CD 构建与发布 |
+| 合并方式 | Squash & Merge（保持 main 线性历史） |
+
+```bash
+# 分支命名示例
+git checkout -b feature/agent-orchestration
+git checkout -b fix/issue-status-sync
+git checkout -b docs/api-examples
+
+# Commit 示例
+feat: Agent 编排支持并行执行
+docs: 补充 Docker 沙箱架构文档
+fix: 修复 Issue 状态同步竞态条件
+ci: 添加 Next.js lint 检查 workflow
+```
+
+### 3.2 GitHub Actions 工作流总览
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  PR → main                                                    │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  ci.yml (每次 push PR)                                │    │
+│  │  ├── Go lint + test + build                          │    │
+│  │  ├── Next.js lint + type-check + build (admin)       │    │
+│  │  └── Next.js lint + type-check + build (desktop)     │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                           ↓ 合并                              │
+├──────────────────────────────────────────────────────────────┤
+│  main → 发布                                                  │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  sandbox-image.yml (push main / Dockerfile 变更)      │    │
+│  │  ├── Build sandbox Docker image                      │    │
+│  │  ├── Push to ghcr.io/anserflow/sandbox               │    │
+│  │  └── Tag: latest + commit-sha                        │    │
+│  ├──────────────────────────────────────────────────────┤    │
+│  │  go-release.yml (push tag v*)                        │    │
+│  │  ├── Cross-compile Go backend                        │    │
+│  │  ├── Upload anserflow binary (linux/windows/macos)   │    │
+│  │  └── Create GitHub Release                           │    │
+│  ├──────────────────────────────────────────────────────┤    │
+│  │  desktop-release.yml (push tag desktop-v*)            │    │
+│  │  ├── Cross-compile Tauri desktop                     │    │
+│  │  ├── Sign + Notarize                                 │    │
+│  │  ├── Create GitHub Release                           │    │
+│  │  └── Generate latest.json (updater)                  │    │
+│  └──────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+| 工作流 | 触发条件 | 耗时 | 产物 |
+|--------|---------|------|------|
+| `ci.yml` | PR / push main | ~3min | 无（仅检查） |
+| `sandbox-image.yml` | push main (Dockerfile) | ~5min | `ghcr.io/anserflow/sandbox` |
+| `go-release.yml` | tag `v*` | ~8min | 多平台二进制 + Release |
+| `desktop-release.yml` | tag `desktop-v*` | ~20min | Tauri 安装包 + `latest.json` |
+
+### 3.3 ci.yml — Pull Request 检查
+
+Go 后端 + 两套 Next.js 在一份工作流中并行检查：
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Go 后端 ──
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=3m
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Build
+        run: go build -o /dev/null ./...
+
+  # ── Next.js admin ──
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run build
+
+  # ── Next.js desktop ──
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run build
+```
+
+> 三个 job 并行运行，总耗时取最慢者（通常 admin build ~2min）。Go test 启用 `-race` 检测数据竞态。
+
+### 3.4 sandbox-image.yml — Docker 沙箱镜像
+
+仅在 `docker/sandbox/Dockerfile` 或相关文件变更时构建，避免浪费 CI 时间：
+
+```yaml
+# .github/workflows/sandbox-image.yml
+name: Sandbox Image
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/sandbox/**'
+      - '.github/workflows/sandbox-image.yml'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/sandbox/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/sandbox:latest
+            ghcr.io/${{ github.repository }}/sandbox:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image size report
+        run: |
+          echo "## Sandbox Image Size" >> $GITHUB_STEP_SUMMARY
+          docker pull ghcr.io/${{ github.repository }}/sandbox:latest
+          docker images ghcr.io/${{ github.repository }}/sandbox:latest --format '{{.Size}}' >> $GITHUB_STEP_SUMMARY
+```
+
+> 使用 GitHub Actions cache 加速构建，仅 Dockerfile 变更时才重新构建。
+
+### 3.5 go-release.yml — Go 后端发布
+
+推 tag `v*` 时触发，交叉编译三平台二进制并发布 Release：
+
+```yaml
+# .github/workflows/go-release.yml
+name: Go Release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm' }
+
+      - name: Build admin SPA
+        run: |
+          npm ci
+          npm run build -w @anserflow/admin
+
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w -X main.Version=${GITHUB_REF_NAME}" \
+            -o anserflow${{ matrix.ext }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anserflow-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: anserflow${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Generate checksums
+        run: |
+          find . -type f -name 'anserflow*' -exec sha256sum {} \; > checksums.txt
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'AnserFlow ${{ github.ref_name }}'
+          body: 'See [CHANGELOG.md](./CHANGELOG.md)'
+          files: |
+            */anserflow*
+            checksums.txt
+          generate_release_notes: true
+```
+
+> `CGO_ENABLED=0` 编译纯静态二进制，无需 glibc 依赖。`-ldflags="-s -w"` 减小体积。
+
+### 3.6 desktop-release.yml — 桌面端发布
+
+> 完整工作流见 [Tauri 自动更新 — GitHub Actions 自动发布](#github-actions-自动发布) 章节。此处摘要关键步骤：
+
+| 步骤 | 说明 |
+|------|------|
+| 触发 | tag `desktop-v*` |
+| 矩阵构建 | windows/macos-x64/macos-arm64/linux |
+| 签名 | `TAURI_SIGNING_PRIVATE_KEY` 环境变量 |
+| 产物 | MSI / DMG / AppImage + `latest.json` |
+| 公证 | macOS 需 Apple Developer 证书 |
+
+### 3.7 GitHub Secrets 清单
+
+所有 CI/CD Secrets 需在 `Repository Settings → Secrets and variables → Actions` 中配置：
+
+| Secret | 用途 | 触发工作流 |
+|--------|------|-----------|
+| `GITHUB_TOKEN` | 自动提供，无需手动配置 | 所有 |
+| `TAURI_PRIVATE_KEY` | Tauri updater 签名私钥 | `desktop-release` |
+| `TAURI_KEY_PASSWORD` | 私钥密码（可选） | `desktop-release` |
+| `APPLE_CERTIFICATE` | macOS 签名证书 (base64) | `desktop-release` |
+| `APPLE_CERTIFICATE_PASSWORD` | 证书密码 | `desktop-release` |
+| `APPLE_ID` | Apple Developer 账号 | `desktop-release` |
+| `APPLE_PASSWORD` | App 专用密码 | `desktop-release` |
+| `APPLE_TEAM_ID` | Team ID | `desktop-release` |
+
+### 3.8 分支保护规则
+
+在 GitHub Repository Settings → Branches 中配置 `main` 分支保护：
+
+| 规则 | 值 |
+|------|-----|
+| Require a pull request before merging | ✅ |
+| Require approvals | 1 |
+| Require status checks to pass | ✅ `ci.yml` (go / admin / desktop) |
+| Require conversation resolution | ✅ |
+| Do not allow bypassing | ✅ (包括 admins) |
 
 ---
 
@@ -2967,6 +3256,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v2.2  
+> 📌 文档版本: v2.3  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
