@@ -2768,6 +2768,349 @@ my-skill.zip
 
 ## 九、核心数据模型
 
+### 9.0 角色与权限管理（RBAC）
+
+AnserFlow 采用双层 RBAC 模型：**系统级角色** + **组织级角色**，由 Casbin 统一管理策略，MySQL 存储策略表，运行时动态加载。
+
+#### 角色体系
+
+```
+┌─────────────────────────────────────────────────┐
+│  系统级 (System-Level)                           │
+│  ┌───────────────────────────────────────────┐  │
+│  │  super_admin  平台超级管理员                │  │
+│  │  • 管理所有组织/用户/Agent                  │  │
+│  │  • 系统配置（邮件/LLM/存储）                │  │
+│  │  • 查看审计日志                            │  │
+│  └───────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────┤
+│  组织级 (Organization-Level)                     │
+│  ┌──────────────┐ ┌──────────────┐             │
+│  │ owner        │ │ admin        │  member     │
+│  │ • 完全控制    │ │ • 管理资源   │  • 只读协作 │
+│  │ • 删除组织    │ │ • 邀请成员   │  • 查看     │
+│  │ • 转移所有权  │ │ • 管理项目   │  • 评论     │
+│  │ • 所有CRUD   │ │ • 管理Agent  │  • 创建Issue│
+│  └──────────────┘ └──────────────┘             │
+└─────────────────────────────────────────────────┘
+```
+
+| 层级 | 角色 | 权限范围 | 典型用户 |
+|------|------|---------|----------|
+| 系统 | `super_admin` | 全平台 | 平台运营者 |
+| 组织 | `owner` | 单个组织完全控制 | 组织创建者 |
+| 组织 | `admin` | 单个组织管理 | 团队负责人 |
+| 组织 | `member` | 单个组织协作 | 普通成员 |
+
+#### 权限矩阵
+
+Casbin 使用 `(sub, obj, act)` 模型：`主体 + 资源 + 操作`。
+
+```ini
+# config/rbac_model.conf
+[request_definition]
+r = sub, obj, act
+
+[policy_definition]
+p = sub, obj, act
+
+[role_definition]
+g = _, _
+
+[policy_effect]
+e = some(where (p.eft == allow))
+
+[matchers]
+m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && regexMatch(r.act, p.act)
+```
+
+| 资源 (obj) | 操作 (act) | owner | admin | member |
+|-----------|-----------|-------|-------|--------|
+| `org` | `read` / `update` / `delete` | ✅ | ❌ | ❌ |
+| `org` | `read` | ✅ | ✅ | ✅ |
+| `member` | `invite` / `remove` / `update_role` | ✅ | ✅ | ❌ |
+| `member` | `list` | ✅ | ✅ | ✅ |
+| `project` | `create` / `update` / `delete` | ✅ | ✅ | ❌ |
+| `project` | `read` / `list` | ✅ | ✅ | ✅ |
+| `issue` | `create` / `update` / `delete` | ✅ | ✅ | ✅(仅自己) |
+| `issue` | `read` / `list` | ✅ | ✅ | ✅ |
+| `issue` | `assign` / `change_status` | ✅ | ✅ | ❌ |
+| `agent` | `create` / `update` / `delete` | ✅ | ✅ | ❌ |
+| `agent` | `read` / `list` | ✅ | ✅ | ✅ |
+| `skill` | `create` / `update` / `delete` | ✅ | ✅ | ❌ |
+| `skill` | `read` / `list` | ✅ | ✅ | ✅ |
+| `group` | `create` / `manage` | ✅ | ✅ | ❌ |
+| `group` | `read` / `send_message` | ✅ | ✅ | ✅ |
+| `webhook` | `manage` | ✅ | ✅ | ❌ |
+| `settings` | `manage` | ✅ | ✅ | ❌ |
+
+#### 数据库设计
+
+```sql
+-- Casbin 策略表（MySQL 存储）
+CREATE TABLE casbin_rules (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    ptype VARCHAR(12) NOT NULL,   -- 'p' 或 'g'
+    v0 VARCHAR(256),              -- sub / 角色名
+    v1 VARCHAR(256),              -- obj / 资源
+    v2 VARCHAR(256),              -- act / 操作
+    v3 VARCHAR(256),
+    v4 VARCHAR(256),
+    v5 VARCHAR(256),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 预置策略数据
+-- 组织所有权关系（动态插入：用户创建组织时写入）
+INSERT INTO casbin_rules (ptype, v0, v1) VALUES
+    ('g', '1', 'org:1:owner'),     -- 用户 1 是组织 1 的 owner
+    ('g', '2', 'org:1:admin'),     -- 用户 2 是组织 1 的 admin
+    ('g', '3', 'org:1:member');    -- 用户 3 是组织 1 的 member
+
+-- 角色权限策略
+INSERT INTO casbin_rules (ptype, v0, v1, v2) VALUES
+    -- owner: 完全控制
+    ('p', 'org_role:owner',   'org:*',    '(read)|(update)|(delete)'),
+    ('p', 'org_role:owner',   'member:*', '(invite)|(remove)|(update_role)|(list)'),
+    ('p', 'org_role:owner',   'project:*','(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:owner',   'issue:*',  '(create)|(read)|(update)|(delete)|(assign)|(change_status)'),
+    ('p', 'org_role:owner',   'agent:*',  '(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:owner',   'skill:*',  '(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:owner',   'group:*',  '(create)|(read)|(manage)|(send_message)'),
+    ('p', 'org_role:owner',   'webhook:*','(manage)'),
+    ('p', 'org_role:owner',   'settings:*','(manage)'),
+    -- admin: 管理权限（不含删除组织/转移所有权）
+    ('p', 'org_role:admin',   'org:*',    '(read)'),
+    ('p', 'org_role:admin',   'member:*', '(invite)|(remove)|(update_role)|(list)'),
+    ('p', 'org_role:admin',   'project:*','(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:admin',   'issue:*',  '(create)|(read)|(update)|(delete)|(assign)|(change_status)'),
+    ('p', 'org_role:admin',   'agent:*',  '(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:admin',   'skill:*',  '(create)|(read)|(update)|(delete)'),
+    ('p', 'org_role:admin',   'group:*',  '(create)|(read)|(manage)|(send_message)'),
+    ('p', 'org_role:admin',   'webhook:*','(manage)'),
+    ('p', 'org_role:admin',   'settings:*','(manage)'),
+    -- member: 只读 + 创建 Issue + 发送消息
+    ('p', 'org_role:member',  'org:*',    '(read)'),
+    ('p', 'org_role:member',  'member:*', '(list)'),
+    ('p', 'org_role:member',  'project:*','(read)'),
+    ('p', 'org_role:member',  'issue:*',  '(create)|(read)|(update)'),
+    ('p', 'org_role:member',  'agent:*',  '(read)'),
+    ('p', 'org_role:member',  'skill:*',  '(read)'),
+    ('p', 'org_role:member',  'group:*',  '(read)|(send_message)');
+
+-- 角色继承：admin 继承 member 权限，owner 继承 admin 权限
+INSERT INTO casbin_rules (ptype, v0, v1) VALUES
+    ('g', 'org_role:admin',  'org_role:member'),
+    ('g', 'org_role:owner',  'org_role:admin');
+
+-- super_admin 全局策略
+INSERT INTO casbin_rules (ptype, v0, v1, v2) VALUES
+    ('p', 'role:super_admin', '*', '(read)|(write)|(delete)|(manage)');
+```
+
+#### Go 中间件集成
+
+Casbin 作为 Gin 中间件，在每个 API 请求前校验权限：
+
+```go
+// internal/middleware/rbac.go
+package middleware
+
+import (
+    "net/http"
+    "strconv"
+
+    "github.com/casbin/casbin/v2"
+    gormadapter "github.com/casbin/gorm-adapter/v3"
+    "github.com/gin-gonic/gin"
+)
+
+var enforcer *casbin.Enforcer
+
+func InitRBAC(dsn string) error {
+    adapter, err := gormadapter.NewAdapter("mysql", dsn)
+    if err != nil {
+        return err
+    }
+    enforcer, err = casbin.NewEnforcer("config/rbac_model.conf", adapter)
+    if err != nil {
+        return err
+    }
+    return enforcer.LoadPolicy()
+}
+
+// RequirePermission 中间件：检查当前用户是否有资源操作权限
+// 用法: r.POST("/api/orgs/:org_id/projects", RequirePermission("project", "create"))
+func RequirePermission(obj, act string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        userID := c.GetInt64("user_id")        // JWT 中间件注入
+        orgID := c.Param("org_id")             // 路径参数
+
+        sub := buildSubject(userID, orgID)      // "user:123@org:1"
+
+        ok, err := enforcer.Enforce(sub, obj, act)
+        if err != nil || !ok {
+            c.JSON(http.StatusForbidden, gin.H{
+                "code":    "ERR_PERMISSION_DENIED",
+                "message": "权限不足",
+            })
+            c.Abort()
+            return
+        }
+        c.Next()
+    }
+}
+
+// 构建主体标识
+func buildSubject(userID int64, orgID string) string {
+    return "user:" + strconv.FormatInt(userID, 10) + "@org:" + orgID
+}
+
+// GetUserRole 获取用户在组织中的角色
+func GetUserRole(userID int64, orgID uint) string {
+    roles, _ := enforcer.GetRolesForUser(
+        buildSubject(userID, strconv.Itoa(int(orgID))),
+    )
+    for _, role := range roles {
+        switch {
+        case role == "org_role:owner":
+            return "owner"
+        case role == "org_role:admin":
+            return "admin"
+        case role == "org_role:member":
+            return "member"
+        }
+    }
+    return ""
+}
+```
+
+#### 路由权限配置
+
+```go
+// internal/handler/router.go
+func SetupRoutes(r *gin.Engine) {
+    api := r.Group("/api")
+    api.Use(middleware.JWTAuth())           // ① 先鉴权（JWT）
+
+    // ── 组织管理（仅 owner） ──
+    org := api.Group("/orgs/:org_id")
+    {
+        org.PUT("", middleware.RequirePermission("org", "update"))
+        org.DELETE("", middleware.RequirePermission("org", "delete"))
+
+        // ── 成员管理（owner / admin） ──
+        org.POST("/members/invite", middleware.RequirePermission("member", "invite"))
+        org.DELETE("/members/:user_id", middleware.RequirePermission("member", "remove"))
+
+        // ── 项目管理 ──
+        org.POST("/projects", middleware.RequirePermission("project", "create"))
+        project := org.Group("/projects/:project_id")
+        {
+            project.PUT("", middleware.RequirePermission("project", "update"))
+            project.DELETE("", middleware.RequirePermission("project", "delete"))
+
+            // Issue (member 可创建/编辑自己的)
+            project.POST("/issues", middleware.RequirePermission("issue", "create"))
+            project.PUT("/issues/:issue_id", middleware.RequirePermission("issue", "update"))
+        }
+
+        // ── Agent 管理（owner / admin） ──
+        org.POST("/agents", middleware.RequirePermission("agent", "create"))
+        org.PUT("/agents/:agent_id", middleware.RequirePermission("agent", "update"))
+        org.DELETE("/agents/:agent_id", middleware.RequirePermission("agent", "delete"))
+
+        // ── 组织设置 ──
+        org.PUT("/settings", middleware.RequirePermission("settings", "manage"))
+    }
+}
+```
+
+#### 前端权限控制
+
+```tsx
+// packages/shared-ui/src/lib/use-permission.ts
+import { useQuery } from '@tanstack/react-query'
+
+interface UserRole {
+  orgRole: 'owner' | 'admin' | 'member' | ''
+  isSuperAdmin: boolean
+}
+
+// 获取当前用户在指定组织中的角色
+function useOrgRole(orgId: string): UserRole {
+  return useQuery({
+    queryKey: ['user-role', orgId],
+    queryFn: () => fetch(`/api/orgs/${orgId}/my-role`).then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+  }).data ?? { orgRole: '', isSuperAdmin: false }
+}
+
+// 权限检查 Hook
+export function useCan(orgId: string, action: string): boolean {
+  const { orgRole, isSuperAdmin } = useOrgRole(orgId)
+
+  if (isSuperAdmin) return true
+
+  const permissions: Record<string, string[]> = {
+    'project:create': ['owner', 'admin'],
+    'project:delete': ['owner', 'admin'],
+    'member:invite': ['owner', 'admin'],
+    'org:delete':    ['owner'],
+    'settings:manage':['owner', 'admin'],
+  }
+
+  return permissions[action]?.includes(orgRole) ?? false
+}
+```
+
+```tsx
+// 条件渲染按钮
+import { useCan } from '@/lib/use-permission'
+
+function ProjectHeader({ orgId }: { orgId: string }) {
+  const canCreate = useCan(orgId, 'project:create')
+
+  return (
+    <div>
+      {canCreate && (
+        <Button onClick={openCreateDialog}>创建项目</Button>
+      )}
+    </div>
+  )
+}
+```
+
+#### 权限变更流程
+
+```
+┌─────────┐    ┌──────────┐    ┌──────────────┐
+│ 操作者   │    │  API      │    │  Casbin       │
+│ (owner)  │    │  Service  │    │  (MySQL)      │
+└────┬────┘    └────┬─────┘    └──────┬───────┘
+     │              │                 │
+     │ PUT /members/3/role          │
+     │ body: {"role": "admin"}      │
+     │─────────────>│                │
+     │              │                │
+     │              │ ① 校验操作者    │
+     │              │   是 org owner  │
+     │              │                │
+     │              │ ② 更新 members  │
+     │              │   表 role 字段  │
+     │              │                │
+     │              │ ③ 修改 Casbin   │
+     │              │   g 策略:       │
+     │              │   user:3 →      │
+     │              │   org_role:admin│
+     │              │───────────────>│
+     │              │                │
+     │              │ ④ LoadPolicy() │
+     │              │   即时生效      │
+     │<─────────────│                │
+     │  200 OK      │                │
+```
+
 ### 9.1 ER 关系图
 
 ```mermaid
@@ -2804,7 +3147,8 @@ CREATE TABLE users (
     password_hash VARCHAR(256),
     avatar_url VARCHAR(512),
     github_id VARCHAR(64),
-    role ENUM('super_admin','admin','member') DEFAULT 'member',
+    locale VARCHAR(10) DEFAULT 'zh-CN',
+    is_super_admin TINYINT(1) DEFAULT 0,        -- 平台超级管理员（替代原 role 字段）
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -2818,12 +3162,12 @@ CREATE TABLE organizations (
     FOREIGN KEY (owner_id) REFERENCES users(id)
 );
 
--- 成员
+-- 成员（组织级角色由此表 + Casbin 双重管理）
 CREATE TABLE members (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     org_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
-    role ENUM('owner','admin','member') DEFAULT 'member',
+    role ENUM('owner','admin','member') DEFAULT 'member',  -- 冗余字段，与 Casbin g 策略同步
     UNIQUE KEY (org_id, user_id),
     FOREIGN KEY (org_id) REFERENCES organizations(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -3256,6 +3600,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v2.3  
+> 📌 文档版本: v2.4  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
