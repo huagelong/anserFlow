@@ -1,0 +1,47 @@
+# Docker build context ignore
+# 排除所有不必要的文件以加速构建
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+go.work
+
+# Node.js
+node_modules/
+.next/
+dist/
+.npm/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+
+# Tauri artifacts
+src-tauri/target/

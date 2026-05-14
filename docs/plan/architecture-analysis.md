@@ -2221,7 +2221,22 @@ Asynq 核心特性：
 | 网络隔离 | 仅允许出站到 GitHub API + LLM API 白名单 |
 | 凭证注入 | GitHub Token 通过环境变量注入，不落盘 |
 | 自动清理 | `AutoRemove: true`，容器退出即销毁 |
-| 镜像预构建 | 包含 Node/Python/Go 运行时 + Git + opencode CLI |
+| 非 root 运行 | User `sandbox` (uid 1000)，无 sudo 权限 |
+| 镜像最小化 | Alpine 3.21 基础，预装 Node/Python/Git，不含 Go 运行时 |
+
+**Dockerfile** 位于 `docker/sandbox/Dockerfile`：
+
+```bash
+# 构建沙箱镜像
+docker build -t anserflow/sandbox:latest -f docker/sandbox/Dockerfile .
+
+# 预估镜像大小（不含 opencode）
+docker images anserflow/sandbox:latest
+# REPOSITORY            TAG       SIZE
+# anserflow/sandbox     latest    ~120MB
+```
+
+> `docker/sandbox/.dockerignore` 已排除 `node_modules/`、`.git/`、`dist/` 等，确保构建上下文最小。
 
 ### 7.3 Go Docker SDK
 
@@ -2952,6 +2967,6 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 
 ---
 
-> 📌 文档版本: v2.1  
+> 📌 文档版本: v2.2  
 > 📅 更新日期: 2026-05-13  
 > 📂 后续可拆分为 wiki 知识库，生成详细执行任务清单
