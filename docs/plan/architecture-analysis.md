@@ -2734,10 +2734,12 @@ func (s *IssueScheduler) Run(ctx context.Context) {
 ┌──────────────────────────────────────────┐
 │  anserflow/internal/agent/  (自研业务层)  │
 │  ├── orchestrator.go    讨论编排          │
+│  ├── command_handler.go /backlog 指令识别 │
 │  ├── executor.go        Docker沙箱调度    │
 │  ├── skill_loader.go    Skills 加载       │
 │  ├── group_discuss.go   群聊 Agent 调度   │
-│  └── backlog_parser.go   方案→Issue 拆解   │
+│  ├── backlog_parser.go   方案→Issue 拆解   │
+│  └── prompt_optimizer.go 人工提示词 Eino 优化│
 ├──────────────────────────────────────────┤
 │  Eino (底层 LLM 引擎)                    │
 │  ├── ChatModel         模型调用           │
@@ -2745,6 +2747,13 @@ func (s *IssueScheduler) Run(ctx context.Context) {
 │  ├── Graph             多Agent编排        │
 │  ├── Callbacks         回调/日志/监控     │
 │  └── Flow              流式处理           │
+├──────────────────────────────────────────┤
+│  ⚠️ Eino 职责边界                         │
+│  Eino 仅负责：Agent 调度 / 群聊讨论编排    │
+│             /backlog 方案拆解             │
+│             人工提示词优化                  │
+│  Eino 不负责：代码生成 / 编码执行          │
+│              └→ 由 opencode 在 Docker 沙箱中完成│
 └──────────────────────────────────────────┘
 ```
 
@@ -2888,6 +2897,71 @@ func (sl *SkillLoader) LoadAsTools(
 }
 ```
 
+### `/backlog` 指令识别
+
+Eino Agent 在群聊中监听 WebSocket 消息，检测到 `/backlog` 指令时触发方案拆解流程：
+
+```go
+// internal/agent/command_handler.go
+type CommandHandler struct {
+    orchestrator *GroupOrchestrator
+    parser       *BacklogParser
+}
+
+func (h *CommandHandler) OnMessage(msg *ws.Message) {
+    // Eino Agent 仅监听自己所在群组的消息
+    if !strings.HasPrefix(msg.Content.Text, "/backlog") {
+        return  // 非指令消息，由 group_discuss.go 处理普通讨论
+    }
+
+    // 收集群聊历史上下文（最近 50 条消息）
+    history := h.getRecentMessages(msg.GroupID, 50)
+
+    // 调用 Eino 编排：根据角色设定调度各 Agent 产出方案
+    plan := h.orchestrator.GeneratePlan(ctx, msg.GroupID, history)
+
+    // 拆解方案为 Issue（状态=backlog）
+    issues := h.parser.Parse(ctx, plan, msg.GroupID)
+
+    // 批量创建 Issue + 推送 backlog 消息到群聊
+    h.createIssues(ctx, issues)
+    h.ws.Broadcast(msg.GroupID, ws.Message{
+        Type: "backlog",
+        Content: map[string]interface{}{
+            "issues": issues,
+            "hint":   "请到项目看板确认 Issue 并拖动到 todo 列启动执行",
+        },
+    })
+}
+```
+
+### 人工提示词 Eino 优化
+
+Eino 在将人工提示词注入 opencode 之前，自动进行上下文增强与工程化改写：
+
+```go
+// internal/agent/prompt_optimizer.go
+func (o *PromptOptimizer) Enhance(ctx context.Context, rawPrompt string, issue *model.Issue) (string, error) {
+    // ① 收集上下文：Issue 描述 + 已有时间线 + 代码仓库信息
+    timeline := o.timelineRepo.FindByIssue(ctx, issue.ID)
+    context := buildContext(issue, timeline)
+
+    // ② Eino 调用 LLM 将自然语言提示词改写为 opencode 可精确执行的指令
+    messages := []*schema.Message{
+        schema.SystemMessage(`你是提示词优化器。将用户反馈改写为精确的编码指令。
+规则：保留用户原意；补充技术细节；如果用户提到具体文件/组件，添加文件路径。`),
+        schema.UserMessage(fmt.Sprintf(
+            "Issue 上下文：\n%s\n\n用户提示词：%s\n\n输出优化后的编码指令：",
+            context, rawPrompt,
+        )),
+    }
+    resp, _ := GetChatModel().Generate(ctx, messages)
+    return resp.Content, nil
+}
+```
+
+> **关键**：Eino 只做调度与提示词优化，不进入 Docker 沙箱。沙箱内的代码生成完全由 opencode 完成。
+
 ### Token 用量与成本追踪
 
 ```go
@@ -2960,10 +3034,18 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  └── 实时流式输出日志（Worker 监控） │  │
 │  │                                │  │
 │  │  Step 5: 收尾                  │  │
-│  │  ├── git add → commit → push   │  │
-│  │  ├── 创建 PR                   │  │
-│  │  ├── 更新 Issue 状态           │  │
-│  │  └── 销毁容器（AutoRemove）    │  │
+│  │  ├── opencode 检查通过:          │  │
+│  │  │   ├── git add → commit → push│  │
+│  │  │   ├── 创建 PR               │  │
+│  │  │   ├── 更新 Issue → in_review│  │
+│  │  │   └── 销毁容器（不再需要）   │  │
+│  │  ├── opencode 检查失败:          │  │
+│  │  │   ├── 写入失败原因到时间线    │  │
+│  │  │   ├── Issue → todo（保留沙箱）│  │
+│  │  │   └── 等待人工提示词 → 重试  │  │
+│  │  └── PR merge → done:            │  │
+│  │      └── 销毁容器（如果还存在）   │  │
+│  └────────────────────────────────┘  │
 │  └────────────────────────────────┘  │
 └──────────────────────────────────────┘
 ```
@@ -2976,7 +3058,7 @@ func (t *TokenTracker) GetDailyUsage(
 | 执行超时 | 单任务最长 30 分钟，超时强制 SIGKILL |
 | 网络隔离 | 仅允许出站到 GitHub API + LLM API 白名单 |
 | 凭证注入 | GitHub Token 通过环境变量注入，不落盘 |
-| 自动清理 | `AutoRemove: true`，容器退出即销毁 |
+| 自动清理 | 执行成功 → 立即销毁容器；执行失败 → 保留容器等待人工介入重试，Issue done 时最终销毁 |
 | 非 root 运行 | User `sandbox` (uid 1000)，无 sudo 权限 |
 | 镜像最小化 | Alpine 3.21 基础，预装 Node/Python/Git，不含 Go 运行时 |
 
