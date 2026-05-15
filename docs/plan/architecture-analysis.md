@@ -1658,9 +1658,18 @@ graph TD
 ### 完整配置文件 (config.yaml)
 
 > AnserFlow 运行时所有配置集中在 `config.yaml`，由 Viper 加载。生产环境敏感字段（数据库密码、API Key 等）可通过环境变量覆盖。
+> 
+> **配置分级原则**：
+> - 🔴 **config.yaml only** — 基础设施，改后需重启服务
+> - 🟡 **config.yaml + 后台覆盖** — 有默认值，后台可运行时修改（存 DB，重启后以 DB 为准）
+> - 🟢 **纯后台管理** — 不走 config.yaml，存储在 DB 中
 
 ```yaml
 # config.yaml — AnserFlow 完整配置
+
+# ═══════════════════════════════════════════════════════════════
+# 🔴 基础设施（config.yaml only，改后需重启）
+# ═══════════════════════════════════════════════════════════════
 server:
   port: 8080
   mode: release                  # debug | release | test
@@ -1673,12 +1682,12 @@ database:
   port: 3306
   database: anserflow
   username: root
-  password: ${DB_PASSWORD}       # 优先从环境变量读取
+  password: ${DB_PASSWORD}
   charset: utf8mb4
   max_open_conns: 100
   max_idle_conns: 10
   conn_max_lifetime: 3600s
-  log_level: warn               # silent | error | warn | info
+  log_level: warn
 
 redis:
   host: 127.0.0.1
@@ -1687,9 +1696,12 @@ redis:
   db: 0
   pool_size: 50
 
+# ═══════════════════════════════════════════════════════════════
+# 🟡 服务级（config.yaml 提供默认值，后台 /admin/settings 可覆盖）
+# ═══════════════════════════════════════════════════════════════
 jwt:
-  secret: ${JWT_SECRET}
-  expire_hours: 720              # 30 天
+  secret: ${JWT_SECRET}          # 密钥不入库，仅 config.yaml
+  expire_hours: 720              # 30 天，后台可覆盖
   issuer: anserflow
 
 oauth2:
@@ -1704,117 +1716,124 @@ cors:
     - http://localhost:3000
     - http://localhost:3001
     - tauri://localhost
-  allow_methods: ["GET","POST","PUT","DELETE","OPTIONS"]
-  allow_headers: ["Origin","Content-Type","Authorization"]
 
 log:
-  level: info                    # debug | info | warn | error
-  format: json                   # json | console
-  output: stdout                 # stdout | file
-  file_path: ./logs/anserflow.log
-  max_size: 100                  # MB, 单文件最大
-  max_backups: 10                # 保留旧文件数
-  max_age: 30                    # 天, 保留天数
-  compress: true
+  level: info
+  format: json
+  output: stdout
 
-asynq:
-  concurrency: 10                # Worker 并发数
+smtp:                            # 后台可覆盖
+  host: smtp.example.com
+  port: 587
+  username: noreply@anserflow.io
+  password: ${SMTP_PASSWORD}
+  from: "AnserFlow <noreply@anserflow.io>"
+  ssl: false
+
+invite:                          # 默认值，管理员可在组织设置中覆盖
+  link_base_url: http://localhost:8080
+  default_expire_hours: 168      # 7 天
+  max_uses_default: 0            # 0 = 不限
+
+upgrade:
+  channel: stable
+  endpoint: https://github.com/anserflow/anserflow/releases/latest/download
+  check_interval: 24h
+
+asynq:                           # Worker 默认值，后台可调整全局默认，组织可覆盖
+  concurrency: 10
   queues:
-    critical: 6                  # P0 优先级权重
-    default: 3                   # P1
-    low: 1                       # P2+
+    critical: 6
+    default: 3
+    low: 1
   retry:
     max_retry: 3
     min_backoff: 5s
     max_backoff: 5m
   timeout: 1800s                 # 单任务最长 30 分钟
 
-# ====== Eino 调度引擎配置（后台管理：系统设置 → Eino 配置） ======
-eino:
-  # LLM 连接（Eino 做 Agent 编排/讨论/拆解/优化时调用的模型）
-  provider: openai
-  api_key: ${EINO_LLM_API_KEY}
-  base_url: https://api.openai.com/v1
-  model: gpt-4o                 # 调度模型（可与 opencode 执行模型不同）
-  temperature: 0.7
-  max_tokens: 4096
-  timeout: 120s
-
-  # 群聊讨论控制
-  discuss:
-    max_turns: 5                # 单次讨论最大 Agent 发言轮数（防止无限讨论）
-    agent_timeout: 60s          # 单个 Agent 响应超时
-    auto_trigger: false         # 是否无需 /backlog 自动触发讨论（默认 false，需手动指令）
-
-  # /backlog 方案拆解
-  backlog:
-    context_window: 50          # 收集最近 N 条群聊消息作为上下文
-    require_project: true       # 群组必须关联项目才能 /backlog
-
-  # 提示词优化
-  optimizer:
-    model: gpt-4o-mini          # 优化模型（可用更便宜的模型）
-    temperature: 0.3            # 低温度保证输出稳定
-
-  # 令牌桶限流
-  rate_limit:
-    capacity: 100               # 每分钟最大请求数
-    refill_rate: 1.67
-
-# ====== opencode 执行配置（后台管理：Agent 编辑页 → 运行时配置） ======
-# 每个 Agent 独立配置，存储在 agents.runtime_config.opencode
-# 示例见 第六章 Agent 运行时配置
-
-sandbox:
+sandbox:                         # Docker 沙箱默认值
   image: ghcr.io/anserflow/sandbox:latest
   memory: 512                    # MB
   cpu: 2                         # cores
   disk: 1024                     # MB
-  timeout: 1800s                 # 30 分钟
-  network: restricted            # restricted (白名单) | none (无网络) | host
-  allowed_domains:               # 网络白名单（仅 restricted 模式生效）
+  timeout: 1800s
+  network: restricted
+  allowed_domains:
     - github.com
     - api.github.com
     - api.openai.com
 
-smtp:
-  host: smtp.example.com
-  port: 587
-  username: noreply@anserflow.io
-  password: ${SMTP_PASSWORD}
-  from: "AnserFlow <noreply@anserflow.io>"
-  ssl: false                     # false = STARTTLS
-
-invite:
-  link_base_url: http://localhost:8080
-  default_expire_hours: 168      # 7 天
-  max_uses_default: 0            # 0 = 不限
-
-upgrade:
-  channel: stable                # stable | beta
-  endpoint: https://github.com/anserflow/anserflow/releases/latest/download
-  check_interval: 24h
+# ═══════════════════════════════════════════════════════════════
+# 🟢 纯后台管理（config.yaml 仅存默认值，运行时从 DB 读取）
+# ═══════════════════════════════════════════════════════════════
+eino:                            # 后台 /admin/settings#eino 配置
+  provider: openai
+  api_key: ${EINO_LLM_API_KEY}
+  model: gpt-4o
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 120s
+  discuss:
+    max_turns: 5
+    agent_timeout: 60s
+  backlog:
+    context_window: 50
+    require_project: true
+  optimizer:
+    model: gpt-4o-mini
+    temperature: 0.3
+  rate_limit:
+    capacity: 100
+    refill_rate: 1.67
 ```
 
-> **环境变量覆盖规则**：Viper 以 `EINO_LLM_API_KEY` 覆盖 `eino.api_key`。生产环境所有 `${VAR}` 占位符必须通过环境变量注入。opencode 的 API Key 按 Agent 独立存储在 `agents.runtime_config.llm.api_key_encrypted` 中，不经过 config.yaml。
+> **环境变量覆盖规则**：Viper 以 `EINO_LLM_API_KEY` 覆盖 `eino.api_key`，`DB_PASSWORD` 覆盖 `database.password`。所有 `${VAR}` 占位符必须通过环境变量注入。
 
-### Eino vs opencode 配置职责划分
+### 全部配置归属总览
 
-| 配置项 | 归属 | 管理位置 | 作用范围 |
-|--------|------|---------|---------|
-| LLM 连接（调度用） | **Eino** | 后台管理 → 系统设置 → Eino 配置 | 全局，所有 Agent 编排/讨论/拆解/优化 |
-| 讨论轮数/超时 | **Eino** | 同上 | 群聊讨论控制 |
-| /backlog 上下文窗口 | **Eino** | 同上 | /backlog 指令 |
-| 提示词优化模型 | **Eino** | 同上 | 人工提示词优化 |
-| LLM 连接（执行用） | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent 在沙箱中编码时使用 |
-| 编码迭代次数 | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent |
-| thinking 开关 | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent |
+| 配置项 | 类型 | 管理位置 | 存 DB | 改后重启 |
+|--------|------|---------|-------|---------|
+| **server** (port/mode) | 🔴 基础设施 | `config.yaml` | ❌ | ✅ 需要 |
+| **database** (host/port/user) | 🔴 基础设施 | `config.yaml` | ❌ | ✅ 需要 |
+| **redis** (host/port) | 🔴 基础设施 | `config.yaml` | ❌ | ✅ 需要 |
+| **jwt** (secret/过期) | 🟡 服务级 | `/admin/settings` → 认证 | ❌ secret / ✅ 过期 | ❌ 即时 |
+| **oauth2** (GitHub) | 🟡 服务级 | `/admin/settings` → 认证 | ✅ | ❌ 即时 |
+| **cors** | 🟡 服务级 | `/admin/settings` → 安全 | ✅ | ❌ 即时 |
+| **smtp** | 🟡 服务级 | `/admin/settings` → 邮件 | ✅ | ❌ 即时 |
+| **invite** (默认值) | 🟡 服务级 | `/admin/settings` → 邀请 | ✅ | ❌ 即时 |
+| **upgrade** | 🟡 服务级 | `/admin/settings` → 更新 | ✅ | ❌ 即时 |
+| **asynq** (并发/重试) | 🟡 服务级 | `/admin/settings` → 任务队列 | ✅ | ❌ 即时 |
+| **sandbox** (资源限制) | 🟡 服务级 | `/admin/settings` → 沙箱 | ✅ | ❌ 即时 |
+| **eino** (LLM/讨论/backlog/优化) | 🟢 全局 | `/admin/settings` → Eino | ✅ | ❌ 即时 |
+| **opencode** (provider/model/APIKey) | 🟢 Agent 级 | `/admin/agents/{id}/edit` | ✅ | ❌ 即时 |
+| **沙箱并发上限** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
+| **invite 链接有效期** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
+| **通知偏好** | 🟢 用户级 | `/admin/user/settings` | ✅ | ❌ 即时 |
+| **主题/语言** | 🟢 用户级 | 客户端 localStorage + `users.locale` | ✅ | ❌ 即时 |
 
-**后台管理界面分布**：
+### 后台管理页面结构
 
 ```
-/admin/settings            → Eino 配置（provider / model / 讨论控制 / backlog 参数）
-/admin/agents/[id]/edit    → 该 Agent 的 opencode 配置（provider / model / API Key / 迭代次数）
+/admin/settings                         # 系统设置（super_admin only）
+├── #eino         Eino 调度引擎（LLM / 讨论控制 / backlog 参数 / 优化器 / 限流）
+├── #auth         认证（JWT 过期 / OAuth2 GitHub / CORS）
+├── #smtp         邮件（SMTP 服务器 / 发件人）
+├── #invite       邀请默认值（过期时间 / 使用次数）
+├── #sandbox      沙箱默认资源（CPU / 内存 / 磁盘 / 超时 / 网络白名单）
+├── #queue        任务队列（Asynq 并发 / 重试次数 / 超时）
+└── #upgrade      自动更新（通道 / 检查间隔）
+
+/admin/organizations/{id}/settings       # 组织设置（owner / admin）
+├── 沙箱并发上限（默认继承全局，可覆盖）
+├── 邀请链接有效期
+└── 其他组织级覆盖项
+
+/admin/agents/{id}/edit                  # Agent 运行时配置
+├── opencode Provider / Model / API Key
+├── 编码模式: build | plan
+├── 最大迭代次数 / thinking 开关
+└── Skills 绑定管理
 ```
 
 ---
@@ -4412,7 +4431,8 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   └── /settings                          GET/PUT → 个人偏好设置（user_settings 表）
 │
 ├── /admin                                 系统管理（🔒 🔐 super_admin only）
-│   └── /settings                          GET/PUT → 全局系统配置（LLM/邮件/存储等）
+│   ├── /settings                           GET/PUT → 全局系统配置（按 section 读写）
+│   └── /settings/{section}                 GET/PUT → section = eino/auth/smtp/sandbox/queue/upgrade
 │
 ├── /notifications                         通知模块（🔒）
 │   ├── /                                  GET  → 通知列表（分页）
@@ -4740,7 +4760,14 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
 │   └── /[id]/issues          Issue 状态Tab列表
 ├── /groups                   群组
 │   └── /[id]/chat            群聊界面
-└── /settings                 全局设置
+└── /settings                 全局系统设置
+    ├── #general               基本信息（JWT过期/邀请默认值）
+    ├── #eino                  Eino 调度引擎
+    ├── #auth                  OAuth / CORS
+    ├── #smtp                  邮件服务
+    ├── #sandbox               Docker 沙箱
+    ├── #queue                 Asynq 任务队列
+    └── #upgrade               自动更新
 ```
 
 公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接和桌面端 deep link 最终都落到该页面。
