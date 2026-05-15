@@ -1,5 +1,5 @@
 ---
-name: flowcode_todo
+name: flowcode-todo
 description: 从 wiki 索引生成 vibe coding 任务计划，并在需要时先调用 flowcode_wiki 生成或更新 wiki。如果涉及页面/UI 设计，在调用 flowcode_wiki 前先调用 flowcode_ui 定义页面设计规范。Use when Codex 需要根据现有 wiki 生成 todos，或用户给的是 Markdown 文档而目标是"先整理成 wiki 再生成任务计划"的综合流程；适用于要求任务由简单到复杂、每个任务链接到对应 wiki 小文档、且输入输出路径不能写死的场景。
 ---
 

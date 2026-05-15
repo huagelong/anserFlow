@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowCode Design"
+  short_description: "使用 Pencil MCP 在画布上进行 UI 设计、原型创建和设计系统管理。"
+  default_prompt: "Use $flowcode_design 根据 UI 设计师文档在 Pencil 画布上创建 UI 设计稿。"

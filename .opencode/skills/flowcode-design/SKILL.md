@@ -1,5 +1,5 @@
 ---
-name: flowcode_design
+name: flowcode-design
 description: 使用 Pencil MCP 在画布上进行 UI 设计、原型创建和设计系统管理。Use when the user asks to create UI designs, mockups, dashboards, landing pages, wireframes, design systems, or any visual design task using Pencil. Triggers on mentions of "设计"、"UI"、"原型"、"画布"、"dashboard"、"landing page"、"wireframe"、"设计系统"、"Pencil"。
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: flowcode_executor
+name: flowcode-executor
 description: 按照已有 vibe coding todo list 逐项执行开发任务。如果任务列表文档不存在，自动调用 flowcode_todo 根据需求生成任务列表后再执行。Use when Codex 需要从现有 todos.md、任务清单或 wiki 生成的 todo list 中选择未完成任务，读取关联 wiki/文档，明确验收标准，做最小代码修改，运行验证，并在通过后更新 todo 状态；适用于"按照 todo list 执行""继续下一个任务""完成 Txx""批量执行前 N 个 todo"等场景。
 ---
 

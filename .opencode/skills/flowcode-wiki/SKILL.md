@@ -1,5 +1,5 @@
 ---
-name: flowcode_wiki
+name: flowcode-wiki
 description: Build a wiki-style knowledge base from a project's existing Markdown documentation files. Use when Codex is asked to analyze documentation, split long docs into smaller Markdown pages, create a central wiki index, add retrieval paths, relationship graphs, and cross-links, while using source docs as the only content source and avoiding unrelated file changes. Source and output directories are configurable, not hardcoded.
 ---
 
