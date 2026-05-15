@@ -3146,20 +3146,40 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  ├── 写入 config.json 到容器    │  │
 │  │  └── 写入 Skills 定义文件       │  │
 │  │                                │  │
-│  │  Step 4: 执行（编码闭环）         │  │
-│  │  ├── git clone 关联仓库            │  │
-│  │  │                                   │  │
-│  │  │  ┌─ opencode run（非交互模式）──┐ │  │
-│  │  │  │ ① 构造 TASK_PROMPT           │  │  │
-│  │  │  │    (Issue 描述+Skills+约束)   │  │  │
-│  │  │  │ ② opencode run 读取 prompt   │  │  │
-│  │  │  │ ③ LLM 生成/修改代码文件       │  │  │
-│  │  │  │ ④ 运行 test/lint 验证        │  │  │
-│  │  │  │ ⑤ 失败 → LLM 自动修正        │  │  │
-│  │  │  │ ⑥ 成功 → 退出                │  │  │
-│  │  │  └──────────────────────────────┘ │  │
-│  │  │                                   │  │
-│  │  └── 实时流式输出日志（Worker 监控） │  │
+│  │  Step 4: 执行（编码闭环 + 消息互通）   │  │
+│  │  ├── git clone 关联仓库               │  │
+│  │  │                                      │  │
+│  │  │  ┌─ opencode run ←→ Worker 消息环 ─┐│  │
+│  │  │  │                                  ││  │
+│  │  │  │  沙箱内 (opencode)              ││  │
+│  │  │  │  ┌────────────────────┐         ││  │
+│  │  │  │  │ ① 读取 TASK_PROMPT │         ││  │
+│  │  │  │  │ ② LLM 生成代码     │ stdout  ││  │
+│  │  │  │  │ ③ write/login.tsx  │────────→││  │
+│  │  │  │  │ ④ run test/lint   │         ││  │
+│  │  │  │  │ ⑤ 失败→LLM修正    │         ││  │
+│  │  │  │  │ ⑥ 成功→exit 0    │         ││  │
+│  │  │  │  └────────────────────┘         ││  │
+│  │  │  │                                  ││  │
+│  │  │  │  Worker (宿主机)                 ││  │
+│  │  │  │  ┌────────────────────────────┐  ││  │
+│  │  │  │  │ Docker SDK 实时捕获 stdout  │  ││  │
+│  │  │  │  │ ↓                            │  ││  │
+│  │  │  │  │ 解析输出 → 写入 DB + 推送 WS │  ││  │
+│  │  │  │  │                              │  ││  │
+│  │  │  │  │ agent_logs:                  │  ││  │
+│  │  │  │  │  [12:02] agent 生成 login.tsx│  ││  │
+│  │  │  │  │  [12:05] agent 运行 test     │  ││  │
+│  │  │  │  │                              │  ││  │
+│  │  │  │  │ issue_timeline:              │  ││  │
+│  │  │  │  │  [12:02] event=agent_log     │  ││  │
+│  │  │  │  │    "正在生成 src/login.tsx"  │  ││  │
+│  │  │  │  │                              │  ││  │
+│  │  │  │  │ WebSocket → 前端实时更新     │  ││  │
+│  │  │  │  └────────────────────────────┘  ││  │
+│  │  │  └──────────────────────────────────┘│  │
+│  │  │                                      │  │
+│  │  └── 退出码 + 工作区检查 → 判定通过/失败 │  │
 │  │                                │  │
 │  │  Step 5: 收尾                  │  │
 │  │  ├── opencode 检查通过:          │  │
@@ -3177,6 +3197,93 @@ func (t *TokenTracker) GetDailyUsage(
 │  └────────────────────────────────┘  │
 └──────────────────────────────────────┘
 ```
+
+### 7.1.1 沙箱 ↔ 系统消息互通闭环
+
+opencode 在 Docker 沙箱内通过 **stdout 流 + 退出码** 与 Worker 通信，Worker 负责解析、存储、推送：
+
+```
+沙箱内 opencode                    宿主机 Worker                   前端 Issue 时间线
+═══════════════                    ════════════                   ════════════════
+                                    ┌─ 启动容器，attach stdout ─┐
+                                    │                           │
+"正在分析 Issue 描述..."  ──stdout──→ 解析 → agent_logs          │
+                                    │         issue_timeline     │
+                                    │         WS push ──────────→ "Agent 开始分析需求"
+                                    │                           │
+"生成文件: src/login.tsx" ──stdout──→ 解析 → agent_logs          │
+                                    │         WS push ──────────→ "正在生成 src/login.tsx"
+                                    │                           │
+"运行测试: 3/4 passed"    ──stdout──→ 解析 → agent_logs          │
+"FAIL: login.test.tsx"             │         WS push ──────────→ "测试 3/4 通过，1 个失败"
+                                    │                           │
+"正在修复 login.test.tsx" ─stdout──→ 解析 → agent_logs          │
+                                    │         WS push ──────────→ "正在修复测试"
+                                    │                           │
+"测试全部通过"            ──stdout──→ 解析 → agent_logs          │
+                                    │         WS push ──────────→ "测试全部通过"
+                                    │                           │
+exit 0                              │ 检查: 退出码=0             │
+                                    │       workspace 有变更     │
+                                    │                           │
+                                    │ git commit + push + PR    │
+                                    │ issue → in_review ────────→ "PR 已提交，等待审核"
+                                    └───────────────────────────┘
+```
+
+**Worker 侧 stdout 流式捕获**：
+
+```go
+// internal/sandbox/stream.go
+func (w *Worker) streamLogs(ctx context.Context, containerID string, issueID uint) {
+    reader, _ := w.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+        ShowStdout: true,
+        ShowStderr: true,
+        Follow:     true,   // 持续跟踪
+    })
+    defer reader.Close()
+
+    scanner := bufio.NewScanner(reader)
+    for scanner.Scan() {
+        line := scanner.Text()
+
+        // ① 写 agent_logs（结构化存储）
+        w.logRepo.Create(ctx, &model.AgentLog{
+            IssueID: issueID,
+            Action:  classifyAction(line),    // 根据关键词分类: generate / test / fix / error
+            Status:  "running",
+            Output:  json.RawMessage(`{"raw":"` + line + `"}`),
+        })
+
+        // ② 写 issue_timeline（供前端展示）
+        w.timelineRepo.Append(ctx, issueID, "agent", "agent_log", "", "", line)
+
+        // ③ 实时推送到 WebSocket → 前端 Issue 时间线组件实时更新
+        w.ws.SendToIssue(issueID, map[string]interface{}{
+            "type": "agent_log",
+            "text": line,
+            "ts":   time.Now().Unix(),
+        })
+    }
+
+    // opencode 退出后检查退出码
+    inspect, _ := w.cli.ContainerInspect(ctx, containerID)
+    exitCode := inspect.State.ExitCode
+    w.handleCompletion(ctx, issueID, containerID, exitCode)
+}
+```
+
+**前端实时展现**：
+
+Issue 详情页的时间线面板通过 WebSocket 订阅该 Issue 的 `agent_log` 事件，消息到达后即时追加到时间线末尾，无需轮询或刷新页面。
+
+| 通信方向 | 通道 | 内容 | 频率 |
+|---------|------|------|------|
+| opencode → Worker | Docker stdout | 实时日志行（生成/测试/修复） | 每秒数次 |
+| Worker → MySQL | GORM Insert | `agent_logs`（结构存储）+ `issue_timeline`（展示存储） | 每条 stdout |
+| Worker → Redis | ZADD | 最近 N 条日志缓存（可选，加速前端加载历史） | 每条 |
+| Worker → 前端 | WebSocket | JSON 事件 `{type:"agent_log", text, ts}` | 每条 stdout |
+| opencode → Worker | Exit Code | 0=成功, 非0=失败 | 结束时 1 次 |
 
 ### 7.2 安全策略
 
