@@ -5438,17 +5438,19 @@ CREATE TABLE issue_timeline (
     FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
--- 群组（一个群绑定一个项目，一个项目可以有多个群：project 1:N groups）
+-- 会话组（group=群聊，绑定项目；direct=双人聊，不绑定项目）
 CREATE TABLE groups (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     org_id BIGINT NOT NULL,
-    project_id BIGINT NOT NULL,         -- 必须绑定项目（一个群只属于一个项目）
-    name VARCHAR(128) NOT NULL,
+    type ENUM('group','direct') NOT NULL DEFAULT 'group',
+    project_id BIGINT NULL,               -- group 类型必填（应用层校验）；direct 类型为 NULL
+    name VARCHAR(128) NOT NULL,           -- group: 用户自定义；direct: 对方昵称/Agent名称（自动填充）
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id),
     FOREIGN KEY (project_id) REFERENCES projects(id),
-    INDEX idx_project (project_id)      -- 按项目查群组
+    INDEX idx_project (project_id),
+    INDEX idx_type_org (type, org_id)      -- 按类型+组织查会话
 );
 
 -- 群成员
