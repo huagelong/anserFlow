@@ -1,7 +1,5 @@
 ﻿# AnserFlow - Client / Frontend
 
-> Split from architecture-analysis.md
-
 ---
 
 ### 前端框架补充说明
@@ -223,7 +221,7 @@ src/
 │   ├── issues/
 │   ├── projects/
 │   ├── organizations/         # 组织管理 + 成员邀请
-│   ├── groups/                # 群组 & 群聊 WebSocket 通信
+│   ├── groups/                # 群组 & 群聊 WebSocket 通信（群管理 + 聊天复用 conversations）
 │   ├── skills/                # Skills 管理
 │   ├── notifications/         # 通知中心
 │   ├── dashboard/             # 仪表盘图表
@@ -1376,7 +1374,7 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
     │
   右侧：聊天窗口
     /chat/:group_id            ← 选中会话后展示聊天内容
-      - 顶部：会话标题（direct: 对方昵称/Agent名称；group: 群名）
+      - 顶部：会话标题（direct: 对方昵称/Agent名称，从成员信息派生；group: 群名）
       - 中部：消息列表（复用现有 MessageList 组件）
       - 底部：输入框（条件渲染，见下方）
 ```

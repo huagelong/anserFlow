@@ -1,7 +1,5 @@
 ﻿# AnserFlow - Overview and Infra
 
-> Split from architecture-analysis.md
-
 ---
 
 # AnserFlow — 多智能体协作项目管理系统 架构分析文档

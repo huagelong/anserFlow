@@ -1,7 +1,5 @@
 ﻿# AnserFlow - Sandbox / Agent
 
-> Split from architecture-analysis.md
-
 ---
 
 ## 六、AI Agent 框架：Eino + 自研封装

@@ -1,7 +1,5 @@
 ﻿# AnserFlow - Admin Backend
 
-> Split from architecture-analysis.md
-
 ---
 
 ### 完整配置文件 (config.yaml)
@@ -461,8 +459,7 @@ function apiFetch(path: string, init?: RequestInit) {
 │   └── /[id]/issues          Issue 状态Tab列表
 ├── /conversations            会话（统一入口，混合群聊+双人聊）
 │   └── /[id]/chat            聊天界面（兼容 group 和 direct 类型）
-├── /groups                   群组管理（仅 group 类型 CRUD）
-│   └── /[id]/chat            群聊界面
+├── /groups                   群组管理（仅 group 类型 CRUD，不含聊天）
 └── /settings                 全局系统设置
     ├── #general               基本信息（JWT过期/邀请默认值）
     ├── #eino                  Eino 调度引擎

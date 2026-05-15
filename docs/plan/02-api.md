@@ -1,7 +1,5 @@
 ﻿# AnserFlow - API / Backend
 
-> Split from architecture-analysis.md
-
 ---
 
 ### 框架补充说明
@@ -363,7 +361,7 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 
 **Hub 消息路由 — Agent 编排判断**：
 
-Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，群聊和双人聊共享同一套判断逻辑：
+Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，`commandHandler` 独立调用以确保 `/new` 全模式可用：
 
 ```go
 func (h *Hub) OnMessage(msg *Message) {
@@ -372,10 +370,12 @@ func (h *Hub) OnMessage(msg *Message) {
     // 持久化 + 广播（所有类型都需要）
     h.persistAndBroadcast(msg)
 
+    // /new 和 /backlog 指令处理（/new 全模式可用，/backlog 仅含 Agent 时可用）
+    h.commandHandler.OnMessage(msg, group)
+
     if group.HasAgentMember() {
-        // 有 Agent 成员：触发 Eino 编排 + 指令处理
+        // 有 Agent 成员：触发 Eino 编排
         // 适用：群聊含 Agent、双人聊（人+Agent）
-        h.commandHandler.OnMessage(msg)    // /backlog /new 等指令
         h.orchestrator.OnMessage(msg)      // Agent 编排
     } else {
         // 无 Agent 成员：纯自然人聊天，不触发 Eino
@@ -386,7 +386,25 @@ func (h *Hub) OnMessage(msg *Message) {
 }
 ```
 
-> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。
+> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。`commandHandler` 内部根据 `HasAgentMember()` 决定 `/backlog` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
+
+```go
+// CommandHandler 内部分发逻辑
+func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
+    if strings.HasPrefix(msg.Content.Text, "/new") {
+        h.HandleNewSession(msg)            // 全模式可用
+        return
+    }
+    if strings.HasPrefix(msg.Content.Text, "/backlog") {
+        if !group.HasAgentMember() {
+            h.ws.Reply(msg, "需要 Agent 参与才能使用 /backlog 功能")
+            return
+        }
+        h.HandleBacklog(msg)               // 仅含 Agent 时可用
+        return
+    }
+}
+```
 
 **Agent 编排判断规则**：
 
@@ -394,11 +412,10 @@ func (h *Hub) OnMessage(msg *Message) {
 
 | 约束 | 说明 |
 |------|------|
-| `HasAgentMember()` 为唯一判断依据 | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
+| `HasAgentMember()` 决定 Eino 编排和 /backlog | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
+| `/new` 全模式可用 | CommandHandler 独立于 HasAgentMember()，在 Hub 层直接调用 |
+| `/backlog` 仅含 Agent 时可用 | CommandHandler 内部检查 HasAgentMember()，无 Agent 返回提示 |
 | 无 Agent 时不触发 `MentionResolver` | 群聊无 Agent 时同样跳过，双人聊天然无 @场景 |
-| 无 Agent 时不支持 `/backlog` | CommandHandler 检测到无 Agent 成员时返回提示"需要 Agent 参与才能使用此功能"，群聊和双人聊一致 |
-| 有 Agent 时 `/backlog` 可用 | 与原有群聊行为一致，CommandHandler 正常处理 |
-| `/new` 在所有模式下均可用 | 会话上下文隔离对所有场景都有意义 |
 | direct 成员不可变更 | Handler 层对 direct 类型返回 400（group 类型不受此限制） |
 
 **Redis 消息缓存**（断线重连恢复）：
@@ -1341,13 +1358,13 @@ CREATE TABLE issue_timeline (
     FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
--- 会话组（group=群聊，绑定项目；direct=双人聊，不绑定项目）
+-- 会话组（group=群聊，绑定项目；direct=双人聊，不绑定项目，不需要群名）
 CREATE TABLE groups (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     org_id BIGINT NOT NULL,
     type ENUM('group','direct') NOT NULL DEFAULT 'group',
     project_id BIGINT NULL,               -- group 类型必填（应用层校验）；direct 类型为 NULL
-    name VARCHAR(128) NOT NULL,           -- group: 用户自定义；direct: 对方昵称/Agent名称（自动填充）
+    name VARCHAR(128) NULL,               -- group: 用户自定义群名（必填）；direct: NULL（显示名从对方成员信息派生，无需群名）
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id),
@@ -1813,7 +1830,7 @@ func (s *Sender) SendAgentNotification(
   "id": 99,
   "type": "direct",
   "org_id": 1,
-  "name": "李四",
+  "name": null,
   "created_by": 7,
   "created_at": "2026-05-15T10:00:00Z",
   "members": [
@@ -1822,6 +1839,8 @@ func (s *Sender) SendAgentNotification(
   ]
 }
 ```
+
+> **设计说明**：direct 类型 `name` 为 `null`（双人聊不需要群名）。前端显示名由 API 自动计算后通过 `display_name` 字段返回，或者由前端从 `members` 中取对方成员信息派生。
 
 校验规则：`target_user_id` 不能是自己；目标必须属于同一组织；调用 `GetOrCreateDirect` / `GetOrCreateDirectWithAgent` 幂等返回。
 
@@ -1860,7 +1879,22 @@ WHERE g.type = 'direct' AND g.org_id = :orgID LIMIT 1;
 ]
 ```
 
-direct 类型的 `name` 取对方昵称（人+人）或 Agent 名称（人+Agent），`avatar_url` 同理。`unread_count` 通过 `group_read_state.last_read_message_id` 与 `messages` 表计算。
+direct 类型的 `name` 为 `null`（双人聊不需要群名）。显示名通过 `display_name` 字段返回，值为对方昵称（人+人）或 Agent 名称（人+Agent）。`unread_count` 通过 `group_read_state.last_read_message_id` 与 `messages` 表计算。
+
+```json
+[
+  {
+    "id": 99, "type": "direct", "name": null, "display_name": "李四", "avatar_url": "...",
+    "last_message": { "content": "好的", "sender_name": "李四", "created_at": "..." },
+    "unread_count": 2
+  },
+  {
+    "id": 5, "type": "group", "name": "登录功能讨论组", "display_name": "登录功能讨论组", "project_id": 3,
+    "last_message": { "content": "前端预计 4h", "sender_name": "前端Agent", "created_at": "..." },
+    "unread_count": 0
+  }
+]
+```
 
 **PUT /api/groups/:group_id/read-state** — 标记已读
 
