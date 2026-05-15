@@ -1753,6 +1753,8 @@ graph TD
     D --> D2["拉入 Agent + 自然人"]
     D --> D3["需求讨论(Agent自动参与)"]
     D --> D4["方案产出 → 自动建 Issue"]
+    D --> D5["@Agent 任务布置(Agent间协作)"]
+    D --> D6["/new 会话上下文切换"]
 
     E --> E1["创建项目"]
     E --> E2["关联 GitHub 仓库(HTTP/SSH)"]
@@ -2930,7 +2932,13 @@ var adminFiles embed.FS
 | `pong` | 心跳响应 | 无 |
 | `typing` | 正在输入状态 | `is_typing: bool` |
 | `backlog_ack` | 方案确认/拒绝 | `backlog_id: string`, `accepted: bool` |
+| `agent_assign` | Agent @其他 Agent 布置任务 | `target_agent_id: int`, `task: string`, `context: string` |
+| `new_session` | 自然人 `/new` 开启新会话 | `session_id: string` |
 | `error` | 错误响应 | `error.code: string`, `error.message: string` |
+
+**@Agent 任务布置**：群内 Agent 在讨论或执行过程中，可根据其他 Agent 的角色定义（`agents.system_prompt` + 绑定的 Skills），通过 `@AgentName` 语法向指定 Agent 布置子任务。被 @ 的 Agent 接收消息后，由 Eino Orchestrator 根据其角色人设和 Skill 自动生成响应或执行操作。典型场景：CTO Agent 在讨论中说 `@前端Agent 你负责登录页 UI 实现`，系统解析 `@前端Agent` 匹配群内 Agent 成员，将任务描述注入该 Agent 的上下文。
+
+**`/new` 新会话指令**：群内自然人发送 `/new` 后，系统在当前群组内创建一个新的会话上下文（`session_id`）。新会话之前的消息不再作为 Agent 讨论的上下文窗口内容，Agent 仅感知 `/new` 之后的消息历史。这使自然人可以在同一群组内切换讨论主题，避免上下文混淆和 Token 浪费。`/new` 不清除历史消息（历史仍可滚动查看），仅重置 Agent 上下文窗口的起点。
 
 **心跳与重连**：
 
@@ -3581,7 +3589,108 @@ func (h *CommandHandler) OnMessage(msg *ws.Message) {
 }
 ```
 
-### 人工提示词 Eino 优化
+### `/new` 指令 — 会话上下文隔离
+
+自然人可在群聊中发送 `/new` 开启新会话。系统生成新的 `session_id`，后续 Agent 讨论仅感知该会话之后的消息历史：
+
+```go
+// internal/agent/command_handler.go — /new 指令处理
+func (h *CommandHandler) HandleNewSession(msg *ws.Message) {
+    if !strings.HasPrefix(msg.Content.Text, "/new") {
+        return
+    }
+
+    // ① 生成新 session_id
+    newSessionID := uuid.New().String()
+
+    // ② 写入一条 new_session 系统消息，标记会话边界
+    h.ws.Broadcast(msg.GroupID, ws.Message{
+        Type: "new_session",
+        Content: map[string]interface{}{
+            "session_id": newSessionID,
+            "by_user":    msg.Sender.Name,
+        },
+    })
+
+    // ③ 后续该群组的消息自动携带 newSessionID
+    h.sessionManager.SetCurrent(msg.GroupID, newSessionID)
+}
+```
+
+**上下文窗口规则**：
+
+- `GroupOrchestrator.InvokeAgent` 收集群聊历史时，以当前 `session_id` 为过滤条件，仅加载该会话内的消息
+- 历史会话消息仍在客户端可见（滚动加载），但不进入 Agent 的 LLM 上下文窗口
+- `/new` 不携带额外参数时，仅重置上下文；后跟文本时（如 `/new 下一阶段：部署上线`），该文本作为新会话的首条消息
+
+```go
+// internal/agent/group_discuss.go — 上下文加载适配 session 隔离
+func (o *GroupOrchestrator) getRecentMessages(groupID uint, limit int) []*schema.Message {
+    sessionID := o.sessionManager.GetCurrent(groupID)
+    // 按 session_id 过滤，只取当前会话的消息
+    return o.msgRepo.FindByGroupAndSession(groupID, sessionID, limit)
+}
+```
+
+### @Agent 任务布置
+
+群内 Agent 在讨论过程中，可通过 `@AgentName` 语法向群内其他 Agent 布置任务。Eino Orchestrator 在调度时解析消息中的 `@AgentName`，匹配群内成员 Agent，将任务注入被 @ Agent 的上下文：
+
+```go
+// internal/agent/mention_resolver.go — @Agent 解析
+func (r *MentionResolver) Resolve(ctx context.Context, groupID uint, text string) ([]*AgentMention, error) {
+    // ① 正则匹配 @AgentName（支持中文/英文 Agent 名）
+    re := regexp.MustCompile(`@(\S+)`)
+    matches := re.FindAllStringSubmatch(text, -1)
+
+    // ② 查询群内 Agent 成员，匹配名称
+    members := r.groupRepo.FindAgentMembers(groupID)
+    var mentions []*AgentMention
+    for _, m := range matches {
+        for _, agent := range members {
+            if agent.Name == m[1] {
+                mentions = append(mentions, &AgentMention{
+                    AgentID: agent.ID,
+                    Name:    agent.Name,
+                    Role:    agent.SystemPrompt,   // 角色定义
+                })
+            }
+        }
+    }
+    return mentions, nil
+}
+```
+
+**调度流程**：
+
+1. Agent A 发言含 `@前端Agent 请实现登录表单组件`
+2. `MentionResolver` 解析出 `@前端Agent`，匹配群内 Agent 成员
+3. Eino Orchestrator 将任务描述 + Agent A 的上下文 + 被提及 Agent 的角色定义（`system_prompt` + 绑定 Skills）注入被提及 Agent 的调用链
+4. 被提及 Agent 根据自身角色和 Skill 决定响应方式：直接回复方案、创建 Issue、或执行操作
+
+```go
+// internal/agent/group_discuss.go — @Agent 调度增强
+func (o *GroupOrchestrator) InvokeWithMentions(
+    ctx context.Context,
+    agent *model.Agent,
+    messages []*schema.Message,
+    mentions []*AgentMention,
+) {
+    for _, mention := range mentions {
+        targetAgent := o.agentRepo.FindByID(ctx, mention.AgentID)
+        // 构建被 @ Agent 的上下文：角色定义 + 任务描述 + 当前讨论
+        agentCtx := append([]*schema.Message{
+            schema.SystemMessage(fmt.Sprintf(
+                "你是 %s。%s 正在群聊中向你布置任务。",
+                targetAgent.SystemPrompt, agent.Name,
+            )),
+        }, messages...)
+
+        // 异步调度被 @ Agent 回复
+        go o.InvokeAgent(ctx, targetAgent, agentCtx)
+    }
+}
+```
 
 Eino 在将人工提示词注入 opencode 之前，自动进行上下文增强与工程化改写：
 
@@ -5329,16 +5438,17 @@ CREATE TABLE issue_timeline (
     FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
--- 群组
+-- 群组（一个群绑定一个项目，一个项目可以有多个群：project 1:N groups）
 CREATE TABLE groups (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     org_id BIGINT NOT NULL,
-    project_id BIGINT,                  -- 关联项目
+    project_id BIGINT NOT NULL,         -- 必须绑定项目（一个群只属于一个项目）
     name VARCHAR(128) NOT NULL,
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id)
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    INDEX idx_project (project_id)      -- 按项目查群组
 );
 
 -- 群成员
@@ -5358,14 +5468,18 @@ CREATE TABLE group_members (
 CREATE TABLE messages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     group_id BIGINT NOT NULL,
+    session_id VARCHAR(36) NOT NULL DEFAULT 'default',  -- 会话 ID，/new 时生成新值，用于上下文隔离
     sender_type ENUM('user','agent') NOT NULL,
     sender_user_id BIGINT,
     sender_agent_id BIGINT,
     content TEXT NOT NULL,
+    mention_agent_id BIGINT,                -- @Agent 时记录被提及的 Agent ID（用于触发任务）
+    message_type VARCHAR(32) DEFAULT 'message', -- message/annotation/system/agent_assign/new_session
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES groups(id),
     FOREIGN KEY (sender_user_id) REFERENCES users(id),
-    FOREIGN KEY (sender_agent_id) REFERENCES agents(id)
+    FOREIGN KEY (sender_agent_id) REFERENCES agents(id),
+    INDEX idx_group_session (group_id, session_id, created_at)  -- 按会话查消息
 );
 
 -- 邀请表
@@ -6123,6 +6237,71 @@ sequenceDiagram
 | 删除 Issue | 仅 backlog 状态可删除 |
 | 批量转 todo | Shift/Ctrl 多选 backlog Issue（来自多次 /backlog 调用）→ 一键全部转为 todo 列入执行队列 |
 | @关联 Issue | 描述中通过 `@Issue #N` 引用其他 Issue，Eino Agent 自动读取被引用 Issue 的内容注入到 opencode 执行提示词 |
+
+### 10.1.1 @Agent 任务布置（Agent 间协作）
+
+群内 Agent 可根据其他 Agent 的角色定义（`system_prompt` + 绑定 Skills），通过 `@AgentName` 语法向指定 Agent 布置任务。这是 Agent 间自主协作的核心机制：
+
+```mermaid
+sequenceDiagram
+    participant ORC as 群聊Orchestrator(Eino)
+    participant CTO as CTO Agent
+    participant FE as 前端 Agent
+    participant BE as 后端 Agent
+    participant SYS as Issue 服务
+
+    Note over ORC: 自然人 /new 开启新会话后
+    ORC->>CTO: 调度 CTO 讨论技术方案
+    CTO->>ORC: "方案确认：前端负责UI，后端负责API"
+    CTO->>ORC: "@前端Agent 请实现登录页表单组件，使用React Hook Form"
+    ORC->>ORC: 解析 @前端Agent → 匹配群成员
+    ORC->>FE: 注入任务上下文 + 角色定义 + Skills
+    FE->>ORC: "收到，我会使用 React Hook Form + Zod 实现表单"
+    CTO->>ORC: "@后端Agent 请实现 /api/auth/login 接口，JWT 签发"
+    ORC->>BE: 注入任务上下文 + 角色定义 + Skills
+    BE->>ORC: "收到，JWT + bcrypt 方案，预计需要实现 3 个接口"
+```
+
+**调度规则**：
+
+| 规则 | 说明 |
+|------|------|
+| 角色感知 | `MentionResolver` 查询被 @ Agent 的角色定义，注入 System Prompt |
+| Skill 继承 | 被 @ Agent 自动加载其绑定的 Skills（含 Runtime 默认 + Agent 独立绑定） |
+| 上下文隔离 | 仅注入当前 `session_id` 内的消息历史，避免跨会话干扰 |
+| 权限校验 | Casbin 校验发起 Agent 是否有权 @ 目标 Agent（同群成员即可） |
+| 防循环 | 同一轮讨论中同一 Agent 最多被 @ 3 次，防止无限调度 |
+
+### 10.1.2 `/new` 会话上下文切换
+
+自然人发送 `/new` 开启新会话上下文。群聊消息历史仍在，但 Agent 的上下文窗口重置：
+
+```mermaid
+sequenceDiagram
+    participant H as 自然人
+    participant G as 群聊
+    participant ORC as Orchestrator
+    participant AG as Agent们
+
+    H->>G: 讨论需求A："做登录页"
+    ORC->>AG: 调度讨论（上下文窗口: session-1）
+    AG->>G: 各 Agent 回复
+    H->>G: /new 下一阶段：部署上线
+    G->>G: 生成新 session_id，广播 new_session
+    Note over ORC: 上下文窗口切换到 session-2
+    H->>G: "准备部署流程"
+    ORC->>AG: 调度讨论（上下文窗口: session-2，不含 session-1 消息）
+```
+
+**设计要点**：
+
+| 要点 | 说明 |
+|------|------|
+| 历史可见 | `/new` 不删除历史消息，客户端仍可向上滚动查看 |
+| 上下文隔离 | Agent 的 LLM 调用仅注入当前 session 的消息，避免 Token 浪费和主题混淆 |
+| 会话标题 | `/new` 后跟的文本（如 `/new 部署上线`）作为新会话标题，显示在消息列表的分割线处 |
+| Agent 感知 | Agent 收到新会话的首条消息时，其 System Prompt 追加 "这是一个新讨论主题的开端" |
+| `/backlog` 作用域 | `/backlog` 指令仅收集当前 session 内的讨论上下文 |
 
 ### 10.2 Agent 自动执行（backlog→todo→in_progress→in_review→done）
 
