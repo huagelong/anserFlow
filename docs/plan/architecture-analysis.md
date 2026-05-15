@@ -316,11 +316,11 @@ import { z } from 'zod'
 
 const agentSchema = z.object({
   name: z.string().min(1, '名称不能为空').max(64),
-  role_label: z.string().max(64),               // 自定义角色标签
-  system_prompt: z.string().min(10, '人设描述至少 10 个字符'),
+  role_label: z.string().max(64),               // 自定义角色标签（如 PM / 前端 / 后端）
+  system_prompt: z.string().max(200, '人设 1-2 句话即可，行为由 Skill 定义'),
   runtime_id: z.number().min(1, '请选择运行时'),
+  skill_ids: z.array(z.number()),               // 绑定的角色 Skill（多选，含内置+自定义）
   // runtime_config 由前端根据 runtimes.config_schema 动态生成表单字段
-  // 不同运行时 config_schema 不同（opencode 需 provider/model/api_key，其他运行时不同）
 })
 
 type AgentFormData = z.infer<typeof agentSchema>
@@ -1617,9 +1617,9 @@ graph TD
     B --> B4["邀请机制"]
 
     C --> C1["Agent 角色定义(自定义提示词)"]
-    C --> C2["Agent System Prompt / 人设"]
-    C --> C3["绑定运行时（opencode 默认，可扩展）"]
-    C --> C4["Agent 绑定 Skills"]
+    C --> C2["Agent System Prompt / 人设（1-2句话，行为由Skill定义）"]
+    C --> C3["绑定运行时（opencode 默认）"]
+    C --> C4["绑定角色 Skill（定制行为）"]
     C --> C5["全局开关 / 单独启停"]
 
     D --> D1["创建群组"]
@@ -2828,12 +2828,15 @@ func (s *IssueScheduler) runningCount(orgID uint) int {
 │  ├── Callbacks         回调/日志/监控     │
 │  └── Flow              流式处理           │
 ├──────────────────────────────────────────┤
-│  ⚠️ Eino 职责边界                         │
+│  ⚠️ Eino 职责边界 + Agent Skill 驱动设计     │
 │  Eino 仅负责：Agent 调度 / 群聊讨论编排    │
 │             /backlog 方案拆解             │
 │             人工提示词优化                  │
 │  Eino 不负责：代码生成 / 编码执行          │
-│              └→ 由 opencode 在 Docker 沙箱中完成│
+│              └→ 由 opencode 在 Docker 沙箱完成│
+│                                           │
+│  Agent 行为由 Skill 定义，System Prompt   │
+│  仅需 1-2 句人设，调度时注入 Skill 上下文 │
 └──────────────────────────────────────────┘
 ```
 
@@ -2921,8 +2924,10 @@ func (o *GroupOrchestrator) InvokeAgent(
     agent *model.Agent,
     messages []*schema.Message,  // 群聊历史上下文
 ) (*schema.Message, error) {
-    // 1. 构建 System Prompt（Agent 人设 + 绑定的 Skills）
-    systemPrompt := o.buildSystemPrompt(agent)
+    // 1. 构建上下文：System Prompt（1-2句话人设） + 绑定的 Skills 定义
+    systemPrompt := agent.SystemPrompt   // 如 "你是前端开发工程师"
+    skills := o.skillLoader.LoadForSandbox(ctx, agent)
+    skillContext := buildSkillContext(skills)  // 拼接所有 Skill 定义正文
 
     // 2. 追加当前讨论上下文
     chatInput := append([]*schema.Message{
