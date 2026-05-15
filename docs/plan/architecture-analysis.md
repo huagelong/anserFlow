@@ -318,6 +318,12 @@ const agentSchema = z.object({
   name: z.string().min(1, '名称不能为空').max(64),
   role_label: z.enum(['CEO', 'CTO', 'Frontend', 'Backend', 'DevOps']),
   system_prompt: z.string().min(10, '人设描述至少 10 个字符'),
+  opencode_provider: z.enum(['openai', 'anthropic', 'google', 'deepseek']),
+  opencode_model: z.string().min(1, '请选择模型'),
+  opencode_agent: z.enum(['build', 'plan']),
+  opencode_api_key: z.string().min(1, 'API Key 不能为空'),
+  opencode_max_iterations: z.number().min(5).max(100).default(20),
+  opencode_thinking: z.boolean().default(true),
 })
 
 type AgentFormData = z.infer<typeof agentSchema>
@@ -2740,7 +2746,7 @@ func GetChatModel() model.ChatModel { return chatModel }
 
 ### Agent 运行时配置
 
-`agents.runtime_config` JSON 字段存储每个 Agent 的个性化 LLM 配置，创建 Agent 时从 `config.yaml` 继承默认值、支持覆盖：
+`agents.runtime_config` JSON 字段存储每个 Agent 的个性化配置，在后台管理界面（Agent 创建/编辑页）设置。沙箱执行时 Worker 读取此配置并注入容器（每次覆盖）：
 
 ```json
 {
@@ -2748,16 +2754,31 @@ func GetChatModel() model.ChatModel { return chatModel }
     "model": "gpt-4o",
     "max_tokens": 4096,
     "temperature": 0.8,
-    "api_key_ref": "${LLM_API_KEY}"    // 引用 config.yaml 统一密钥（可与全局共用或 agent 独立覆盖）
+    "api_key_encrypted": "aes256:xxx"  // API Key 加密存储，Worker 解密后注入环境变量
   },
   "opencode": {
-    "provider": "openai",          // opencode 使用的 LLM 提供商（对应 opencode auth login 中的 provider）
-    "model": "gpt-4o",            // --model 参数值
-    "agent": "build",             // opencode 内置 agent: build（读写）| plan（只读）
-    "max_iterations": 20,         // 最大 round-trip 次数
-    "thinking": true              // 启用 thinking 模式（需要模型支持）
+    "provider": "openai",          // 后台下拉选择: openai / anthropic / google / deepseek
+    "model": "gpt-4o",            // 后台下拉选择（根据 provider 动态加载模型列表）
+    "agent": "build",             // 后台下拉选择: build（读写）| plan（只读分析）
+    "max_iterations": 20,         // 后台数字输入
+    "thinking": true              // 后台开关
   }
 }
+```
+
+**配置流转**：
+
+```
+Admin UI (Agent 编辑页)
+│  opencode provider 下拉 / model 下拉 / agent 下拉 / max_iter 输入
+│  保存 → agents.runtime_config.opencode JSON
+│
+▼
+Worker (沙箱启动时)
+│  ① 读取 agents.runtime_config.opencode
+│  ② 解密 api_key_encrypted → Provider 对应环境变量
+│  ③ 生成 ~/.config/opencode/config.json 写入容器
+│  ④ 执行 opencode run --model provider/model --agent build
 ```
 
 ### ChatModel 调用示例
@@ -2856,7 +2877,7 @@ func (t *TokenTracker) GetDailyUsage(
 }
 ```
 
-> **LLM API Key 安全模型**：`api_key_ref` 字段通过 `${VAR}` 引用环境变量而非直接存明文；Agent 执行时 Worker 从环境变量读取后通过环境变量注入 Docker 沙箱，不落盘。
+> **LLM API Key 安全模型**：API Key 在 `agents.runtime_config.llm.api_key_encrypted` 中以 AES-256 加密存储；Agent 执行时 Worker 解密后通过环境变量注入 Docker 沙箱，不写入容器文件系统。
 
 ---
 
@@ -2880,10 +2901,14 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  ├── Volume: /workspace        │  │
 │  │  └── AutoRemove: true          │  │
 │  │                                │  │
-│  │  Step 3: 执行（编码闭环）         │  │
+│  │  Step 3: 注入 opencode 配置     │  │
+│  │  ├── 读取 Agent runtime_config  │  │
+│  │  ├── 解密 API Key → 环境变量    │  │
+│  │  ├── 写入 config.json 到容器    │  │
+│  │  └── 写入 Skills 定义文件       │  │
+│  │                                │  │
+│  │  Step 4: 执行（编码闭环）         │  │
 │  │  ├── git clone 关联仓库            │  │
-│  │  ├── 注入 Agent System Prompt      │  │
-│  │  ├── 注入 Skills 定义文件          │  │
 │  │  │                                   │  │
 │  │  │  ┌─ opencode run（非交互模式）──┐ │  │
 │  │  │  │ ① 构造 TASK_PROMPT           │  │  │
@@ -2897,7 +2922,7 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  │                                   │  │
 │  │  └── 实时流式输出日志（Worker 监控） │  │
 │  │                                │  │
-│  │  Step 4: 收尾                  │  │
+│  │  Step 5: 收尾                  │  │
 │  │  ├── git add → commit → push   │  │
 │  │  ├── 创建 PR                   │  │
 │  │  ├── 更新 Issue 状态           │  │
@@ -2960,12 +2985,52 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 ```bash
 # entrypoint.sh — 沙箱入口脚本
-# 由 Worker 传入环境变量控制行为：
+# 由 Worker 传入环境变量和配置注入文件控制行为：
 #   GIT_REPO_URL / GIT_BRANCH / GITHUB_TOKEN → git clone
-#   LLM_API_KEY / OPENAI_API_KEY 等          → opencode LLM 认证（由 Agent runtime_config 指定 provider）
-#   OPENCODE_MODEL                           → --model provider/model
 #   TASK_PROMPT                              → opencode run 的 prompt 参数
+#
+# opencode 配置由 Worker 在容器启动后、执行编码前通过以下方式注入（每次覆盖）：
+#   ① 写入 ~/.config/opencode/config.json   → opencode 读取 provider / model 配置
+#   ② 注入环境变量                           → API Key（如 OPENAI_API_KEY）不落盘
+#   ③ opencode run --model provider/model    → 运行时指定模型
 ```
+```
+
+**opencode 配置注入流程**（Worker 侧伪代码）：
+
+```go
+// Worker 从 Agent runtime_config 读取 opencode 配置，写入沙箱
+func injectOpenCodeConfig(ctx context.Context, containerID string, agent *model.Agent) error {
+    cfg := agent.RuntimeConfig.OpenCode
+
+    // ① 生成 opencode 配置文件（模型、provider、tools 权限等）
+    configJSON := OpenCodeConfig{
+        Model:       cfg.Model,       // "gpt-4o"
+        Provider:    cfg.Provider,    // "openai"
+        Agent:       cfg.Agent,       // "build"
+        MaxTurns:    cfg.MaxIterations,
+        Thinking:    cfg.Thinking,
+        Permissions: map[string]bool{  // opencode 工具权限白名单
+            "read":  true,
+            "write": true,
+            "bash":  true,
+            "glob":  true,
+            "grep":  true,
+        },
+    }
+    // 写入容器内 ~/.config/opencode/config.json（通过 docker cp 或 exec）
+    execInContainer(ctx, containerID,
+        "mkdir -p /home/sandbox/.config/opencode",
+        "echo '"+toJSON(configJSON)+"' > /home/sandbox/.config/opencode/config.json",
+    )
+
+    // ② 注入 API Key（环境变量已在容器创建时设置，此处为 Provider → 环境变量映射）
+    //    容器创建时的 Env: "OPENAI_API_KEY=" + decrypt(cfg.APIKeyEncrypted)
+    return nil
+}
+```
+
+> **安全说明**：API Key 在数据库中以加密存储，Worker 解密后通过环境变量注入容器，不写入容器文件系统。
 
 ```dockerfile
 # .dockerignore
@@ -2992,13 +3057,21 @@ import (
 func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 
+    // 根据 Agent 的 opencode provider 决定注入哪个 API Key 环境变量
+    envVars := []string{
+        "GITHUB_TOKEN=" + cfg.GitHubToken,
+    }
+    switch cfg.OpenCode.Provider {
+    case "openai":
+        envVars = append(envVars, "OPENAI_API_KEY="+cfg.OpenCode.APIKey)
+    case "anthropic":
+        envVars = append(envVars, "ANTHROPIC_API_KEY="+cfg.OpenCode.APIKey)
+    }
+
     resp, err := cli.ContainerCreate(ctx, &container.Config{
         Image: "anserflow/sandbox:latest",
-        Env: []string{
-            "GITHUB_TOKEN=" + cfg.GitHubToken,
-            "LLM_API_KEY=" + cfg.LLMAPIKey,
-        },
-        Cmd: []string{"opencode", "run", cfg.TaskPrompt, "--model", cfg.Model, "--agent", "build", "--dangerously-skip-permissions"},
+        Env:   envVars,
+        Cmd:   []string{"/entrypoint.sh"},
     }, &container.HostConfig{
         Memory:     512 * 1024 * 1024, // 512MB
         NanoCPUs:   2 * 1e9,           // 2 CPU
@@ -3006,6 +3079,17 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     }, nil, nil, "")
 
     cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
+
+    // 容器启动后注入 opencode 配置
+    injectOpenCodeConfig(ctx, resp.ID, cfg.OpenCode)
+
+    // 写入 TASK_PROMPT 并启动 opencode run
+    execInContainer(ctx, resp.ID,
+        "cd /workspace/repo",
+        "echo '"+escapeShell(cfg.TaskPrompt)+"' > /tmp/task.md",
+        "opencode run \"$(cat /tmp/task.md)\" --model "+cfg.OpenCode.Provider+"/"+cfg.OpenCode.Model+" --agent "+cfg.OpenCode.Agent+" --dangerously-skip-permissions",
+    )
+
     return resp.ID, nil
 }
 ```
