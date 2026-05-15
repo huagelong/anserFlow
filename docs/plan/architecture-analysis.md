@@ -1640,10 +1640,12 @@ graph TD
     F --> F5["分配给 Agent 或 自然人"]
     F --> F6["看板视图"]
 
-    G --> G1["监听 InProgress + 执行人为Agent"]
+    G --> G1["监听 todo→in_progress 自动入队"]
     G --> G2["Asynq 入队 → Worker 消费"]
-    G --> G3["Docker 沙箱执行"]
-    G --> G4["结果回写 / PR 提交 / 状态流转"]
+    G --> G3["Docker 沙箱 + opencode run"]
+    G --> G4["opencode 检查结果 → commit → PR"]
+    G --> G5["监听人工提示词 → 重新执行"]
+    G --> G6["结果回写时间线 / 状态流转 / 通知"]
 
     H --> H1["Skill 定义(全局)"]
     H --> H2["Skill 绑定到 Agent"]
@@ -2555,12 +2557,12 @@ var adminFiles embed.FS
 |------|------|-----------------|
 | `message` | 普通聊天消息 | `text: string` |
 | `annotation` | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` |
-| `plan` | 方案产出（`/plan` 指令触发） | `issues: [{title, status, priority, assignee}]` |
+| `backlog` | 方案产出（`/backlog` 指令触发） | `issues: [{title, status: "backlog", priority, assignee}]` |
 | `system` | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` |
 | `ping` | 心跳请求（客户端每 30s 发送） | 无 |
 | `pong` | 心跳响应 | 无 |
 | `typing` | 正在输入状态 | `is_typing: bool` |
-| `plan_ack` | 方案确认/拒绝 | `plan_id: string`, `accepted: bool` |
+| `backlog_ack` | 方案确认/拒绝 | `backlog_id: string`, `accepted: bool` |
 | `error` | 错误响应 | `error.code: string`, `error.message: string` |
 
 **心跳与重连**：
@@ -2570,7 +2572,7 @@ var adminFiles embed.FS
 - 客户端重连采用指数退避：`1s → 2s → 4s → 8s → 16s → 32s (max)`
 - 重连后客户端发送 `seq` 字段为上次收到的最后序号，服务端据此推送遗漏消息
 
-**消息持久化**：所有 `message` / `system` / `annotation` / `plan` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
+**消息持久化**：所有 `message` / `system` / `annotation` / `backlog` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
 
 **Redis 消息缓存**（断线重连恢复）：
 
@@ -2616,7 +2618,7 @@ func (h *Hub) SendMessage(msg *Message) {
 选用 **Asynq**（https://github.com/hibiken/asynq），基于 Redis 的分布式任务队列：
 
 ```
-Issue 状态变为 InProgress
+Issue 状态变为 in_progress (assignee = agent)
         │
         ▼
 ┌──────────────────┐
@@ -2624,7 +2626,7 @@ Issue 状态变为 InProgress
 │ (Gin HTTP 层)    │     Priority: P0 > P1 > P2...
 └──────────────────┘     Timeout: 30min
         │                MaxRetry: 3
-        ▼
+        ▼                Payload: {issue_id, agent_id, human_prompts[]}
 ┌──────────────────┐
 │ Redis Queue       │
 │ ├── critical (P0) │
@@ -2636,12 +2638,12 @@ Issue 状态变为 InProgress
 ┌──────────────────┐
 │ Asynq Worker      │  →  HandleFunc("agent:execute", handler)
 │ (独立进程/协程)   │     1. 创建 Docker 沙箱
-└──────────────────┘     2. 注入 Agent 配置 + Skills
-        │                3. 执行编码任务
-        ▼                4. 提交 PR → 更新 Issue
-┌──────────────────┐
-│ Docker Sandbox    │
-└──────────────────┘
+└──────────────────┘     2. 注入 opencode 配置 + Agent 人设
+        │                3. 注入人工提示词（来自 issue_timeline）
+        ▼                4. opencode run 执行编码
+┌──────────────────┐     5. opencode 检查结果
+│ Docker Sandbox    │     6. 通过 → commit + push + PR → in_review
+└──────────────────┘     7. 失败 → 写入时间线 → 人工介入重试
 ```
 
 Asynq 核心特性：
@@ -2654,6 +2656,41 @@ Asynq 核心特性：
 | 死信队列 | 3 次重试仍失败 → 人工介入 |
 | 定时任务 | 延迟执行（Agent 启动冷却期） |
 | Web UI | Asynqmon 可视化管理面板 |
+
+**Issue 调度器**（todo → in_progress 自动调度）：
+
+系统的调度器作为一个轻量的 Gin 后台协程运行，与 Asynq Worker 解耦：
+
+```go
+// internal/scheduler/issue_scheduler.go
+func (s *IssueScheduler) Run(ctx context.Context) {
+    ticker := time.NewTicker(5 * time.Second)
+    for {
+        select {
+        case <-ticker.C:
+            // ① 扫描所有 org 的 todo Issue，按优先级 ASC + 创建时间 ASC
+            issues := s.repo.FindSchedulableIssues(ctx)
+            for _, issue := range issues {
+                // ② 检查该 org 是否达到并发上限（默认 3 个 Agent 同时执行）
+                if s.runningCount(issue.OrgID) >= s.maxConcurrent(issue.OrgID) {
+                    continue
+                }
+                // ③ 状态 → in_progress + 写入时间线
+                s.repo.TransitionStatus(issue.ID, "todo", "in_progress")
+                s.timelineRepo.Append(issue.ID, "system", "status_change",
+                    "todo", "in_progress", "调度器自动分配执行")
+                // ④ 入队 Asynq
+                s.asynqClient.Enqueue(issue)
+                s.ws.NotifyProject(issue.ProjectID, "Issue #%d 开始执行", issue.ID)
+            }
+        case <-ctx.Done():
+            return
+        }
+    }
+}
+```
+
+> 每个组织默认最多 3 个 Agent 同时执行（可通过 org settings 调整），超过上限的 Issue 保持 todo 等待。
 
 ### 5.3 整体分布式拓扑
 
@@ -2700,7 +2737,7 @@ Asynq 核心特性：
 │  ├── executor.go        Docker沙箱调度    │
 │  ├── skill_loader.go    Skills 加载       │
 │  ├── group_discuss.go   群聊 Agent 调度   │
-│  └── plan_parser.go     方案→Issue 拆解   │
+│  └── backlog_parser.go   方案→Issue 拆解   │
 ├──────────────────────────────────────────┤
 │  Eino (底层 LLM 引擎)                    │
 │  ├── ChatModel         模型调用           │
@@ -3671,6 +3708,7 @@ erDiagram
     Project ||--o{ Todo : "包含"
     Issue ||--o{ Issue : "父子关系"
     Issue ||--o{ IssueAssignee : "分配"
+    Issue ||--o{ IssueTimeline : "时间线"
     Issue ||--o{ AgentLog : "产生日志"
     Group ||--o{ GroupMember : "包含"
     Group ||--o{ Message : "包含"
@@ -3817,6 +3855,7 @@ CREATE TABLE issues (
     priority ENUM('p0','p1','p2','p3','p4') DEFAULT 'p2',
     source_group_id BIGINT,             -- 来源群聊
     source_message_id BIGINT,           -- 来源消息
+    pr_url VARCHAR(512),                -- 关联 PR 链接（由 Worker 在创建 PR 后回写）
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -3837,6 +3876,22 @@ CREATE TABLE issue_assignee (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (agent_id) REFERENCES agents(id),
     CHECK ((user_id IS NULL) <> (agent_id IS NULL))
+);
+
+-- Issue 状态时间线（记录全量状态变更 + 人工介入提示词）
+CREATE TABLE issue_timeline (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    issue_id BIGINT NOT NULL,
+    actor_type ENUM('user','agent','system') NOT NULL,  -- 操作者
+    actor_id BIGINT,                                     -- user_id / agent_id
+    event_type ENUM('status_change','human_prompt','agent_log','system_note') NOT NULL,
+    old_status VARCHAR(32),                              -- status_change 时记录旧状态
+    new_status VARCHAR(32),                              -- status_change 时记录新状态
+    comment TEXT,                                        -- 人工提示词 / Agent 日志摘要 / 系统备注
+    metadata JSON,                                       -- 扩展信息（opencode 返回的日志/错误等）
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_issue_time (issue_id, created_at),
+    FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
 -- 群组
@@ -3940,7 +3995,7 @@ CREATE TABLE todos (
 -- │  粒度: 粗（功能级）          粒度: 细（子任务级）              │
 -- │  流转: backlog→done          流转: todo→in_progress→done      │
 -- │  关联: GitHub Issue          关联: 内部任务拆解                 │
--- │  来源: 群聊/plan 指令             来源: Agent 拆解 / 手动创建    │
+-- │  来源: 群聊/backlog 指令         来源: Agent 拆解 / 手动创建    │
 -- │                                                               │
 -- │  关系: 一个 Issue 可以拆解为 N 个 Todo（linked_issue_id）     │
 -- │        Todo 完成后可同步 Issue 进度                            │
@@ -4131,7 +4186,9 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   │   │   ├── /:issue_id                 DELETE → 🔐 删除 Issue
 │   │   │   ├── /:issue_id/status          PUT  → 🔒 状态流转
 │   │   │   ├── /:issue_id/assign          PUT  → 🔐 分配/更改负责人
-│   │   │   └── /:issue_id/children        GET  → 子 Issue 列表
+│   │   │   ├── /:issue_id/children        GET  → 子 Issue 列表
+│   │   │   ├── /:issue_id/timeline         GET  → 状态时间线（含人工提示词历史）
+│   │   │   └── /:issue_id/prompt           POST → 🔒 追加人工提示词（重新触发 opencode 执行）
 │   │   │
 │   │   ├── /:project_id/todos            Todo 管理 [远期]
 │   │   │   ├── /                          GET  → Todo 列表
@@ -4187,6 +4244,9 @@ func SendInviteEmail(to string, inviteLink string) error {
 ├── /audit-logs                            审计日志（🔒 🔐）
 │   └── /                                  GET  → 按 org + 时间筛选
 │
+├── /webhook                                 Webhook 接收
+│   └── /github                             POST → GitHub Webhook（PR merge → Issue→done）
+│
 └── /ws                                    WebSocket（认证参数化）
     └── ?token=xxx&group_id=42             → 群聊连接
 
@@ -4240,7 +4300,7 @@ func (s *NotificationService) NotifyIssueStatusChanged(
 
 ## 十、核心业务流程
 
-### 10.1 需求讨论 → Issue 自动生成
+### 10.1 需求讨论 → /backlog 自动生成 Issue
 
 ```mermaid
 sequenceDiagram
@@ -4260,20 +4320,21 @@ sequenceDiagram
     ORC->>DEV: 调度 DEV Agent 评估工时
     DEV->>G: [评估] 前端预计 4h
 
-    H->>G: /plan 生成执行方案
+    H->>G: /backlog 生成执行方案
     ORC->>ORC: 收集讨论上下文 → 结构化方案
-    ORC->>SYS: 调用 Issue 服务创建
+    ORC->>SYS: 调用 Issue 服务创建（状态=backlog）
 
-    SYS->>SYS: 创建 Issue #1: 设计登录页UI (Todo, P1, →前端Agent)
-    SYS->>SYS: 创建 Issue #2: 实现JWT认证API (Todo, P1, →后端Agent)
-    SYS->>SYS: 创建 Issue #3: 用户表+密码加密 (Todo, P0, →后端Agent)
-    SYS->>G: 系统消息: 已生成 3 个 Issue，关联到项目
+    SYS->>SYS: 创建 Issue #1: 设计登录页UI (backlog, P1, →前端Agent)
+    SYS->>SYS: 创建 Issue #2: 实现JWT认证API (backlog, P1, →后端Agent)
+    SYS->>SYS: 创建 Issue #3: 用户表+密码加密 (backlog, P0, →后端Agent)
+    SYS->>G: 系统消息: 已生成 3 个 Issue（backlog），请到看板确认并启动
 ```
 
-### 10.2 Agent 自动执行（Asynq + Docker）
+### 10.2 Agent 自动执行（backlog→todo→in_progress→in_review→done）
 
 ```mermaid
 sequenceDiagram
+    participant H as 自然人(看板)
     participant ISS as Issue 服务
     participant Q as Asynq Queue
     participant W as Worker
@@ -4281,24 +4342,119 @@ sequenceDiagram
     participant GH as GitHub
     participant WS as WebSocket
 
-    ISS->>ISS: Issue 状态变为 in_progress
-    ISS->>ISS: 检查 assignee 类型 = agent
-    
-    ISS->>Q: enqueue("agent:execute", {issue_id, agent_id})
-    Q-->>ISS: task_id
+    Note over H,ISS: ① 看板手动拖动 backlog → todo
+    H->>ISS: 拖动 Issue 到 todo 列
+    ISS->>ISS: 记录状态变更（issue_timeline）
+    ISS->>Q: 加入排队（按优先级+创建时间）
+    ISS->>WS: 推送 "Issue #1 已排队等待执行"
 
+    Note over ISS,Q: ② 自动调度 todo → in_progress
+    Q->>Q: 调度器检查队列 + 资源可用
+    ISS->>ISS: Issue 状态 → in_progress
+    ISS->>ISS: 记录状态变更 + 注入人工提示词
+    ISS->>ISS: 检查 assignee 类型 = agent
+    ISS->>Q: enqueue("agent:execute", {issue_id, agent_id, human_prompts})
+    Q-->>ISS: task_id
+    ISS->>WS: 推送 "Agent 开始执行 Issue #1"
+
+    Note over W,D: ③ Worker 执行
     W->>Q: dequeue → "agent:execute"
-    W->>W: 加载 Agent 配置 + Skills
+    W->>W: 加载 Agent 配置 + Skills + 人工提示词
     W->>D: 创建沙箱容器
-    W->>D: git clone → 注入配置 → 执行编码
-    W->>D: 监控日志输出
-    
-    W->>GH: git add → commit → push
-    W->>GH: 创建 Pull Request
-    W->>ISS: 更新 Issue status → in_review
-    W->>WS: 推送通知 "PR 已提交，等待审核"
+    W->>D: git clone → 注入配置 → opencode run
+    W->>D: 监控日志输出 → 实时推送 Issue 时间线
+    W->>WS: 推送 "编码中..." / "运行测试..."
+
+    Note over W,GH: ④ opencode 自检查 → PR
+    W->>D: opencode 返回执行结果
+    W->>W: 检查结果（代码完整性/lint/test 通过）
+    alt opencode 检查通过
+        W->>D: git add → commit → push
+        W->>GH: 创建 Pull Request
+        W->>ISS: 更新 Issue status → in_review + 写入 pr_url
+        W->>WS: 推送通知 "PR 已提交，等待审核"
+    else opencode 检查失败
+        W->>ISS: 写入失败原因到时间线
+        W->>WS: 推送 "执行失败: {原因}，等待人工介入"
+        Note over H,W: 人工可在 Issue 时间线追加提示词 → Worker 重新执行
+    end
+
+    Note over H,GH: ⑤ PR 审核 → merge → done
+    H->>GH: Review PR → Approve → Merge
+    GH-->>ISS: Webhook: PR merged
+    ISS->>ISS: Issue 状态 → done
+    ISS->>ISS: 记录状态变更
+    ISS->>WS: 推送 "Issue #1 已完成"
     W->>D: 容器自动销毁
 ```
+
+**状态流转规则**：
+
+| 状态 | 触发方式 | 下一状态 | 触发条件 |
+|------|---------|---------|---------|
+| `backlog` | `/backlog` 指令自动创建 | `todo` | **人工在看板拖动** |
+| `todo` | 人工从 backlog 拖动 | `in_progress` | 系统自动调度（按优先级+排队顺序） |
+| `in_progress` | 系统自动 | `in_review` | opencode 检查通过 + PR 创建成功 |
+| `in_progress` | 系统自动 | `todo` | opencode 检查失败 → 人工介入调整后重新排队 |
+| `in_review` | opencode 检查通过后 | `done` | GitHub Webhook 通知 PR 已 merge |
+| `in_review` | opencode 检查通过后 | `todo` | PR 被拒绝 → 人工追加提示词 → 重新排队 |
+
+**人工提示词介入机制**：
+
+Issue 看板的时间线面板允许自然人在任意阶段追加提示词，直接干预 opencode 的下一步执行：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Issue 时间线                                            │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ 12:00  system   状态变更: backlog → todo           │  │
+│  │ 12:01  system   状态变更: todo → in_progress       │  │
+│  │ 12:02  agent    开始编码: 正在读取 Issue 描述...    │  │
+│  │ 12:05  agent    生成文件: src/login.tsx             │  │
+│  │ 12:08  agent    运行测试: 2 passed, 1 failed       │  │
+│  │ ─────────────────────────────────────────────      │  │
+│  │ 12:09  张三     提示词: "login.tsx 的密码框需要     │  │
+│  │                 autocomplete='new-password'"        │  │
+│  │ 12:09  system   收到人工提示词，重新执行 opencode    │  │
+│  │ 12:12  agent    修复完成: lint + test 全部通过      │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  ┌─ 追加提示词 ──────────────────────────────────────┐  │
+│  │ [                    ]  [发送并重新执行]            │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**实现**：
+
+- `POST /api/orgs/:org_id/projects/:project_id/issues/:issue_id/prompt` → 写入 `issue_timeline`（event_type=human_prompt）
+- Worker 在 `in_progress` 阶段持续监听该 Issue 是否有新的 `human_prompt` 事件
+- 收到新提示词后，Worker 将提示词作为追加上下文注入 opencode run 的 prompt
+- opencode 重新执行时保留之前的 `issue_timeline` 日志记录
+
+**GitHub Webhook 处理器**：
+
+```go
+// internal/handler/webhook.go
+func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
+    event := c.GetHeader("X-GitHub-Event")
+    if event != "pull_request" { return }
+
+    var payload github.PullRequestEvent
+    c.ShouldBindJSON(&payload)
+
+    if payload.Action == "closed" && payload.PullRequest.Merged {
+        // 根据 PR URL 反查 Issue → 更新 status = done
+        issue := h.issueRepo.FindByPRURL(payload.PullRequest.HTMLURL)
+        h.issueRepo.UpdateStatus(issue.ID, "done")
+        h.timelineRepo.Append(issue.ID, "system", "status_change",
+            "in_review", "done", "PR merged by @"+payload.Sender.Login)
+        h.ws.SendToProject(issue.ProjectID, "Issue #%d 已完成", issue.ID)
+    }
+}
+```
+
+> GitHub Webhook 需在项目关联的 GitHub 仓库中配置 Payload URL: `https://<host>/api/webhook/github`，Events: `Pull requests`。
 
 ---
 
@@ -4376,7 +4532,7 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 | T16 | 群聊 WebSocket + 消息持久化 | 多人实时聊天正常 |
 | T17 | WebSocket Redis Pub/Sub 分布式 | 多实例消息同步 |
 | T18 | Eino 集成 + 群聊 Agent 讨论编排 | Agent 自动参与讨论 |
-| T19 | 讨论→方案→自动创建 Issue | /plan 指令产出 Issue |
+| T19 | 讨论→方案→自动创建 Issue（backlog） | /backlog 指令产出 Issue（状态=backlog），到看板手动转为 todo 后列入执行队列 |
 | T20 | Asynq 任务队列集成 | 任务入队/消费正常 |
 | T21 | Docker 沙箱执行引擎 | Agent 在容器中执行编码 |
 | T22 | GitHub PR 自动提交 | 代码提交 + PR 创建流程通 |
@@ -4447,7 +4603,7 @@ internal/seed/
 | 风险 | 等级 | 应对措施 |
 |------|------|----------|
 | Agent 自动编码质量不可控 | 🔴 高 | 先做半自动：Agent 生成代码 → 创建 PR → 人工审核合并 |
-| 多 Agent 讨论无限循环 | 🟡 中 | `/plan` 指令触发方案讨论而非实时监听，限制对话轮数 |
+| 多 Agent 讨论无限循环 | 🟡 中 | `/backlog` 指令触发方案讨论而非实时监听，限制对话轮数 |
 | Docker 沙箱安全 | 🟡 中 | 网络白名单 + 资源限额 + 执行超时 + 无特权模式 |
 | Tauri 移动端成熟度 | 🟡 中 | 先交付桌面端，移动端作为 Phase 2 |
 | Eino 框架迭代不稳定 | 🟢 低 | 字节内部大规模使用，稳定性有保障 |
@@ -4455,7 +4611,7 @@ internal/seed/
 ### 13.2 简化策略
 
 1. **Agent 执行优先做"半自动"**：编码 → PR → 人工 Review → 合并，而非全自动合入 main
-2. **讨论先做"指令触发"**：Agent 不实时监听所有消息，通过 `/plan` 触发，避免 Token 浪费
+2. **讨论先做"指令触发"**：Agent 不实时监听所有消息，通过 `/backlog` 触发，避免 Token 浪费
 3. **Tauri 先桌面后移动**：降低初期复杂度
 4. **Skills 系统复用现有模式**：项目已有 `flowcode_design/executor/todo/wiki` Skill 定义，直接复用 YAML frontmatter + Markdown body 的格式
 
@@ -4565,7 +4721,7 @@ graph TD
 ```
 
 ```go
-// internal/agent/plan_breakdown.go
+// internal/agent/backlog_breakdown.go
 type BreakdownResult struct {
     Tasks []BreakdownTask `json:"tasks"`
 }
