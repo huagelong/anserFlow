@@ -1652,8 +1652,8 @@ graph TD
 
     R --> R1["运行时注册（名称/Docker镜像/执行命令模板）"]
     R --> R2["运行时配置 Schema 定义"]
-    R --> R3["默认运行时指定（opencode 为内置默认）"]
-    R --> R4["Agent 绑定运行时 + 配置覆盖"]
+    R --> R3["运行时默认 Skill 绑定（flowcode_executor 内置不可关）"]
+    R --> R4["Agent 绑定运行时 + 继承默认 Skills"]
 ```
 
 ---
@@ -1811,6 +1811,8 @@ eino:                            # 后台 /admin/settings#eino 配置
 | **eino** (LLM/讨论/backlog/优化) | 🟢 全局 | `/admin/settings` → Eino | ✅ | ❌ 即时 |
 | **opencode** (provider/model/APIKey) | 🟢 Agent 级 | `/admin/agents/{id}/edit` | ✅ | ❌ 即时 |
 | **沙箱并发上限** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
+| **Runtime 默认 Skills** | 🟢 Runtime 级 | `/admin/settings#runtimes/{id}/skills` | ✅ | ❌ 即时 |
+| **Skills 管理** | 🟢 全局/组织级 | `/admin/skills` | ✅ | ❌ 即时 |
 | **invite 链接有效期** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
 | **通知偏好** | 🟢 用户级 | `/admin/user/settings` | ✅ | ❌ 即时 |
 | **主题/语言** | 🟢 用户级 | 客户端 localStorage + `users.locale` | ✅ | ❌ 即时 |
@@ -2980,6 +2982,47 @@ func (sl *SkillLoader) LoadAsTools(
 }
 ```
 
+### Skill 两层继承（沙箱执行时）
+
+Worker 注入 Skills 到沙箱时，合并 Runtime 默认 + Agent 独立绑定，Agent 可覆盖关闭 Runtime 继承的 Skill：
+
+```go
+// internal/agent/skill_loader.go
+func (sl *SkillLoader) LoadForSandbox(ctx context.Context, agent *model.Agent) ([]*model.Skill, error) {
+    // ① Runtime 默认 Skills（如 opencode→flowcode_executor）
+    runtimeSkills, _ := sl.skillRepo.FindEnabledByRuntime(ctx, agent.RuntimeID)
+
+    // ② Agent 独立绑定的 Skills
+    agentSkills, _ := sl.skillRepo.FindEnabledByAgent(ctx, agent.ID)
+
+    // ③ 合并去重：Agent 级配置覆盖 Runtime 默认（以 skill_id 为 key）
+    merged := make(map[uint]*model.Skill)
+    for _, s := range runtimeSkills {
+        merged[s.ID] = s
+    }
+    for _, s := range agentSkills {
+        merged[s.ID] = s    // Agent 级覆盖（含 enabled=false 的情况）
+    }
+
+    // ④ 仅返回 enabled=true 的 Skill
+    result := make([]*model.Skill, 0)
+    for _, s := range merged {
+        if s.Enabled {
+            result = append(result, s)
+        }
+    }
+    return result, nil
+}
+```
+
+**Skill 注入规则**：
+
+| Skill | 来源 | 能否关闭 | 说明 |
+|-------|------|---------|------|
+| `flowcode_executor` | Runtime 默认（opencode） | ❌ 不可关闭 | `is_builtin=1`，前端灰掉开关 |
+| 用户创建的 Skill | Runtime 默认 / Agent 绑定 | ✅ 可开关 | 后台自由管理 |
+| Agent 主动关闭 Runtime Skill | Agent 级覆盖 | ✅ | `agent_skills.enabled=false` 覆盖 Runtime 默认 |
+
 ### `/backlog` 指令识别
 
 Eino Agent 在群聊中监听 WebSocket 消息，检测到 `/backlog` 指令时触发方案拆解流程：
@@ -3144,7 +3187,9 @@ func (t *TokenTracker) GetDailyUsage(
 │  │  ├── 读取 Agent runtime_config  │  │
 │  │  ├── 解密 API Key → 环境变量    │  │
 │  │  ├── 写入 config.json 到容器    │  │
-│  │  └── 写入 Skills 定义文件       │  │
+│  │  ├── 写入 Runtime 默认 Skills   │  │
+│  │  │   (opencode→flowcode_executor)│  │
+│  │  └── 写入 Agent 绑定 Skills     │  │
 │  │                                │  │
 │  │  Step 4: 执行（编码闭环 + 消息互通）   │  │
 │  │  ├── git clone 关联仓库               │  │
@@ -4139,6 +4184,8 @@ erDiagram
     Agent ||--o{ AgentLog : "执行日志"
     Agent ||--o{ Todo : "被分配"
     Skill ||--o{ AgentSkill : "属于"
+    Runtime ||--o{ RuntimeSkill : "默认Skills"
+    Skill ||--o{ RuntimeSkill : "属于"
     Invitation ||--o{ InvitationUsage : "记录接受"
     Todo ||--o{ Issue : "关联同步"
 ```
@@ -4260,6 +4307,7 @@ CREATE TABLE skills (
     zip_hash VARCHAR(64),              -- ZIP 的 SHA256
     file_tree JSON,                    -- ZIP 文件树
     enabled TINYINT(1) DEFAULT 1,      -- 全局开关
+    is_builtin TINYINT(1) DEFAULT 0,   -- 是否系统内置（内置 Skill 不可删除，如 flowcode_executor）
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -4272,6 +4320,17 @@ CREATE TABLE agent_skills (
     enabled TINYINT(1) DEFAULT 1,      -- 该 Agent 是否启用该 Skill
     UNIQUE KEY (agent_id, skill_id),
     FOREIGN KEY (agent_id) REFERENCES agents(id),
+    FOREIGN KEY (skill_id) REFERENCES skills(id)
+);
+
+-- Runtime-Skill 默认绑定（Agent 继承该运行时的默认 Skill，可在 Agent 级覆盖关闭）
+CREATE TABLE runtime_skills (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    runtime_id BIGINT NOT NULL,
+    skill_id BIGINT NOT NULL,
+    enabled TINYINT(1) DEFAULT 1,      -- 该运行时是否启用此 Skill
+    UNIQUE KEY (runtime_id, skill_id),
+    FOREIGN KEY (runtime_id) REFERENCES runtimes(id),
     FOREIGN KEY (skill_id) REFERENCES skills(id)
 );
 
@@ -4688,8 +4747,9 @@ func SendInviteEmail(to string, inviteLink string) error {
 ├── /admin                                 系统管理（🔒 🔐 super_admin only）
 │   ├── /settings                           GET/PUT → 全局系统配置（按 section 读写）
 │   ├── /settings/{section}                 GET/PUT → section = eino/auth/smtp/sandbox/queue/upgrade
-│   └── /runtimes                           GET/POST → 运行时列表 / 注册新运行时
-│       └── /:runtime_id                    GET/PUT/DELETE → 运行时详情/更新/删除（内置不可删）
+│   ├── /runtimes                           GET/POST → 运行时列表 / 注册新运行时
+│   │   └── /:runtime_id                    GET/PUT/DELETE → 运行时详情/更新/删除（内置不可删）
+│   │       └── /skills                     GET/PUT → 该运行时的默认 Skills 绑定
 │
 ├── /notifications                         通知模块（🔒）
 │   ├── /                                  GET  → 通知列表（分页）
@@ -5047,7 +5107,7 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
     ├── #sandbox               Docker 沙箱
     ├── #queue                 Asynq 任务队列
     ├── #upgrade               自动更新
-    └── #runtimes              运行时管理（注册/编辑/启停）
+    └── #runtimes              运行时管理（注册/编辑/启停 + 默认Skills绑定）
 ```
 
 公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接和桌面端 deep link 最终都落到该页面。
@@ -5154,9 +5214,10 @@ anserflow migrate --seed=false
 
 ```
 internal/seed/
-├── 001_default_skills.sql     # 系统预置 Skill（全局默认）
+├── 001_default_skills.sql     # 系统预置 Skill（flowcode_executor 内置不可关）+ Runtime 默认绑定
 ├── 002_casbin_policies.sql    # Casbin RBAC 角色权限策略
-└── 003_example_agent.sql      # 可选：示例 Agent 配置
+├── 003_runtime_skills.sql     # 各运行时默认 Skill 绑定（opencode→flowcode_executor）
+└── 004_example_agent.sql      # 可选：示例 Agent 配置
 ```
 
 ---
