@@ -317,9 +317,8 @@ import { z } from 'zod'
 const agentSchema = z.object({
   name: z.string().min(1, '名称不能为空').max(64),
   role_label: z.string().max(64),               // 自定义角色标签（如 PM / 前端 / 后端）
-  system_prompt: z.string().max(200, '人设 1-2 句话即可，行为由 Skill 定义'),
+  system_prompt: z.string().max(200, '人设 1-2 句话即可，调度行为由 Eino Skill 定义'),
   runtime_id: z.number().min(1, '请选择运行时'),
-  skill_ids: z.array(z.number()),               // 绑定的角色 Skill（多选，含内置+自定义）
   // runtime_config 由前端根据 runtimes.config_schema 动态生成表单字段
 })
 
@@ -1619,7 +1618,7 @@ graph TD
     C --> C1["Agent 角色定义(自定义提示词)"]
     C --> C2["Agent System Prompt / 人设（1-2句话，行为由Skill定义）"]
     C --> C3["绑定运行时（opencode 默认）"]
-    C --> C4["绑定角色 Skill（定制行为）"]
+    C --> C4["Agent 绑定运行时 + 配置覆盖"]
     C --> C5["全局开关 / 单独启停"]
 
     D --> D1["创建群组"]
@@ -2828,15 +2827,15 @@ func (s *IssueScheduler) runningCount(orgID uint) int {
 │  ├── Callbacks         回调/日志/监控     │
 │  └── Flow              流式处理           │
 ├──────────────────────────────────────────┤
-│  ⚠️ Eino 职责边界 + Agent Skill 驱动设计     │
+│  ⚠️ Eino 职责边界 + Skill 驱动调度          │
 │  Eino 仅负责：Agent 调度 / 群聊讨论编排    │
 │             /backlog 方案拆解             │
 │             人工提示词优化                  │
 │  Eino 不负责：代码生成 / 编码执行          │
 │              └→ 由 opencode 在 Docker 沙箱完成│
 │                                           │
-│  Agent 行为由 Skill 定义，System Prompt   │
-│  仅需 1-2 句人设，调度时注入 Skill 上下文 │
+│  调度行为由 Eino Skill 定义               │
+│  (eino-discuss/eino-backlog/eino-optimizer)│
 └──────────────────────────────────────────┘
 ```
 
@@ -2924,10 +2923,10 @@ func (o *GroupOrchestrator) InvokeAgent(
     agent *model.Agent,
     messages []*schema.Message,  // 群聊历史上下文
 ) (*schema.Message, error) {
-    // 1. 构建上下文：System Prompt（1-2句话人设） + 绑定的 Skills 定义
+    // 1. 构建上下文：System Prompt（1-2句话人设） + Eino 调度 Skill 定义
     systemPrompt := agent.SystemPrompt   // 如 "你是前端开发工程师"
-    skills := o.skillLoader.LoadForSandbox(ctx, agent)
-    skillContext := buildSkillContext(skills)  // 拼接所有 Skill 定义正文
+    einoSkills := o.skillLoader.LoadByCategory(ctx, "eino")  // eino-discuss/backlog/optimizer
+    skillContext := buildSkillContext(einoSkills)
 
     // 2. 追加当前讨论上下文
     chatInput := append([]*schema.Message{
@@ -5225,19 +5224,17 @@ internal/seed/
 └── 004_example_agent.sql      # 可选：示例 Agent 配置
 ```
 
-**预置角色 Skill 清单**（`001_default_skills.sql`）：
+**预置 Eino 调度 Skill 清单**（`001_default_skills.sql`）：
 
-| Skill 名称 | 用途 | 适用 Agent | 核心内容 |
-|-----------|------|-----------|---------|
-| `flowcode_executor` | 编码执行规范 | 所有（Runtime 默认） | 代码风格、提交规范、PR 格式 |
-| `skill-analysis` | 需求分析 | PM/CEO 角色 | 需求拆解方法、用户故事模板、优先级判定规则 |
-| `skill-tech-review` | 技术评审 | CTO/架构师角色 | 技术选型决策树、架构评审清单、安全审查要点 |
-| `skill-frontend` | 前端开发规范 | 前端角色 | 组件设计规范、状态管理约定、CSS 命名规则 |
-| `skill-backend` | 后端开发规范 | 后端角色 | API 设计规范、数据库设计约定、错误处理模式 |
-| `skill-devops` | 部署运维规范 | DevOps 角色 | CI/CD 模板、Dockerfile 规范、监控告警配置 |
-| `skill-testing` | 测试策略 | QA 角色 | 测试用例模板、覆盖率要求、E2E 测试规范 |
+| Skill 名称 | 用途 | Eino 调度环节 | 核心内容 |
+|-----------|------|-------------|---------|
+| `flowcode_executor` | 编码执行规范 | opencode 沙箱执行 | 代码风格、提交规范、PR 格式 |
+| `eino-discuss` | 群聊讨论调度 | 群聊 Agent 编排 | 如何组织讨论、轮次控制、何时收敛结论 |
+| `eino-backlog` | 方案拆解 | /backlog 指令 | 如何从讨论生成 Issue、描述格式、优先级/负责人判定 |
+| `eino-optimizer` | 提示词优化 | 人工提示词改写 | 自然语言→编码指令的转换规则、技术细节补充要求 |
+| `eino-planner` | 任务编排 | Issue 调度 + 依赖分析 | 优先级判定、依赖关系推导、并发度计算 |
 
-> 以上 Skill 均为系统内置（`is_builtin=1`），自动绑定到对应 Runtime。Agent 通过组合 Skill 定义行为，System Prompt 仅需写角色人设（1-2 句话）。
+> 以上 Skill 均为 Eino 调度专用（`is_builtin=1`）。Agent 的 System Prompt 仅写角色人设 1-2 句，具体调度行为由对应 Eino Skill 定义。
 
 ---
 
