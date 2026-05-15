@@ -1729,17 +1729,41 @@ asynq:
     max_backoff: 5m
   timeout: 1800s                 # 单任务最长 30 分钟
 
-llm:
-  provider: openai               # openai | anthropic | local
-  api_key: ${LLM_API_KEY}
+# ====== Eino 调度引擎配置（后台管理：系统设置 → Eino 配置） ======
+eino:
+  # LLM 连接（Eino 做 Agent 编排/讨论/拆解/优化时调用的模型）
+  provider: openai
+  api_key: ${EINO_LLM_API_KEY}
   base_url: https://api.openai.com/v1
-  default_model: gpt-4o
-  max_tokens: 4096
+  model: gpt-4o                 # 调度模型（可与 opencode 执行模型不同）
   temperature: 0.7
+  max_tokens: 4096
   timeout: 120s
-  rate_limit:                    # 令牌桶限流
-    capacity: 100                # 每分钟最大请求数
-    refill_rate: 1.67            # 令牌补充速率/秒（100/60）
+
+  # 群聊讨论控制
+  discuss:
+    max_turns: 5                # 单次讨论最大 Agent 发言轮数（防止无限讨论）
+    agent_timeout: 60s          # 单个 Agent 响应超时
+    auto_trigger: false         # 是否无需 /backlog 自动触发讨论（默认 false，需手动指令）
+
+  # /backlog 方案拆解
+  backlog:
+    context_window: 50          # 收集最近 N 条群聊消息作为上下文
+    require_project: true       # 群组必须关联项目才能 /backlog
+
+  # 提示词优化
+  optimizer:
+    model: gpt-4o-mini          # 优化模型（可用更便宜的模型）
+    temperature: 0.3            # 低温度保证输出稳定
+
+  # 令牌桶限流
+  rate_limit:
+    capacity: 100               # 每分钟最大请求数
+    refill_rate: 1.67
+
+# ====== opencode 执行配置（后台管理：Agent 编辑页 → 运行时配置） ======
+# 每个 Agent 独立配置，存储在 agents.runtime_config.opencode
+# 示例见 第六章 Agent 运行时配置
 
 sandbox:
   image: ghcr.io/anserflow/sandbox:latest
@@ -1772,7 +1796,26 @@ upgrade:
   check_interval: 24h
 ```
 
-> **环境变量覆盖规则**：Viper 以 `DB_PASSWORD` 覆盖 `database.password`，`LLM_API_KEY` 覆盖 `llm.api_key`。生产环境所有 `${VAR}` 占位符必须通过环境变量注入。
+> **环境变量覆盖规则**：Viper 以 `EINO_LLM_API_KEY` 覆盖 `eino.api_key`。生产环境所有 `${VAR}` 占位符必须通过环境变量注入。opencode 的 API Key 按 Agent 独立存储在 `agents.runtime_config.llm.api_key_encrypted` 中，不经过 config.yaml。
+
+### Eino vs opencode 配置职责划分
+
+| 配置项 | 归属 | 管理位置 | 作用范围 |
+|--------|------|---------|---------|
+| LLM 连接（调度用） | **Eino** | 后台管理 → 系统设置 → Eino 配置 | 全局，所有 Agent 编排/讨论/拆解/优化 |
+| 讨论轮数/超时 | **Eino** | 同上 | 群聊讨论控制 |
+| /backlog 上下文窗口 | **Eino** | 同上 | /backlog 指令 |
+| 提示词优化模型 | **Eino** | 同上 | 人工提示词优化 |
+| LLM 连接（执行用） | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent 在沙箱中编码时使用 |
+| 编码迭代次数 | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent |
+| thinking 开关 | **opencode** | Agent 编辑页 → 运行时配置 | 单个 Agent |
+
+**后台管理界面分布**：
+
+```
+/admin/settings            → Eino 配置（provider / model / 讨论控制 / backlog 参数）
+/admin/agents/[id]/edit    → 该 Agent 的 opencode 配置（provider / model / API Key / 迭代次数）
+```
 
 ---
 
@@ -2786,12 +2829,12 @@ import (
 
 var chatModel model.ChatModel
 
-func InitEino(cfg *config.LLMConfig) error {
+func InitEino(cfg *config.EinoConfig) error {
     var err error
     chatModel, err = openai.NewChatModel(context.Background(), &openai.ChatModelConfig{
         APIKey:      cfg.APIKey,
         BaseURL:     cfg.BaseURL,
-        Model:       cfg.DefaultModel,
+        Model:       cfg.Model,
         MaxTokens:   cfg.MaxTokens,
         Temperature: &cfg.Temperature,
         Timeout:     cfg.Timeout,
