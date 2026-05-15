@@ -316,14 +316,11 @@ import { z } from 'zod'
 
 const agentSchema = z.object({
   name: z.string().min(1, '名称不能为空').max(64),
-  role_label: z.enum(['CEO', 'CTO', 'Frontend', 'Backend', 'DevOps']),
+  role_label: z.string().max(64),               // 自定义角色标签
   system_prompt: z.string().min(10, '人设描述至少 10 个字符'),
-  opencode_provider: z.enum(['openai', 'anthropic', 'google', 'deepseek']),
-  opencode_model: z.string().min(1, '请选择模型'),
-  opencode_agent: z.enum(['build', 'plan']),
-  opencode_api_key: z.string().min(1, 'API Key 不能为空'),
-  opencode_max_iterations: z.number().min(5).max(100).default(20),
-  opencode_thinking: z.boolean().default(true),
+  runtime_id: z.number().min(1, '请选择运行时'),
+  // runtime_config 由前端根据 runtimes.config_schema 动态生成表单字段
+  // 不同运行时 config_schema 不同（opencode 需 provider/model/api_key，其他运行时不同）
 })
 
 type AgentFormData = z.infer<typeof agentSchema>
@@ -1599,7 +1596,7 @@ const wdioOptions = {
 | 🟢 可选 | fs | 文件系统操作 |
 | 🟢 可选 | process | 更新后重启 |
 
-> **opencode**：开源 AI 编码代理 [anomalyco/opencode](https://github.com/anomalyco/opencode)（TypeScript，160k+ Stars），在 Docker 沙箱中通过非交互 CLI 模式（`opencode run`）执行编码任务。支持多 LLM 提供商（OpenAI / Anthropic / Google 等）、Plan/Build 双模式、`read/write/bash/glob/grep` 工具调用。通过 `agents.runtime_config.opencode` 字段配置行为参数。
+> **opencode**：AnserFlow 内置默认运行时，基于开源 AI 编码代理 [anomalyco/opencode](https://github.com/anomalyco/opencode)（TypeScript，160k+ Stars）。在 Docker 沙箱中通过非交互 CLI 模式（`opencode run`）执行编码任务。支持多 LLM 提供商、Plan/Build 双模式。后台可注册其他运行时（如 Claude Code），Agent 绑定任意运行时。
 
 ### 系统功能模块总览
 
@@ -1612,15 +1609,16 @@ graph TD
     A --> F["Issue 系统"]
     A --> G["Agent 执行引擎"]
     A --> H["Skills 技能系统"]
+    A --> R["运行时管理"]
 
     B --> B1["注册/登录(OAuth/GitHub)"]
     B --> B2["组织/团队管理"]
     B --> B3["角色权限(RBAC)"]
     B --> B4["邀请机制"]
 
-    C --> C1["Agent 角色定义(CEO/CTO/Dev...)"]
+    C --> C1["Agent 角色定义(自定义提示词)"]
     C --> C2["Agent System Prompt / 人设"]
-    C --> C3["Agent 运行时配置(opencode等)"]
+    C --> C3["绑定运行时（opencode 默认，可扩展）"]
     C --> C4["Agent 绑定 Skills"]
     C --> C5["全局开关 / 单独启停"]
 
@@ -1651,6 +1649,11 @@ graph TD
     H --> H2["Skill 绑定到 Agent"]
     H --> H3["Skill 启用/禁用(全局+单Agent)"]
     H --> H4["手动编写 + ZIP 导入"]
+
+    R --> R1["运行时注册（名称/Docker镜像/执行命令模板）"]
+    R --> R2["运行时配置 Schema 定义"]
+    R --> R3["默认运行时指定（opencode 为内置默认）"]
+    R --> R4["Agent 绑定运行时 + 配置覆盖"]
 ```
 
 ---
@@ -2867,23 +2870,28 @@ func GetChatModel() model.ChatModel { return chatModel }
 
 ### Agent 运行时配置
 
-`agents.runtime_config` JSON 字段存储每个 Agent 的个性化配置，在后台管理界面（Agent 创建/编辑页）设置。沙箱执行时 Worker 读取此配置并注入容器（每次覆盖）：
+`agents.runtime_config` JSON 由绑定的运行时决定其 schema。`runtimes.config_schema` 定义了该运行时可配置的所有字段，前端根据 schema 动态生成表单：
+
+**opencode 运行时配置示例**（`runtimes.config_schema` 驱动）：
 
 ```json
 {
-  "llm": {
-    "model": "gpt-4o",
-    "max_tokens": 4096,
-    "temperature": 0.8,
-    "api_key_encrypted": "aes256:xxx"  // API Key 加密存储，Worker 解密后注入环境变量
-  },
-  "opencode": {
-    "provider": "openai",          // 后台下拉选择: openai / anthropic / google / deepseek
-    "model": "gpt-4o",            // 后台下拉选择（根据 provider 动态加载模型列表）
-    "agent": "build",             // 后台下拉选择: build（读写）| plan（只读分析）
-    "max_iterations": 20,         // 后台数字输入
-    "thinking": true              // 后台开关
-  }
+  "provider": "openai",
+  "model": "gpt-4o",
+  "agent": "build",
+  "api_key_encrypted": "aes256:xxx",
+  "max_iterations": 20,
+  "thinking": true
+}
+```
+
+**自定义运行时配置示例**（如 claude-code）：
+
+```json
+{
+  "api_key_encrypted": "aes256:xxx",
+  "model": "claude-sonnet-4-20250514",
+  "permission_mode": "acceptEdits"
 }
 ```
 
@@ -2891,15 +2899,15 @@ func GetChatModel() model.ChatModel { return chatModel }
 
 ```
 Admin UI (Agent 编辑页)
-│  opencode provider 下拉 / model 下拉 / agent 下拉 / max_iter 输入
-│  保存 → agents.runtime_config.opencode JSON
+│  ① 下拉选择运行时（opencode / claude-code / ...）
+│  ② 前端根据 runtimes.config_schema 动态渲染配置表单
+│  ③ 保存 → agents.runtime_config JSON
 │
 ▼
 Worker (沙箱启动时)
-│  ① 读取 agents.runtime_config.opencode
-│  ② 解密 api_key_encrypted → Provider 对应环境变量
-│  ③ 生成 ~/.config/opencode/config.json 写入容器
-│  ④ 执行 opencode run --model provider/model --agent build
+│  ① 读取 agents.runtime_id → runtimes.execute_template
+│  ② 读取 agents.runtime_config → 填充模板变量
+│  ③ 执行: opencode run "{prompt}" --model openai/gpt-4o --agent build
 ```
 
 ### ChatModel 调用示例
@@ -3296,28 +3304,30 @@ import (
 func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 
-    // 检查是否已有沙箱（失败重试场景）
     if cfg.ExistingContainerID != "" {
-        // 复用旧容器：仅注入新的优化提示词，保留工作区
-        injectPromptAndRun(ctx, cfg.ExistingContainerID, cfg.TaskPrompt, cfg.OpenCode)
+        injectPromptAndRun(ctx, cfg.ExistingContainerID, cfg.TaskPrompt, cfg.Runtime)
         return cfg.ExistingContainerID, nil
     }
 
-    // ... 创建新容器（首次执行）
+    // 根据运行时选择镜像
+    image := cfg.Runtime.DockerImage       // 来自 runtimes.docker_image
+
     resp, _ := cli.ContainerCreate(ctx, &container.Config{
-        Image: "anserflow/sandbox:latest",
+        Image: image,
         Env:   buildEnvVars(cfg),
     }, &container.HostConfig{
         Memory:     512 * 1024 * 1024,
         NanoCPUs:   2 * 1e9,
-        AutoRemove: false,  // 不自动销毁，由 Worker 在 done 时显式删除
+        AutoRemove: false,
     }, nil, nil, "")
 
     cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
-    injectOpenCodeConfig(ctx, resp.ID, cfg.OpenCode)
-    execInContainer(ctx, resp.ID,
-        "opencode run \"$(cat /tmp/task.md)\" --model ...",
-    )
+
+    // 注入运行时配置 + 执行
+    injectRuntimeConfig(ctx, resp.ID, cfg.Runtime)
+    // 根据 execute_template 渲染命令: "opencode run \"...\" --model ..."
+    cmd := renderTemplate(cfg.Runtime.ExecuteTemplate, cfg.Runtime.Config, cfg.TaskPrompt)
+    execInContainer(ctx, resp.ID, cmd)
     return resp.ID, nil
 }
 
@@ -3956,19 +3966,47 @@ CREATE TABLE members (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- 运行时注册表（Agent 执行引擎配置）
+CREATE TABLE runtimes (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(32) NOT NULL UNIQUE,     -- 标识: opencode / claude-code / custom
+    display_name VARCHAR(64) NOT NULL,    -- 显示名: OpenCode / Claude Code
+    description TEXT,                     -- 描述
+    docker_image VARCHAR(256) NOT NULL,   -- Docker 镜像
+    install_cmd VARCHAR(512),             -- Dockerfile 中安装命令（空=预装在镜像中）
+    execute_template TEXT NOT NULL,       -- 执行命令模板（支持变量: {model} {agent} {prompt}）
+    config_schema JSON NOT NULL,          -- 配置项 JSON Schema（前端动态生成表单）
+    default_config JSON NOT NULL,         -- 默认配置
+    is_builtin TINYINT(1) DEFAULT 0,     -- 是否系统内置（内置运行时不可删除）
+    enabled TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 预置运行时: opencode
+INSERT INTO runtimes (name, display_name, description, docker_image, install_cmd, execute_template, config_schema, default_config, is_builtin) VALUES
+('opencode', 'OpenCode', '开源 AI 编码代理，TypeScript，160k+ Stars',
+ 'ghcr.io/anserflow/sandbox:latest',
+ 'npm install -g opencode-ai@latest',
+ 'opencode run "{prompt}" --model {provider}/{model} --agent {agent} --dangerously-skip-permissions',
+ '{"type":"object","properties":{"provider":{"type":"string","enum":["openai","anthropic","google","deepseek"]},"model":{"type":"string"},"agent":{"type":"string","enum":["build","plan"]},"api_key_encrypted":{"type":"string"},"max_iterations":{"type":"number","default":20},"thinking":{"type":"boolean","default":true}}}',
+ '{"provider":"openai","model":"gpt-4o","agent":"build","max_iterations":20,"thinking":true}',
+ 1);
+
 -- Agent 定义
 CREATE TABLE agents (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     org_id BIGINT NOT NULL,
     name VARCHAR(64) NOT NULL,
-    role_label VARCHAR(64),            -- CEO / CTO / 前端...
+    role_label VARCHAR(64),            -- 用户自定义角色标签
     system_prompt TEXT NOT NULL,       -- Agent 人设
-    runtime_type VARCHAR(32) DEFAULT 'opencode',
-    runtime_config JSON,               -- API Key、模型等
+    runtime_id BIGINT NOT NULL DEFAULT 1,  -- 绑定运行时（默认=opencode）
+    runtime_config JSON,               -- 覆盖运行时默认配置（API Key、模型等）
     enabled TINYINT(1) DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (org_id) REFERENCES organizations(id)
+    FOREIGN KEY (org_id) REFERENCES organizations(id),
+    FOREIGN KEY (runtime_id) REFERENCES runtimes(id)
 );
 
 -- Agent 执行日志（org_id 为冗余设计，避免跨表 JOIN agents 读取，便于按组织聚合统计）
@@ -4432,7 +4470,9 @@ func SendInviteEmail(to string, inviteLink string) error {
 │
 ├── /admin                                 系统管理（🔒 🔐 super_admin only）
 │   ├── /settings                           GET/PUT → 全局系统配置（按 section 读写）
-│   └── /settings/{section}                 GET/PUT → section = eino/auth/smtp/sandbox/queue/upgrade
+│   ├── /settings/{section}                 GET/PUT → section = eino/auth/smtp/sandbox/queue/upgrade
+│   └── /runtimes                           GET/POST → 运行时列表 / 注册新运行时
+│       └── /:runtime_id                    GET/PUT/DELETE → 运行时详情/更新/删除（内置不可删）
 │
 ├── /notifications                         通知模块（🔒）
 │   ├── /                                  GET  → 通知列表（分页）
@@ -4767,7 +4807,8 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
     ├── #smtp                  邮件服务
     ├── #sandbox               Docker 沙箱
     ├── #queue                 Asynq 任务队列
-    └── #upgrade               自动更新
+    ├── #upgrade               自动更新
+    └── #runtimes              运行时管理（注册/编辑/启停）
 ```
 
 公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接和桌面端 deep link 最终都落到该页面。
