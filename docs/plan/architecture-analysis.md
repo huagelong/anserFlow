@@ -2949,6 +2949,46 @@ var adminFiles embed.FS
 
 **消息持久化**：所有 `message` / `system` / `annotation` / `backlog` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
 
+**Hub 消息路由 — Agent 编排判断**：
+
+Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，群聊和双人聊共享同一套判断逻辑：
+
+```go
+func (h *Hub) OnMessage(msg *Message) {
+    group := h.groupRepo.FindByID(msg.GroupID)
+
+    // 持久化 + 广播（所有类型都需要）
+    h.persistAndBroadcast(msg)
+
+    if group.HasAgentMember() {
+        // 有 Agent 成员：触发 Eino 编排 + 指令处理
+        // 适用：群聊含 Agent、双人聊（人+Agent）
+        h.commandHandler.OnMessage(msg)    // /backlog /new 等指令
+        h.orchestrator.OnMessage(msg)      // Agent 编排
+    } else {
+        // 无 Agent 成员：纯自然人聊天，不触发 Eino
+        // 适用：群聊无 Agent、双人聊（人+人）
+        // 仅通知未连接该会话 WS 的离线成员
+        h.notifyOfflineMembers(msg)
+    }
+}
+```
+
+> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。
+
+**Agent 编排判断规则**：
+
+`HasAgentMember()` 是决定是否触发 Eino 编排的唯一条件，与 `group.type` 无关：
+
+| 约束 | 说明 |
+|------|------|
+| `HasAgentMember()` 为唯一判断依据 | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
+| 无 Agent 时不触发 `MentionResolver` | 群聊无 Agent 时同样跳过，双人聊天然无 @场景 |
+| 无 Agent 时不支持 `/backlog` | CommandHandler 检测到无 Agent 成员时返回提示"需要 Agent 参与才能使用此功能"，群聊和双人聊一致 |
+| 有 Agent 时 `/backlog` 可用 | 与原有群聊行为一致，CommandHandler 正常处理 |
+| `/new` 在所有模式下均可用 | 会话上下文隔离对所有场景都有意义 |
+| direct 成员不可变更 | Handler 层对 direct 类型返回 400（group 类型不受此限制） |
+
 **Redis 消息缓存**（断线重连恢复）：
 
 断线重连时客户端通过 `seq` 号请求遗漏消息。为减少 MySQL 查询压力，在 Redis 中维护每个群组的最近消息滑动窗口：
@@ -3245,6 +3285,22 @@ func (s *IssueService) TransitionToTodo(ctx context.Context, issueID uint) error
 │  (eino-discuss/eino-backlog/eino-optimizer)│
 └──────────────────────────────────────────┘
 ```
+
+**Agent 编排通用规则（群聊 + 双人聊）**：
+
+Hub 路由层统一根据 `HasAgentMember()` 决定是否调用 Agent 组件，不再区分 `group.type`：
+
+| 场景 | GroupOrchestrator | CommandHandler | MentionResolver | 说明 |
+|------|-------------------|----------------|-----------------|------|
+| 群聊（含 Agent） | ✅ 调用 | ✅ /backlog /new 可用 | ✅ 调用 | 原有群聊行为不变 |
+| 群聊（无 Agent） | ❌ 不调用 | ✅ 仅 /new 可用 | ❌ 不调用 | 纯自然人聊天，不触发 Eino |
+| 双人聊（人+Agent） | ✅ 调用 | ✅ /backlog /new 可用 | ❌ 不调用 | Agent 自动参与，与群聊含 Agent 一致 |
+| 双人聊（人+人） | ❌ 不调用 | ✅ 仅 /new 可用 | ❌ 不调用 | 纯自然人聊天，不触发 Eino |
+
+以下组件**零修改**，Hub 层通过 `HasAgentMember()` 控制调用入口：
+- `GroupOrchestrator.InvokeAgent` — 有 Agent 的群聊和双人聊直接复用
+- `CommandHandler` — Hub 判断后调用，无 Agent 时 /backlog 返回提示
+- `ToolRegistry` — Agent Tool（create_issue / send_message 等）在所有含 Agent 的会话中同样适用
 
 ### Eino 初始化与配置
 
@@ -4841,6 +4897,8 @@ m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && regexMatch(r.act, p.act)
 | `skill` | `read` / `list` | ✅ | ✅ | ✅ |
 | `group` | `create` / `manage` | ✅ | ✅ | ❌ |
 | `group` | `read` / `send_message` | ✅ | ✅ | ✅ |
+| `direct` | `create` | ✅ | ✅ | ✅ |
+| `direct` | `read` / `send_message` | ✅ | ✅ | ✅ |
 | `webhook` | `manage` | ✅ | ✅ | ❌ |
 | `settings` | `manage` | ✅ | ✅ | ❌ |
 
@@ -4897,6 +4955,12 @@ INSERT INTO casbin_rules (ptype, v0, v1, v2) VALUES
     ('p', 'org_role:member',  'agent:*',  '(read)'),
     ('p', 'org_role:member',  'skill:*',  '(read)'),
     ('p', 'org_role:member',  'group:*',  '(read)|(send_message)');
+
+-- direct message 权限（所有组织成员均可发起双人聊）
+INSERT INTO casbin_rules (ptype, v0, v1, v2) VALUES
+    ('p', 'org_role:owner',  'direct', '(create)|(read)|(send_message)'),
+    ('p', 'org_role:admin',  'direct', '(create)|(read)|(send_message)'),
+    ('p', 'org_role:member', 'direct', '(create)|(read)|(send_message)');
 
 -- 角色继承：admin 继承 member 权限，owner 继承 admin 权限
 INSERT INTO casbin_rules (ptype, v0, v1) VALUES
@@ -5205,8 +5269,9 @@ erDiagram
     Organization ||--o{ AuditLog : "审计范围"
     Organization ||--o{ Notification : "通知范围"
     Project ||--o{ Issue : "包含"
-    Project ||--o{ Group : "关联"
+    Project ||--o{ Group : "关联（仅 group 类型）"
     Project ||--o{ Todo : "包含"
+    Organization ||--o{ Group : "关联（direct 类型不绑定项目）"
     Issue ||--o{ Issue : "父子关系"
     Issue ||--o{ IssueAssignee : "分配"
     Issue ||--o{ IssueTimeline : "时间线"
@@ -5214,6 +5279,7 @@ erDiagram
     Group ||--o{ GroupMember : "包含"
     Group ||--o{ Message : "包含"
     Group ||--o{ AgentLog : "产生日志"
+    Group ||--o{ GroupReadState : "已读状态"
     Agent ||--o{ GroupMember : "参与"
     Agent ||--o{ AgentSkill : "绑定"
     Agent ||--o{ IssueAssignee : "被分配"
@@ -5599,7 +5665,20 @@ CREATE TABLE user_settings (
     notify_mention TINYINT(1) DEFAULT 1,
     notify_invite TINYINT(1) DEFAULT 1,
     notify_email TINYINT(1) DEFAULT 1,  -- 同时发送邮件通知
+    notify_dm TINYINT(1) DEFAULT 1,     -- 双人聊新消息通知
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 会话已读状态（群聊和双人聊均适用）
+CREATE TABLE group_read_state (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    group_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    last_read_message_id BIGINT NOT NULL DEFAULT 0,   -- 已读到的最新 message ID
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY (group_id, user_id),
+    FOREIGN KEY (group_id) REFERENCES groups(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
@@ -5808,6 +5887,12 @@ func (s *Sender) SendAgentNotification(
 │   │       ├── /                          GET  → 群组列表
 │   │       └── /                          POST → 🔐 创建群组
 │   │
+│   ├── /:org_id/direct-messages          双人聊（🔒）
+│   │   └── /                              POST → 🔒 发起双人聊（幂等，人+人或人+Agent）
+│   │
+│   ├── /:org_id/conversations            会话列表（🔒）
+│   │   └── /                              GET  → 混合群聊+双人聊列表（按最后消息时间倒序）
+│   │
 │   ├── /:org_id/agents                   Agent 管理（🔒）
 │   │   ├── /                              GET  → Agent 列表
 │   │   ├── /                              POST → 🔐 创建 Agent
@@ -5831,13 +5916,14 @@ func (s *Sender) SendAgentNotification(
 │       ├── /:skill_id/enable              PUT  → 🔐 启用/禁用
 │       └── /import/zip                    POST → 🔐 ZIP 导入
 │
-├── /groups/:group_id                      群组模块（🔒）
-│   ├── /                                  GET  → 群组信息
+├── /groups/:group_id                      群组/会话模块（🔒）
+│   ├── /                                  GET  → 群组/会话信息（兼容 group 和 direct 类型）
 │   ├── /members                           GET  → 成员列表
-│   ├── /members                           POST → 🔐 添加成员
-│   ├── /members/:id                       DELETE → 🔐 移除成员
+│   ├── /members                           POST → 🔐 添加成员（direct 类型返回 400）
+│   ├── /members/:id                       DELETE → 🔐 移除成员（direct 类型返回 400）
 │   ├── /messages                          GET  → 历史消息（分页）
-│   └── /messages                          POST → 发送消息
+│   ├── /messages                          POST → 发送消息
+│   └── /read-state                        PUT  → 🔒 标记已读（更新 last_read_message_id）
 │
 ├── /user                                  当前用户模块（🔒）
 │   └── /settings                          GET/PUT → 个人偏好设置（user_settings 表）
@@ -5862,14 +5948,90 @@ func (s *Sender) SendAgentNotification(
 │   └── /github                             POST → GitHub Webhook（PR merge → Issue→done）
 │
 └── /ws                                    WebSocket（认证参数化）
-    └── ?token=xxx&group_id=42             → 群聊连接
+    └── ?token=xxx&group_id=42             → 群聊/双人聊连接（兼容 group 和 direct 类型）
 
 /invite/:token [公开]                      GET  → 查看邀请详情 → 注册/登录后接受
 ```
 
 > **图例**：无标注 = 公开端点 | `🔒` = 需 JWT 认证 | `🔐` = 需 JWT + Casbin RBAC | `[远期]` = Phase 2 实施
 
-### 9.5.1 Dashboard 聚合 API
+### 9.5.1 双人聊 API 详细说明
+
+**POST /api/orgs/:org_id/direct-messages** — 发起双人聊（幂等）
+
+请求体（二选一）：
+
+```json
+// 人+人
+{ "target_user_id": 42 }
+
+// 人+Agent
+{ "target_agent_id": 5 }
+```
+
+响应体（已存在返回 200，新创建返回 201）：
+
+```json
+{
+  "id": 99,
+  "type": "direct",
+  "org_id": 1,
+  "name": "李四",
+  "created_by": 7,
+  "created_at": "2026-05-15T10:00:00Z",
+  "members": [
+    {"user_id": 7, "name": "张三", "avatar_url": "..."},
+    {"user_id": 42, "name": "李四", "avatar_url": "..."}
+  ]
+}
+```
+
+校验规则：`target_user_id` 不能是自己；目标必须属于同一组织；调用 `GetOrCreateDirect` / `GetOrCreateDirectWithAgent` 幂等返回。
+
+去重查询（应用层）：
+
+```sql
+-- 人+人去重
+SELECT g.id FROM groups g
+JOIN group_members gm1 ON g.id = gm1.group_id AND gm1.user_id = :userID AND gm1.agent_id IS NULL
+JOIN group_members gm2 ON g.id = gm2.group_id AND gm2.user_id = :targetUserID AND gm2.agent_id IS NULL
+WHERE g.type = 'direct' AND g.org_id = :orgID LIMIT 1;
+
+-- 人+Agent 去重
+SELECT g.id FROM groups g
+JOIN group_members gm1 ON g.id = gm1.group_id AND gm1.user_id = :userID AND gm1.agent_id IS NULL
+JOIN group_members gm2 ON g.id = gm2.group_id AND gm2.user_id IS NULL AND gm2.agent_id = :agentID
+WHERE g.type = 'direct' AND g.org_id = :orgID LIMIT 1;
+```
+
+**GET /api/orgs/:org_id/conversations** — 会话列表
+
+混合返回群聊和双人聊，按最后消息时间倒序排列。响应体：
+
+```json
+[
+  {
+    "id": 99, "type": "direct", "name": "李四", "avatar_url": "...",
+    "last_message": { "content": "好的", "sender_name": "李四", "created_at": "..." },
+    "unread_count": 2
+  },
+  {
+    "id": 5, "type": "group", "name": "登录功能讨论组", "project_id": 3,
+    "last_message": { "content": "前端预计 4h", "sender_name": "前端Agent", "created_at": "..." },
+    "unread_count": 0
+  }
+]
+```
+
+direct 类型的 `name` 取对方昵称（人+人）或 Agent 名称（人+Agent），`avatar_url` 同理。`unread_count` 通过 `group_read_state.last_read_message_id` 与 `messages` 表计算。
+
+**PUT /api/groups/:group_id/read-state** — 标记已读
+
+请求体：`{ "last_read_message_id": 12345 }`
+
+更新 `group_read_state` 表，用于计算未读消息数。
+
+### 9.5.2 Dashboard 聚合 API
 
 `GET /api/orgs/:org_id/dashboard` 返回仪表盘所需的聚合数据：
 
@@ -6090,6 +6252,63 @@ func (s *NotificationService) NotifyMention(
 }
 ```
 
+#### NotifyOfflineMembers — 无 Agent 会话离线成员通知
+
+当会话**无 Agent 成员**时（人+人 双人聊、无 Agent 群聊），对**未连接**该会话 WebSocket 的成员推送通知。有 Agent 的会话由 Eino 自动响应，不需要此通知。
+
+```go
+func (s *NotificationService) NotifyOfflineMembers(
+    ctx context.Context,
+    orgID uint,
+    senderID uint,
+    messageText string,
+    groupID uint,
+) {
+    group := s.groupRepo.FindByID(groupID)
+    // 获取会话中所有人类成员（排除 sender）
+    members := s.groupRepo.FindHumanMembers(groupID)
+    for _, member := range members {
+        if member.UserID == senderID {
+            continue
+        }
+        // 已在线且正在该会话页面 → 不推送
+        if s.ws.IsUserConnectedToGroup(member.UserID, groupID) {
+            continue
+        }
+
+        senderName := s.userRepo.FindByID(senderID).Name
+        title := fmt.Sprintf("%s 发来一条消息", senderName)
+        if group.Type == "group" {
+            title = fmt.Sprintf("[%s] %s", group.Name, senderName)
+        }
+
+        notif := &model.Notification{
+            OrgID:        orgID,
+            UserID:       member.UserID,
+            Type:         "dm_message",
+            Title:        title,
+            Body:         truncate(messageText, 100),
+            ResourceType: "group",
+            ResourceID:   groupID,
+        }
+        s.repo.Create(ctx, notif)
+        s.ws.SendToUser(member.UserID, notif)
+
+        if s.shouldEmail(member.UserID, "notify_dm") {
+            s.smtp.SendDMNotification(member.UserID, senderName, messageText)
+        }
+
+        // 桌面端原生通知
+        s.ws.SendToUser(member.UserID, map[string]interface{}{
+            "type":   "native_notification",
+            "title":  fmt.Sprintf("💬 %s", title),
+            "body":   truncate(messageText, 100),
+            "channel": "dm",
+        })
+    }
+}
+```
+
 #### NotifyInvite — 组织邀请通知
 
 ```go
@@ -6133,6 +6352,7 @@ func (s *NotificationService) NotifyInvite(
 | Agent 执行完成 | `agent_completed` | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
 | Agent 执行失败 | `agent_completed` | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
 | 群聊 @提及 | `mention` | ✅ | ✅ | ✅ (受 notify_mention 控制) | `MessageService.Send` (解析 @) |
+| 无 Agent 会话新消息（人+人 双人聊 / 无 Agent 群聊） | `dm_message` | ✅ | ✅ | ✅ (受 notify_dm 控制) | `Hub.OnMessage` `notifyOfflineMembers` 分支（仅未连接该会话 WS 的成员推送）|
 | 组织邀请 (邮箱) | `invite` | ✅ | ❌ | ✅ (直接发送，不受偏好控制) | `InviteService.Create` |
 | PR 已合并 (Issue done) | `issue_status_changed` | ✅ | ❌ | ✅ | `WebhookHandler.HandleGitHub` |
 | PR 被拒绝 | `issue_status_changed` | ✅ | ❌ | ✅ | `WebhookHandler.HandleGitHub` |
@@ -6515,7 +6735,9 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
 ├── /projects                 项目管理
 │   ├── /create               创建 + GitHub 关联(HTTP/SSH)
 │   └── /[id]/issues          Issue 状态Tab列表
-├── /groups                   群组
+├── /conversations            会话（统一入口，混合群聊+双人聊）
+│   └── /[id]/chat            聊天界面（兼容 group 和 direct 类型）
+├── /groups                   群组管理（仅 group 类型 CRUD）
 │   └── /[id]/chat            群聊界面
 └── /settings                 全局系统设置
     ├── #general               基本信息（JWT过期/邀请默认值）
@@ -6538,6 +6760,33 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 - **核心路由**：`/dashboard`、`/projects/:id`、`/chat`、`/invite/:token`
 - **原生能力**：系统通知、文件系统、Git 代理（Tauri Command）
 - **分阶段交付**：先桌面端，移动端作为 Phase 2
+
+**`/chat` IM 两栏布局**：
+
+```
+/chat                          ← 主聊天页面（两栏布局）
+  左侧：会话列表（side panel）
+    ├── 搜索/新建双人聊（支持搜索用户和 Agent）
+    ├── 双人聊列表项
+    │     - 人+人：对方用户头像 + 昵称 + 最后消息 + 未读数
+    │     - 人+Agent：Agent 头像 + 名称 + Agent 标识 + 最后消息 + 未读数
+    ├── 群聊列表项（群名 + 最后消息 + 未读数）
+    │     - 按最后消息时间统一排序（双人聊和群聊混合排列）
+    │
+  右侧：聊天窗口
+    /chat/:group_id            ← 选中会话后展示聊天内容
+      - 顶部：会话标题（direct: 对方昵称/Agent名称；group: 群名）
+      - 中部：消息列表（复用现有 MessageList 组件）
+      - 底部：输入框（条件渲染，见下方）
+```
+
+**direct 类型下的 UI 条件渲染**：
+
+| 场景 | 隐藏 | 显示 |
+|------|------|------|
+| 人+人（direct, 无 Agent） | @Agent 选择器、/backlog 按钮、Agent 成员头像、成员管理面板 | 纯文本输入框、/new 按钮 |
+| 人+Agent（direct, 有 Agent） | @Agent 选择器（只有 1 个 Agent，无需 @）、成员管理面板 | /backlog 按钮、/new 按钮、Agent 头像标识、Agent 回复消息 |
+| 群聊（group） | — | 全部功能 |
 
 ---
 
