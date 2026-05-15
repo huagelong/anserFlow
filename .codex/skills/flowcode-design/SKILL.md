@@ -1,11 +1,13 @@
 ---
-name: flowcode_design
+name: flowcode-design
 description: 使用 Pencil MCP 在画布上进行 UI 设计、原型创建和设计系统管理。Use when the user asks to create UI designs, mockups, dashboards, landing pages, wireframes, design systems, or any visual design task using Pencil. Triggers on mentions of "设计"、"UI"、"原型"、"画布"、"dashboard"、"landing page"、"wireframe"、"设计系统"、"Pencil"。
 ---
 
 # Pencil MCP 设计技能
 
 通过 Pencil MCP 服务器在画布上创建和修改 UI 设计。所有操作通过 `CallMcpTool` 调用 Pencil MCP 的工具完成。
+
+核心原则：**自动运行，自主找方案，实在不能运行就停止**。遇到问题时先自行分析并尝试解决，不等待用户介入；多个方案可选时，选择最优方案直接执行；只有确认无法继续时才停止任务并说明原因。
 
 ## 工具调用方式
 

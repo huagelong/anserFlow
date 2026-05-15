@@ -1,19 +1,22 @@
 ---
-name: flowcode_todo
-description: 从 wiki 索引生成 vibe coding 任务计划，并在需要时先调用 flowcode_wiki 生成或更新 wiki。Use when Codex 需要根据现有 wiki 生成 todos，或用户给的是 Markdown 文档而目标是“先整理成 wiki 再生成任务计划”的综合流程；适用于要求任务由简单到复杂、每个任务链接到对应 wiki 小文档、且输入输出路径不能写死的场景。
+name: flowcode-todo
+description: 从 wiki 索引生成 vibe coding 任务计划，并在需要时先调用 flowcode_wiki 生成或更新 wiki。如果涉及页面/UI 设计，在调用 flowcode_wiki 前先调用 flowcode_ui 定义页面设计规范。Use when Codex 需要根据现有 wiki 生成 todos，或用户给的是 Markdown 文档而目标是"先整理成 wiki 再生成任务计划"的综合流程；适用于要求任务由简单到复杂、每个任务链接到对应 wiki 小文档、且输入输出路径不能写死的场景。
 ---
 
 # Docs Wiki Todo Planner
 
 ## 使用目标
 
-基于 wiki 总目录生成可执行的 vibe coding 任务计划；如果输入还是原始 Markdown 文档，则先调用 `flowcode_wiki` 生成或更新 wiki，再继续生成任务计划。
+基于 wiki 总目录生成可执行的 vibe coding 任务计划；如果输入还是原始 Markdown 文档，则先调用 `flowcode_wiki` 生成或更新 wiki，再继续生成任务计划。如果输入涉及页面/UI 设计，在调用 `flowcode_wiki` 之前先调用 `flowcode_ui` 生成页面设计规范文档，确保后续 wiki 和任务计划中包含明确的设计参考。
 
-支持三种模式：
+核心原则：**自动运行，自主找方案，实在不能运行就停止**。遇到问题时先自行分析并尝试解决，不等待用户介入；多个方案可选时，选择最优方案直接执行；只有确认无法继续时才停止任务并说明原因。
+
+支持四种模式：
 
 - **仅生成 wiki**：直接调用 `flowcode_wiki`，本 Skill 不重复实现 wiki 生成细则。
 - **生成 todo list**：从 wiki 索引生成任务计划文档。
 - **综合流程**：先调用 `flowcode_wiki` 生成 wiki，再基于刚生成的 wiki 生成任务计划。
+- **含 UI 设计的综合流程**：先调用 `flowcode_ui` 定义页面设计规范，再调用 `flowcode_wiki` 生成 wiki，最后生成任务计划。
 
 必须遵守：
 
@@ -40,7 +43,7 @@ todoOutput      任务计划输出文件
 1. 优先使用用户明确给出的路径。
 2. 如果用户只给出 `wiki/README.md`，则 `wikiDir` 是其父目录，`wikiIndex` 是该文件。
 3. 如果用户只说"根据 wiki 生成 todo"，优先查找当前项目中已有的 wiki 索引，例如 `<wikiDir>/README.md`；不要假设只有根目录 `wiki/README.md`。
-4. 如果用户只说"根据 docs 生成 wiki"，优先查找当前项目中明显的 Markdown 文档目录，例如 `docs/`；如果存在多个候选且无法判断，先询问用户。
+4. 如果用户只说"根据 docs 生成 wiki"，优先查找当前项目中明显的 Markdown 文档目录，例如 `docs/`；如果存在多个候选且无法判断，按以下决策顺序处理：分析各候选目录的上下文与当前任务相关性，推断最优候选并执行；无法推断则停止任务并说明原因。
 5. 如果用户要求输出到 `todos.md`，按要求写入；否则将任务计划写入用户指定的 `todoOutput`，没有指定时才默认使用项目根目录的 `todos.md`。
 
 在汇报中说明实际采用的路径。
@@ -52,13 +55,38 @@ todoOutput      任务计划输出文件
 1. 用户只要求生成或更新 wiki。
    - 直接使用 `flowcode_wiki`。
    - 不要在本 Skill 内重复描述或实现 wiki 拆分、导航、关系图谱和校验细节。
-2. 用户给了现成 `wikiIndex` 或明确说“根据 wiki 生成 todo”。
-   - 直接进入“生成 todo list 流程”。
-3. 用户给的是原始 Markdown 文档，但目标是任务计划。
+2. 用户给了现成 `wikiIndex` 或明确说"根据 wiki 生成 todo"。
+   - 直接进入"生成 todo list 流程"。
+3. 用户给的是原始 Markdown 文档，目标是任务计划，且文档内容涉及页面设计、UI 界面、交互设计、前端页面等功能。
+   - 先调用 `flowcode_ui` 生成页面设计规范文档（UI 设计师文档）。
+   - `flowcode_ui` 的输入为 `sourceDocsDir`，输出为独立的 UI 设计说明文档。
+   - 再调用 `flowcode_wiki` 生成或更新 wiki（wiki 内容会引用 UI 设计说明文档作为设计参考）。
+   - 最后读取生成后的 `wikiIndex`，进入"生成 todo list 流程"。
+4. 用户给的是原始 Markdown 文档，目标是任务计划，但不涉及页面/UI 设计。
    - 先使用 `flowcode_wiki` 生成或更新 wiki。
-   - 再读取生成后的 `wikiIndex`，进入“生成 todo list 流程”。
+   - 再读取生成后的 `wikiIndex`，进入"生成 todo list 流程"。
 
-如果需要调用 `flowcode_wiki`，路径沿用本 Skill 已确定的 `sourceDocsDir`、`wikiDir`、`wikiIndex`，不要重新发明另一套固定目录。
+### 判断是否涉及页面/UI 设计
+
+在模式路由步骤 3 中，需要判断源文档是否涉及页面设计。满足以下任一条件即视为涉及 UI 设计：
+
+- 文档中描述了具体的页面、界面、仪表盘、表单、列表等前端视图。
+- 文档中包含交互说明、页面布局、组件结构、设计稿引用等内容。
+- 文档主题是 Web 应用、移动端页面、管理后台等前端项目。
+- 用户明确提到"设计页面""UI""前端界面"等关键词。
+
+如果以上条件均无法明确判断，按以下决策顺序处理：
+
+1. 先分析源文档内容，尝试根据上下文推断是否涉及 UI 设计。
+2. 如果能推断出最优方案（涉及 UI → 走步骤 3；不涉及 → 走步骤 4），按最优方案执行。
+3. 以上均无法判断则停止任务，说明无法确定的原因。
+
+如果涉及 UI 设计：
+
+- 调用 `flowcode_ui` 时，使用与 `flowcode_wiki` 一致的 `sourceDocsDir` 作为输入。
+- `flowcode_ui` 的输出路径由用户指定或自动推断，默认放在 `wikiDir` 同级或 `wikiDir` 内的 `ui-design/` 目录下。
+- `flowcode_ui` 生成的 UI 设计说明文档会被后续 `flowcode_wiki` 作为源文档纳入 wiki 索引，确保 wiki 中包含设计参考链接。
+- 生成的 todo list 中，涉及页面的任务应引用对应的 UI 设计说明文档作为参考。
 
 ## 生成 todo list 流程
 
@@ -137,5 +165,6 @@ ROUND=3 LEVELS=... TASKS=... LINKS=... MISSING=...
 - 使用的源文档目录、wiki 目录、wiki 索引和 todo 输出文件。
 - 创建或更新了哪些文件。
 - 如果调用了 `flowcode_wiki`，说明是“直接复用 `flowcode_wiki` 完成 wiki 阶段”。
+- 如果调用了 `flowcode_ui`，说明“已先通过 `flowcode_ui` 生成页面设计规范文档”，并给出设计文档路径。
 - 校验结果，尤其是链接缺失数量。
 - 如果无法完成自动校验，明确说明原因和残余风险。
