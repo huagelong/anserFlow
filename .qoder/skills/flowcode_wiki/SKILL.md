@@ -9,6 +9,8 @@ description: Build a wiki-style knowledge base from a project's existing Markdow
 
 把项目已有 Markdown 文档整理成可检索的 wiki 知识库，方便 Codex 或其他大模型按总目录逐级检索。
 
+核心原则：**自动运行，自主找方案，实在不能运行就停止**。遇到问题时先自行分析并尝试解决，不等待用户介入；多个方案可选时，选择最优方案直接执行；只有确认无法继续时才停止任务并说明原因。
+
 必须遵守：
 
 - 只从源 Markdown 文档目录获取内容，不修改源文档原文。
@@ -30,7 +32,7 @@ wikiIndex       wiki 总目录文件（默认 wikiDir 下的 README.md）
 推断顺序：
 
 1. 优先使用用户明确给出的路径。
-2. 如果用户只说"生成 wiki"或"整理文档"，优先查找当前项目中明显的 Markdown 文档目录（如 `docs/`、`doc/`、`documentation/`）；如果存在多个候选且无法判断，先询问用户。
+2. 如果用户只说"生成 wiki"或"整理文档"，优先查找当前项目中明显的 Markdown 文档目录（如 `docs/`、`doc/`、`documentation/`）；如果存在多个候选且无法判断，按以下决策顺序处理：分析各候选目录的上下文与当前任务相关性，推断最优候选并执行；无法推断则停止任务并说明原因。
 3. 如果用户指定了输出位置，`wikiDir` 取该位置；否则默认使用项目根目录下的 `wiki/`。
 4. `wikiIndex` 默认为 `wikiDir/README.md`，除非用户指定了其他索引文件名。
 5. 如果本 Skill 的副本也在 `wikiDir` 下，生成业务 wiki 时不要覆盖或移动该 Skill 目录。

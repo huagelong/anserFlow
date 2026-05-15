@@ -5214,11 +5214,25 @@ anserflow migrate --seed=false
 
 ```
 internal/seed/
-├── 001_default_skills.sql     # 系统预置 Skill（flowcode_executor 内置不可关）+ Runtime 默认绑定
+├── 001_default_skills.sql     # 系统预置 Skill（flowcode_executor + 6个角色Skill）
 ├── 002_casbin_policies.sql    # Casbin RBAC 角色权限策略
 ├── 003_runtime_skills.sql     # 各运行时默认 Skill 绑定（opencode→flowcode_executor）
 └── 004_example_agent.sql      # 可选：示例 Agent 配置
 ```
+
+**预置角色 Skill 清单**（`001_default_skills.sql`）：
+
+| Skill 名称 | 用途 | 适用 Agent | 核心内容 |
+|-----------|------|-----------|---------|
+| `flowcode_executor` | 编码执行规范 | 所有（Runtime 默认） | 代码风格、提交规范、PR 格式 |
+| `skill-analysis` | 需求分析 | PM/CEO 角色 | 需求拆解方法、用户故事模板、优先级判定规则 |
+| `skill-tech-review` | 技术评审 | CTO/架构师角色 | 技术选型决策树、架构评审清单、安全审查要点 |
+| `skill-frontend` | 前端开发规范 | 前端角色 | 组件设计规范、状态管理约定、CSS 命名规则 |
+| `skill-backend` | 后端开发规范 | 后端角色 | API 设计规范、数据库设计约定、错误处理模式 |
+| `skill-devops` | 部署运维规范 | DevOps 角色 | CI/CD 模板、Dockerfile 规范、监控告警配置 |
+| `skill-testing` | 测试策略 | QA 角色 | 测试用例模板、覆盖率要求、E2E 测试规范 |
+
+> 以上 Skill 均为系统内置（`is_builtin=1`），自动绑定到对应 Runtime。Agent 通过组合 Skill 定义行为，System Prompt 仅需写角色人设（1-2 句话）。
 
 ---
 
