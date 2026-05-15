@@ -3285,6 +3285,113 @@ Issue 详情页的时间线面板通过 WebSocket 订阅该 Issue 的 `agent_log
 | Worker → 前端 | WebSocket | JSON 事件 `{type:"agent_log", text, ts}` | 每条 stdout |
 | opencode → Worker | Exit Code | 0=成功, 非0=失败 | 结束时 1 次 |
 
+### 7.1.2 执行控制（暂停 / 恢复 / 停止）
+
+Worker 监听 Issue 控制命令，通过 Docker API 直接操作沙箱容器：
+
+```go
+// internal/sandbox/control.go
+func (w *Worker) PauseIssue(issueID uint) error {
+    issue, _ := w.issueRepo.FindByID(issueID)
+    if issue.Status != "in_progress" {
+        return errors.New("只能暂停执行中的 Issue")
+    }
+
+    // Docker 冻结容器（进程挂起，内存保留，恢复时从断点继续）
+    w.cli.ContainerPause(ctx, issue.SandboxContainerID)
+
+    // 状态流转 + 时间线
+    w.issueRepo.UpdateStatus(issueID, "paused")
+    w.timelineRepo.Append(issueID, "system", "status_change",
+        "in_progress", "paused", "执行已暂停")
+
+    w.ws.SendToIssue(issueID, map[string]interface{}{
+        "type": "status_change",
+        "status": "paused",
+        "hint": "执行已暂停，沙箱冻结中。点击恢复继续。",
+    })
+    return nil
+}
+
+func (w *Worker) ResumeIssue(issueID uint) error {
+    issue, _ := w.issueRepo.FindByID(issueID)
+    if issue.Status != "paused" {
+        return errors.New("只能恢复已暂停的 Issue")
+    }
+
+    // Docker 解冻容器（从断点继续运行）
+    w.cli.ContainerUnpause(ctx, issue.SandboxContainerID)
+
+    w.issueRepo.UpdateStatus(issueID, "in_progress")
+    w.timelineRepo.Append(issueID, "system", "status_change",
+        "paused", "in_progress", "执行已恢复")
+
+    w.ws.SendToIssue(issueID, map[string]interface{}{
+        "type": "status_change",
+        "status": "in_progress",
+        "hint": "沙箱已解冻，opencode 继续执行。",
+    })
+    return nil
+}
+
+func (w *Worker) StopIssue(issueID uint) error {
+    issue, _ := w.issueRepo.FindByID(issueID)
+    if issue.Status != "in_progress" && issue.Status != "paused" {
+        return errors.New("只能停止执行中或已暂停的 Issue")
+    }
+
+    // Docker 终止容器 + 销毁
+    timeout := 10
+    w.cli.ContainerStop(ctx, issue.SandboxContainerID, container.StopOptions{Timeout: &timeout})
+    w.cli.ContainerRemove(ctx, issue.SandboxContainerID, container.RemoveOptions{Force: true})
+
+    // 回到 backlog，可重新编辑后再执行
+    w.issueRepo.UpdateStatus(issueID, "backlog")
+    w.issueRepo.ClearContainerID(issueID)
+    w.timelineRepo.Append(issueID, "system", "status_change",
+        issue.Status, "backlog", "执行已停止，容器已销毁")
+
+    w.ws.SendToIssue(issueID, map[string]interface{}{
+        "type": "status_change",
+        "status": "backlog",
+        "hint": "执行已停止。可编辑 Issue 后重新转为 todo 启动。",
+    })
+    return nil
+}
+```
+
+**前端控制按钮**（仅在 `in_progress` / `paused` 状态下显示）：
+
+```
+┌─ Issue #1 (in_progress) ────────────────────────────────────────┐
+│  [⏸ 暂停]  [⏹ 停止]                                             │
+│                                                                  │
+│  时间线:                                                         │
+│   12:02  agent   正在生成 src/login.tsx                           │
+│   12:03  agent   正在生成 src/auth.ts                             │
+│   ───────────────────────────────────────────                    │
+│   [追加提示词: ________________________] [发送并重新执行]          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+暂停后按钮变为：
+
+```
+┌─ Issue #1 (paused) ────────────────────────────────────────────┐
+│  [▶ 恢复]  [⏹ 停止]                                             │
+│                                                                  │
+│  时间线:                                                         │
+│   12:02  agent   正在生成 src/login.tsx                           │
+│   12:05  system  执行已暂停（沙箱冻结中）                           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+| 操作 | Docker API | 沙箱状态 | Issue 状态 | 数据保留 |
+|------|-----------|---------|-----------|---------|
+| **暂停** | `ContainerPause` | 进程冻结，内存保留 | `paused` | ✅ 全部保留 |
+| **恢复** | `ContainerUnpause` | 从断点继续 | `in_progress` | ✅ 继续 |
+| **停止** | `ContainerStop` + `Remove` | 容器销毁 | `backlog` | ❌ 沙箱清空，MySQL 数据保留 |
+
 ### 7.2 安全策略
 
 | 策略 | 配置 |
@@ -4192,7 +4299,7 @@ CREATE TABLE issues (
     parent_id BIGINT NULL,              -- 子 Issue
     title VARCHAR(256) NOT NULL,
     description TEXT,
-    status ENUM('backlog','todo','in_progress','in_review','done') DEFAULT 'backlog',
+    status ENUM('backlog','todo','in_progress','paused','in_review','done') DEFAULT 'backlog',
     priority ENUM('p0','p1','p2','p3','p4') DEFAULT 'p2',
     source_group_id BIGINT,             -- 来源群聊
     source_message_id BIGINT,           -- 来源消息
@@ -4531,7 +4638,10 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   │   │   ├── /:issue_id/children        GET  → 子 Issue 列表
 │   │   │   ├── /batch-status                PUT  → 🔒 批量状态变更（backlog→todo / todo→backlog）
 │   │   │   ├── /:issue_id/timeline         GET  → 状态时间线（含人工提示词历史）
-│   │   │   └── /:issue_id/prompt           POST → 🔒 追加人工提示词（重新触发 opencode 执行）
+│   │   │   ├── /:issue_id/prompt           POST → 🔒 追加人工提示词（重新触发执行）
+│   │   │   ├── /:issue_id/pause            POST → 🔒 暂停执行（冻结沙箱）
+│   │   │   ├── /:issue_id/resume           POST → 🔒 恢复执行（解冻沙箱）
+│   │   │   └── /:issue_id/stop             POST → 🔒 停止执行（终止沙箱 → backlog）
 │   │   │
 │   │   ├── /:project_id/todos            Todo 管理 [远期]
 │   │   │   ├── /                          GET  → Todo 列表
@@ -4778,6 +4888,24 @@ sequenceDiagram
     W->>D: 监控日志输出 → 实时推送 Issue 时间线
     W->>WS: 推送 "编码中..." / "运行测试..."
 
+    Note over H,D: ③.5 执行控制（暂停/恢复/停止）
+    H->>ISS: 点击 [暂停]
+    ISS->>W: ContainerPause
+    W->>D: 冻结容器（内存保留）
+    ISS->>ISS: Issue → paused + 时间线
+    ISS->>WS: 推送 "执行已暂停"
+    H->>ISS: 点击 [恢复]
+    ISS->>W: ContainerUnpause
+    W->>D: 解冻容器
+    ISS->>ISS: Issue → in_progress + 时间线
+    alt 点击 [停止]
+        H->>ISS: 点击 [停止]
+        ISS->>W: ContainerStop + Remove
+        W->>D: 终止 + 销毁容器
+        ISS->>ISS: Issue → backlog + 时间线
+        ISS->>WS: 推送 "执行已停止"
+    end
+
     Note over W,GH: ④ opencode 自检查 → PR
     W->>D: opencode 返回执行结果
     W->>W: 检查结果（代码完整性/lint/test 通过）
@@ -4811,9 +4939,13 @@ sequenceDiagram
 | 状态 | 触发方式 | 下一状态 | 触发条件 |
 |------|---------|---------|---------|
 | `backlog` | `/backlog` 指令自动创建 | `todo` | **人工点击 [转为 todo] 按钮** |
-| `todo` | 人工从 backlog 拖动 | `in_progress` | 系统自动调度（按优先级+排队顺序） |
+| `todo` | 人工从 backlog 转为 todo | `in_progress` | 系统自动调度（按优先级+排队顺序） |
 | `in_progress` | 系统自动 | `in_review` | opencode 检查通过 + PR 创建成功 |
-| `in_progress` | 系统自动 | `todo` | opencode 检查失败 → 保留沙箱 → 人工追加提示词 → Eino 优化 → 复用沙箱重新执行 |
+| `in_progress` | 系统自动 | `paused` | 人工点击 [暂停] |
+| `in_progress` | 系统自动 | `backlog` | 人工点击 [停止]（终止容器 + 销毁沙箱） |
+| `paused` | 人工暂停 | `in_progress` | 人工点击 [恢复]（解冻沙箱，从断点继续） |
+| `paused` | 人工暂停 | `backlog` | 人工点击 [停止]（终止容器 + 销毁沙箱） |
+| `in_progress` | 系统自动 / 人工恢复 | `todo` | opencode 检查失败 → 保留沙箱 → 等待人工提示词 |
 | `in_review` | opencode 检查通过后 | `done` | GitHub Webhook 通知 PR 已 merge → 销毁沙箱 |
 | `in_review` | opencode 检查通过后 | `todo` | PR 被拒绝 → 人工追加提示词 → Eino 优化 → 复用沙箱重新执行 |
 
