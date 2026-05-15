@@ -82,13 +82,13 @@
 | **Eino** | 字节跳动开源、12k+ Stars、Graph/Workflow 多 Agent 编排、流式原生支持、中文社区强 |
 | **Docker SDK** | Agent 编码沙箱隔离，资源限制、自动清理 |
 | **TanStack Query** | 服务端状态管理，自动缓存/重取/去重，SPA 模式完美兼容 |
-| **Zustand** | 极轻量客户端状态管理（侧栏、弹窗、看板拖拽状态） |
+| **Zustand** | 极轻量客户端状态管理（侧栏、弹窗、Tab 切换状态） |
 | **React Hook Form + Zod** | 高性能表单 + 声明式校验，与 shadcn/ui 深度集成 |
 | **TanStack Table** | 无头表格库，Issue 列表/Agent 列表/成员表格 |
 | **Recharts** | 图表库，Dashboard 数据可视化 |
 | **next-themes** | 暗色/亮色主题切换，与 Tailwind CSS 原生配合 |
 | **next-intl** | Next.js App Router 原生 i18n、静态导出兼容、TypeScript 类型安全、ICU 消息格式 |
-| **Framer Motion** | 动效库，页面过渡、看板拖拽动画 |
+| **Framer Motion** | 动效库，页面过渡、Issue Tab 展开/折叠动画 |
 | **Sonner** | 轻量 Toast 通知，操作反馈 |
 | **date-fns** | 日期处理，轻量 tree-shakable |
 | **lucide-react** | 图标库，与 shadcn/ui 配套 |
@@ -292,7 +292,7 @@ export function useCreateIssue() {
 
 #### Zustand — 客户端状态管理
 
-`zustand` 管理纯客户端状态：侧栏展开/收起、弹窗开关、看板拖拽状态、WebSocket 连接状态等。极简 API，无 Provider 包裹：
+`zustand` 管理纯客户端状态：侧栏展开/收起、弹窗开关、Tab 切换状态、WebSocket 连接状态等。极简 API，无 Provider 包裹：
 
 ```tsx
 // stores/sidebar.ts
@@ -404,7 +404,7 @@ import { useTheme } from 'next-themes'
 
 #### Framer Motion — 动效
 
-`framer-motion` 提供页面过渡动画、看板卡片拖拽、模态框弹出动效：
+`framer-motion` 提供页面过渡动画、Issue 行展开/折叠、模态框弹出动效：
 
 ```tsx
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1638,7 +1638,7 @@ graph TD
     F --> F3["优先级(P0-P4)"]
     F --> F4["子 Issue 层级"]
     F --> F5["分配给 Agent 或 自然人"]
-    F --> F6["看板视图"]
+    F --> F6["状态Tab视图（backlog/todo/in_progress/in_review/done）"]
 
     G --> G1["监听 todo→in_progress 自动入队"]
     G --> G2["Asynq 入队 → Worker 消费"]
@@ -2438,7 +2438,7 @@ anserflow/
 | 访问方式 | 浏览器 `http://host:8080/admin/dashboard` | Tauri 原生窗口 |
 | 嵌入 Go | ✅ `//go:embed admin/dist/*` | ❌ 由 Tauri 加载 |
 | 目标用户 | 管理员、组织负责人 | 普通成员、被邀请者 |
-| 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | 项目看板 / Issue 列表 / 群聊 / 个人工作台 |
+| 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | Issue 状态Tab / 群聊 / 个人工作台 |
 | 路由前缀 | `/admin/*` | `/dashboard` `/projects/:id` `/chat` `/invite/:token` |
 | API 地址 | 同源 `/api/*`（无跨域） | 配置的远程 `https://<server>/api/*`；开发环境可指向 `http://localhost:8080/api/*` |
 
@@ -2557,7 +2557,7 @@ var adminFiles embed.FS
 |------|------|-----------------|
 | `message` | 普通聊天消息 | `text: string` |
 | `annotation` | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` |
-| `backlog` | 方案产出（`/backlog` 指令触发） | `issues: [{title, status: "backlog", priority, assignee}]` |
+| `backlog` | 方案产出（`/backlog` 指令触发，每次产出一个 Issue） | `issue: {title, status: "backlog", priority, assignee, description}` |
 | `system` | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` |
 | `ping` | 心跳请求（客户端每 30s 发送） | 无 |
 | `pong` | 心跳响应 | 无 |
@@ -2922,27 +2922,46 @@ type CommandHandler struct {
 }
 
 func (h *CommandHandler) OnMessage(msg *ws.Message) {
-    // Eino Agent 仅监听自己所在群组的消息
     if !strings.HasPrefix(msg.Content.Text, "/backlog") {
-        return  // 非指令消息，由 group_discuss.go 处理普通讨论
+        return
     }
 
-    // 收集群聊历史上下文（最近 50 条消息）
+    // ── 输入校验 ──
+    text := strings.TrimPrefix(msg.Content.Text, "/backlog")
+    text = strings.TrimSpace(text)
+
+    // 收集群聊历史上下文
     history := h.getRecentMessages(msg.GroupID, 50)
 
-    // 调用 Eino 编排：根据角色设定调度各 Agent 产出方案
-    plan := h.orchestrator.GeneratePlan(ctx, msg.GroupID, history)
+    // 校验 1: /backlog 不能为空（无上下文）
+    if text == "" && len(history) == 0 {
+        h.ws.Reply(msg, "❌ /backlog 需要描述需求或先进行群聊讨论，不能为空。")
+        return
+    }
 
-    // 拆解方案为 Issue（状态=backlog）
-    issues := h.parser.Parse(ctx, plan, msg.GroupID)
+    // 校验 2: 群聊上下文不足（防止误触发）
+    if len(history) < 3 && text == "" {
+        h.ws.Reply(msg, "❌ 群聊讨论内容不足，请先描述需求或补充更多讨论后再 /backlog。")
+        return
+    }
 
-    // 批量创建 Issue + 推送 backlog 消息到群聊
-    h.createIssues(ctx, issues)
+    // 校验 3: 调用 Eino 编排 Agent 产出单条方案
+    plan := h.orchestrator.GeneratePlan(ctx, msg.GroupID, history, text)
+
+    // 校验 4: Eino 返回空方案
+    if plan == nil || plan.Title == "" {
+        h.ws.Reply(msg, "❌ /backlog 未能产出有效方案，请补充更多需求细节后重试。")
+        return
+    }
+
+    // 拆解为 1 个 Issue（状态=backlog）
+    issue := h.parser.ParseSingle(ctx, plan, msg.GroupID)
+    h.createIssue(ctx, issue)
     h.ws.Broadcast(msg.GroupID, ws.Message{
         Type: "backlog",
         Content: map[string]interface{}{
-            "issues": issues,
-            "hint":   "请到项目看板确认 Issue 并拖动到 todo 列启动执行",
+            "issue": issue,
+            "hint":  "请到项目 backlog Tab 确认 Issue 细节，确认后点击 [转为 todo] 启动执行",
         },
     })
 }
@@ -4415,32 +4434,44 @@ sequenceDiagram
     ORC->>ORC: 收集讨论上下文 → 结构化方案
     ORC->>SYS: 调用 Issue 服务创建（状态=backlog）
 
-    SYS->>SYS: 创建 Issue #1: 设计登录页UI (backlog, P1, →前端Agent)
-    SYS->>SYS: 创建 Issue #2: 实现JWT认证API (backlog, P1, →后端Agent)
-    SYS->>SYS: 创建 Issue #3: 用户表+密码加密 (backlog, P0, →后端Agent)
-    SYS->>G: 系统消息: 已生成 3 个 Issue（backlog），    请到看板确认并启动
+    SYS->>SYS: 创建 Issue #1: 实现用户登录页面 (backlog, P1, →前端Agent)
+    SYS->>G: 系统消息: 已生成 Issue #1（backlog），请到 backlog Tab 确认细节并启动
 ```
 
-**看板操作**（backlog → 确认/编辑 → 批量拖动）：
+**Tab 视图操作**（backlog → 确认/编辑 → 转为 todo）：
 
 ```
-┌─ 项目看板 ──────────────────────────────────────────────────┐
-│  backlog          todo           in_progress    in_review    │
-│  ┌──────────┐                                 ┌──────────┐  │
-│  │ Issue #1 │  ☑ 批量选中 #1 #2 #3            │ Issue #5 │  │
-│  │ Issue #2 │  [转为 todo]                    │  (审核中) │  │
-│  │ Issue #3 │                                 └──────────┘  │
-│  └──────────┘                                                │
-│                                                              │
-│  ┌─ Issue #1 详情 ───────────────────────────────────────┐  │
-│  │ 标题: 设计登录页UI                          [编辑]      │  │
-│  │ 描述: 使用 React Hook Form + Zod 实现登录表单...      │  │
-│  │         [Eino 优化描述]  ← 一键 AI 优化                │  │
-│  │ 优先级: [P1 ▼]    负责人: [前端Agent ▼]               │  │
-│  │ 时间线: 12:00 /backlog创建 · 12:05 张三编辑了描述      │  │
-│  └──────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+┌─ 项目 Issues ──────────────────────────────────────────────────────────────────┐
+│  [backlog 3]  [todo 5]  [in_progress 2]  [in_review 1]  [done 12]             │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  ☐ Issue #1  实现用户登录页面                        P1  前端Agent  12:00     │
+│  │ 描述: 使用 React Hook Form + Zod 实现...  Eino优化  [转为 todo] [编辑]     │
+│  │ ── 时间线 ─────────────────────────────────────────────────────────────── │
+│  │ 12:00  system   /backlog 创建此 Issue                                      │
+│  │ 12:05  张三     编辑了标题 + 补充验收标准                                     │
+│  │ 12:06  system   Eino 优化了描述（补充了错误处理边界）                          │
+│  ├────────────────────────────────────────────────────────────────────────────┤
+│  ☐ Issue #2  JWT 认证 API 实现                       P0  后端Agent  11:30     │
+│  │ 描述: 实现基于 JWT 的登录认证...         [转为 todo] [编辑]                  │
+│  ├────────────────────────────────────────────────────────────────────────────┤
+│  ☐ Issue #3  密码加密存储                            P0  后端Agent  11:28     │
+│  │ 描述: 使用 bcrypt 对密码加盐哈希...      [转为 todo] [编辑]                  │
+│  └────────────────────────────────────────────────────────────────────────────┘
+│                                                                                │
+│  ☑ 已选 3 个  [一键转为 todo]  [批量编辑优先级]                                 │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Tab 设计要点**：
+
+| 特性 | 说明 |
+|------|------|
+| 顶部 Tab 栏 | 按状态分页，Tab 上显示各状态的 Issue 数量 |
+| 当前 Tab | 默认进入 `backlog` Tab，展开第一个 Issue 的时间线 |
+| Issue 行 | 可展开/折叠，展开后显示描述摘要 + 最近 3 条时间线 |
+| 转为 todo | 按钮操作（非拖动），确认后 Issue 移入 todo Tab |
+| 批量操作 | 勾选多行 → 一键批量转 todo / 批量编辑优先级 |
+| 状态流转 | todo Tab 中 Issue 会自动消失（调度器转为 in_progress 后移到对应 Tab） |
 
 **Issue 编辑能力**（backlog / todo 阶段均可）：
 
@@ -4451,13 +4482,13 @@ sequenceDiagram
 | 调整优先级 | P0-P4 下拉切换 |
 | 修改负责人 | 重新分配 Agent 或自然人 |
 | 删除 Issue | 仅 backlog 状态可删除 |
-| 批量转 todo | Shift/Ctrl 多选 backlog Issue → 一键全部转为 todo 列入执行队列 |
+| 批量转 todo | Shift/Ctrl 多选 backlog Issue（来自多次 /backlog 调用）→ 一键全部转为 todo 列入执行队列 |
 
 ### 10.2 Agent 自动执行（backlog→todo→in_progress→in_review→done）
 
 ```mermaid
 sequenceDiagram
-    participant H as 自然人(看板)
+    participant H as 自然人(Issue Tab)
     participant ISS as Issue 服务
     participant Q as Asynq Queue
     participant W as Worker
@@ -4465,8 +4496,8 @@ sequenceDiagram
     participant GH as GitHub
     participant WS as WebSocket
 
-    Note over H,ISS: ① 看板手动拖动 backlog → todo
-    H->>ISS: 拖动 Issue 到 todo 列
+    Note over H,ISS: ① backlog Tab 点击 [转为 todo]
+    H->>ISS: 点击 Issue #1 的 [转为 todo]
     ISS->>ISS: 记录状态变更（issue_timeline）
     ISS->>Q: 加入排队（按优先级+创建时间）
     ISS->>WS: 推送 "Issue #1 已排队等待执行"
@@ -4520,7 +4551,7 @@ sequenceDiagram
 
 | 状态 | 触发方式 | 下一状态 | 触发条件 |
 |------|---------|---------|---------|
-| `backlog` | `/backlog` 指令自动创建 | `todo` | **人工在看板拖动** |
+| `backlog` | `/backlog` 指令自动创建 | `todo` | **人工点击 [转为 todo] 按钮** |
 | `todo` | 人工从 backlog 拖动 | `in_progress` | 系统自动调度（按优先级+排队顺序） |
 | `in_progress` | 系统自动 | `in_review` | opencode 检查通过 + PR 创建成功 |
 | `in_progress` | 系统自动 | `todo` | opencode 检查失败 → 保留沙箱 → 人工追加提示词 → Eino 优化 → 复用沙箱重新执行 |
@@ -4529,7 +4560,7 @@ sequenceDiagram
 
 **人工提示词介入机制**：
 
-Issue 看板的时间线面板允许自然人在任意阶段追加提示词，直接干预 opencode 的下一步执行：
+Issue 的时间线面板允许自然人在任意阶段追加提示词，直接干预 opencode 的下一步执行：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -4614,7 +4645,7 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
 │   └── /[id]/edit            编辑
 ├── /projects                 项目管理
 │   ├── /create               创建 + GitHub 关联(HTTP/SSH)
-│   └── /[id]/issues          Issue 看板
+│   └── /[id]/issues          Issue 状态Tab列表
 ├── /groups                   群组
 │   └── /[id]/chat            群聊界面
 └── /settings                 全局设置
@@ -4656,7 +4687,7 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 | T10 | Skills CRUD + 手动/ZIP 导入 | 两种方式均可添加 Skill |
 | T11 | Agent-Skill 绑定 + 启用控制 | 全局/单Agent 开关生效 |
 | T12 | 项目管理 + GitHub 关联（HTTP Token / SSH Key） | 创建项目并绑定 GitHub 仓库，支持两种授权方式 |
-| T13 | Issue CRUD + 状态流转 + 优先级 + 子 Issue | 看板操作全流程通 |
+| T13 | Issue CRUD + 状态流转 + 优先级 + 子 Issue | Tab 状态视图操作全流程通 |
 | T14 | Issue 分配给 Agent/自然人 | 分配并正确记录 |
 
 
@@ -4667,7 +4698,7 @@ PC 桌面 + Android + iOS 共用 Next.js 前端，Tauri 打包：
 | T16 | 群聊 WebSocket + 消息持久化 | 多人实时聊天正常 |
 | T17 | WebSocket Redis Pub/Sub 分布式 | 多实例消息同步 |
 | T18 | Eino 集成 + 群聊 Agent 讨论编排 | Agent 自动参与讨论 |
-| T19 | 讨论→方案→自动创建 Issue（backlog） | /backlog 指令产出 Issue（状态=backlog），到看板手动转为 todo 后列入执行队列 |
+| T19 | 讨论→方案→自动创建 Issue（backlog） | /backlog 指令产出 Issue（状态=backlog），到 backlog Tab 手动确认后转为 todo |
 | T20 | Asynq 任务队列集成 | 任务入队/消费正常 |
 | T21 | Docker 沙箱执行引擎 | Agent 在容器中执行编码 |
 | T22 | GitHub PR 自动提交 | 代码提交 + PR 创建流程通 |
