@@ -2692,6 +2692,19 @@ func (s *IssueScheduler) Run(ctx context.Context) {
 
 > 每个组织默认最多 3 个 Agent 同时执行（可通过 org settings 调整），超过上限的 Issue 保持 todo 等待。
 
+并发统计直接查询 `issues` 表，无需额外 Redis 计数器：
+
+```go
+func (s *IssueScheduler) runningCount(orgID uint) int {
+    var count int64
+    s.db.Model(&Issue{}).
+        Joins("JOIN projects ON projects.id = issues.project_id").
+        Where("projects.org_id = ? AND issues.status = ?", orgID, "in_progress").
+        Count(&count)
+    return int(count)
+}
+```
+
 ### 5.3 整体分布式拓扑
 
 ```
@@ -3932,6 +3945,7 @@ CREATE TABLE issues (
     source_group_id BIGINT,             -- 来源群聊
     source_message_id BIGINT,           -- 来源消息
     pr_url VARCHAR(512),                -- 关联 PR 链接（由 Worker 在创建 PR 后回写）
+    sandbox_container_id VARCHAR(64),   -- Docker 容器 ID（首次执行时写入，重试时由此复用沙箱，done 后清空）
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -4263,6 +4277,7 @@ func SendInviteEmail(to string, inviteLink string) error {
 │   │   │   ├── /:issue_id/status          PUT  → 🔒 状态流转
 │   │   │   ├── /:issue_id/assign          PUT  → 🔐 分配/更改负责人
 │   │   │   ├── /:issue_id/children        GET  → 子 Issue 列表
+│   │   │   ├── /batch-status                PUT  → 🔒 批量状态变更（backlog→todo / todo→backlog）
 │   │   │   ├── /:issue_id/timeline         GET  → 状态时间线（含人工提示词历史）
 │   │   │   └── /:issue_id/prompt           POST → 🔒 追加人工提示词（重新触发 opencode 执行）
 │   │   │
@@ -4560,11 +4575,15 @@ func (h *WebhookHandler) HandleGitHub(c *gin.Context) {
     c.ShouldBindJSON(&payload)
 
     if payload.Action == "closed" && payload.PullRequest.Merged {
-        // 根据 PR URL 反查 Issue → 更新 status = done
         issue := h.issueRepo.FindByPRURL(payload.PullRequest.HTMLURL)
         h.issueRepo.UpdateStatus(issue.ID, "done")
         h.timelineRepo.Append(issue.ID, "system", "status_change",
             "in_review", "done", "PR merged by @"+payload.Sender.Login)
+        // 销毁沙箱容器 + 清空 container_id
+        if issue.SandboxContainerID != "" {
+            h.sandbox.Destroy(ctx, issue.SandboxContainerID)
+            h.issueRepo.ClearContainerID(issue.ID)
+        }
         h.ws.SendToProject(issue.ProjectID, "Issue #%d 已完成", issue.ID)
     }
 }
