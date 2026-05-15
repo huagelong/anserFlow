@@ -2978,17 +2978,43 @@ func (o *PromptOptimizer) Enhance(ctx context.Context, rawPrompt string, issue *
     timeline := o.timelineRepo.FindByIssue(ctx, issue.ID)
     context := buildContext(issue, timeline)
 
-    // ② Eino 调用 LLM 将自然语言提示词改写为 opencode 可精确执行的指令
+    // ② 解析描述中的 @Issue #N 引用，读取被引用 Issue 的内容
+    refs := parseIssueRefs(issue.Description) // 正则: @Issue\s+#(\d+)
+    var refContext strings.Builder
+    for _, refID := range refs {
+        refIssue, _ := o.issueRepo.FindByID(ctx, refID)
+        if refIssue != nil {
+            refContext.WriteString(fmt.Sprintf(
+                "关联 Issue #%d「%s」: %s\n",
+                refIssue.ID, refIssue.Title, refIssue.Description,
+            ))
+        }
+    }
+
+    // ③ Eino 调用 LLM 改写提示词（包含 @Issue 上下文）
     messages := []*schema.Message{
         schema.SystemMessage(`你是提示词优化器。将用户反馈改写为精确的编码指令。
-规则：保留用户原意；补充技术细节；如果用户提到具体文件/组件，添加文件路径。`),
+规则：保留用户原意；补充技术细节；如果用户提到具体文件/组件，添加文件路径。
+如果提供了关联 Issue 的内容，确保生成代码时保持与关联 Issue 的技术方案一致。`),
         schema.UserMessage(fmt.Sprintf(
-            "Issue 上下文：\n%s\n\n用户提示词：%s\n\n输出优化后的编码指令：",
-            context, rawPrompt,
+            "Issue 上下文：\n%s\n\n关联 Issue 内容：\n%s\n\n用户提示词：%s\n\n输出优化后的编码指令：",
+            context, refContext.String(), rawPrompt,
         )),
     }
     resp, _ := GetChatModel().Generate(ctx, messages)
     return resp.Content, nil
+}
+
+// 正则: 匹配 "需要 @Issue #42" 或 "参考 @Issue #8 的实现"
+func parseIssueRefs(text string) []uint {
+    re := regexp.MustCompile(`@Issue\s+#(\d+)`)
+    matches := re.FindAllStringSubmatch(text, -1)
+    ids := make([]uint, 0, len(matches))
+    for _, m := range matches {
+        id, _ := strconv.ParseUint(m[1], 10, 64)
+        ids = append(ids, uint(id))
+    }
+    return ids
 }
 ```
 
@@ -4442,17 +4468,20 @@ sequenceDiagram
 
 ```
 ┌─ 项目 Issues ──────────────────────────────────────────────────────────────────┐
-│  [backlog 3]  [todo 5]  [in_progress 2]  [in_review 1]  [done 12]             │
+│  [ backlog 3 ]   todo 5    in_progress 2    in_review 1    done 12            │
 ├────────────────────────────────────────────────────────────────────────────────┤
+│  ← 当前选中 backlog Tab，下面只展示 backlog 状态的 Issue                           │
+│                                                                                │
 │  ☐ Issue #1  实现用户登录页面                        P1  前端Agent  12:00     │
-│  │ 描述: 使用 React Hook Form + Zod 实现...  Eino优化  [转为 todo] [编辑]     │
+│  │ 描述: 使用 React Hook Form + Zod 实现...          [转为 todo] [编辑]       │
 │  │ ── 时间线 ─────────────────────────────────────────────────────────────── │
 │  │ 12:00  system   /backlog 创建此 Issue                                      │
 │  │ 12:05  张三     编辑了标题 + 补充验收标准                                     │
 │  │ 12:06  system   Eino 优化了描述（补充了错误处理边界）                          │
 │  ├────────────────────────────────────────────────────────────────────────────┤
 │  ☐ Issue #2  JWT 认证 API 实现                       P0  后端Agent  11:30     │
-│  │ 描述: 实现基于 JWT 的登录认证...         [转为 todo] [编辑]                  │
+│  │ 描述: 实现 JWT 签发/验证，token 格式需要 @Issue #1 的登录接口对接...          │
+│  │        [转为 todo] [编辑]                                                    │
 │  ├────────────────────────────────────────────────────────────────────────────┤
 │  ☐ Issue #3  密码加密存储                            P0  后端Agent  11:28     │
 │  │ 描述: 使用 bcrypt 对密码加盐哈希...      [转为 todo] [编辑]                  │
@@ -4461,6 +4490,24 @@ sequenceDiagram
 │  ☑ 已选 3 个  [一键转为 todo]  [批量编辑优先级]                                 │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+点击 `todo 5` 标签后，列表切换为：
+
+```
+│  [ backlog 3 ]  [ todo 5 ]  in_progress 2    in_review 1    done 12          │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  ← 当前选中 todo Tab，下面只展示 todo 状态的 Issue                                  │
+│                                                                                │
+│  Issue #4  API 接口文档编写                            P2  后端Agent  11:50    │
+│  │ 状态: 排队中（第 2 位），预估等待 3 分钟                                       │
+│  │ 时间线: 11:50 转为 todo · 11:50 加入调度队列                                   │
+│  ├────────────────────────────────────────────────────────────────────────────┤
+│  Issue #5  单元测试补充                              P2  前端Agent  11:40    │
+│  │ 状态: 排队中（第 3 位）                                                       │
+│  └────────────────────────────────────────────────────────────────────────────┘
+```
+
+> 每个 Tab 的数字表示该状态的 Issue 数量，实时更新。当前选中的 Tab 高亮显示。
 
 **Tab 设计要点**：
 
@@ -4483,6 +4530,7 @@ sequenceDiagram
 | 修改负责人 | 重新分配 Agent 或自然人 |
 | 删除 Issue | 仅 backlog 状态可删除 |
 | 批量转 todo | Shift/Ctrl 多选 backlog Issue（来自多次 /backlog 调用）→ 一键全部转为 todo 列入执行队列 |
+| @关联 Issue | 描述中通过 `@Issue #N` 引用其他 Issue，Eino Agent 自动读取被引用 Issue 的内容注入到 opencode 执行提示词 |
 
 ### 10.2 Agent 自动执行（backlog→todo→in_progress→in_review→done）
 
@@ -4514,8 +4562,9 @@ sequenceDiagram
     Note over W,D: ③ Worker 执行
     W->>Q: dequeue → "agent:execute"
     W->>W: 加载 Agent 配置 + Skills + 人工提示词
+    W->>W: 解析描述中的 @Issue #N → 读取关联 Issue 内容
     W->>D: 创建沙箱容器
-    W->>D: git clone → 注入配置 → opencode run
+    W->>D: git clone → 注入配置 + 关联Issue上下文 → opencode run
     W->>D: 监控日志输出 → 实时推送 Issue 时间线
     W->>WS: 推送 "编码中..." / "运行测试..."
 
