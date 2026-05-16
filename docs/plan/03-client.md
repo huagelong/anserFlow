@@ -551,6 +551,215 @@ goi18n merge active.*.json translate.*.json  # 合并新增 key
       - 进度概览（Issue 完成率、PR 状态、最近活动）
 ```
 
+**Issue 详情页（展开 Issue 行后显示）**：
+
+第四栏的 Issue 列表中，点击某条 Issue 后展开为详情视图，核心是**时间线面板** + **执行控制**：
+
+```
+┌─ Issue #42: 实现登录表单组件 ────────────────────────────────────┐
+│  状态: in_progress   优先级: P1   负责人: Agent-前端              │
+│                                                                  │
+│  ┌─ 工具栏 ────────────────────────────────────────────────────┐  │
+│  │  [编辑]  [⏸ 暂停]  [⏹ 停止]              筛选: [全部 ▾]    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌─ 时间线 ────────────────────────────────────────────────────┐  │
+│  │                                                              │  │
+│  │  12:00  system   状态变更: backlog → todo                    │  │
+│  │  12:01  system   状态变更: todo → in_progress                │  │
+│  │  12:02  agent    📝 开始编码: 正在读取 Issue 描述...          │  │
+│  │  12:05  agent    📄 生成文件: src/login.tsx                   │  │
+│  │  12:05  agent    📄 生成文件: src/login.test.tsx              │  │
+│  │  12:08  agent    ✅ 运行测试: 3 passed, 1 failed              │  │
+│  │  12:08  agent    ❌ FAIL: login.test.tsx > 密码验证           │  │
+│  │  12:09  agent    🔧 正在修复 login.test.tsx                   │  │
+│  │  12:12  agent    ✅ 运行测试: 4 passed, 0 failed              │  │
+│  │  12:12  agent    📦 commit + push → PR #15                   │  │
+│  │  12:12  system   状态变更: in_progress → in_review           │  │
+│  │  ───────────────── 自动滚动到底部 ─────────────────          │  │
+│  │                                                              │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌─ 追加提示词 ────────────────────────────────────────────────┐  │
+│  │  [                                ] [发送并重新执行]          │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌─ Token 消耗 ────────────────────────────────────────────────┐  │
+│  │  输入: 12,450 tokens  输出: 3,200 tokens  合计: 15,650       │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**时间线事件类型与样式**：
+
+| event_type | source | 图标 | 样式 | 说明 |
+|------------|--------|------|------|------|
+| `status_change` | system | 无 | 灰色斜体 | 状态流转记录，显示 `旧状态 → 新状态` + 触发原因 |
+| `agent_log` | agent | 按动作分类 | 默认文本 | 沙箱执行日志，action 决定图标（见下表） |
+| `human_prompt` | user | ✏️ | 蓝色高亮 | 人工追加提示词，显示用户名 + 内容 |
+| `system_note` | system | 📋 | 灰色 | 编辑/备注等管理操作 |
+
+**agent_log 的 action 分类与图标**：
+
+| action | 图标 | 说明 |
+|--------|------|------|
+| `generate` | 📄 | 生成文件 |
+| `test` / `test_pass` | ✅ | 测试通过 |
+| `test_fail` / `fix` | ❌ / 🔧 | 测试失败 / 修复中 |
+| `commit` | 📦 | 提交代码 |
+| `create_pr` | 🔀 | 创建 PR |
+| `error` | ⚠️ | 执行异常 |
+| `paused` | ⏸ | 执行暂停 |
+| 其他 | 📝 | 通用日志 |
+
+**时间线数据流**：
+
+```
+沙箱 opencode stdout
+    │
+    ▼
+Worker streamLogs() 捕获
+    ├── 写入 agent_logs 表（结构化：action / status / output）
+    ├── 写入 issue_timeline 表（展示用：source / event_type / content）
+    └── WebSocket 推送 {type: "agent_log", text, ts}
+            │
+            ▼
+前端 IssueTimeline 组件
+    ├── 历史加载: GET /api/issues/:id/timeline?page=1&size=50
+    ├── 实时追加: WebSocket issue:{id} 频道订阅
+    └── 筛选过滤: 前端内存过滤（数据量可控，无需服务端筛选）
+```
+
+**前端组件结构**：
+
+```tsx
+// features/issues/components/issue-detail.tsx
+
+export function IssueDetail({ issueId }: { issueId: number }) {
+  // 加载 Issue 元信息
+  const { data: issue } = useQuery({
+    queryKey: ['issue', issueId],
+    queryFn: () => fetch(`/api/issues/${issueId}`).then(r => r.json()),
+  })
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* 头部：标题 + 状态 + 优先级 + 负责人 */}
+      <IssueHeader issue={issue} />
+
+      {/* 工具栏：编辑/暂停/停止 + 日志筛选 */}
+      <IssueToolbar issueId={issueId} status={issue?.status} />
+
+      {/* 时间线：核心区域，占满剩余空间 */}
+      <IssueTimeline issueId={issueId} />
+
+      {/* 底部：追加提示词输入框（in_progress / paused / todo 状态显示） */}
+      <PromptInput issueId={issueId} status={issue?.status} />
+
+      {/* Token 消耗统计（折叠显示） */}
+      <TokenUsageSummary issueId={issueId} />
+    </div>
+  )
+}
+```
+
+```tsx
+// features/issues/components/issue-timeline.tsx
+
+export function IssueTimeline({ issueId }: { issueId: number }) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const [filter, setFilter] = useState<string>('all')
+
+  // ① 历史数据加载（分页）
+  const { data: timeline } = useQuery({
+    queryKey: ['issue-timeline', issueId],
+    queryFn: () =>
+      fetch(`/api/issues/${issueId}/timeline?page=1&size=100`).then(r => r.json()),
+  })
+
+  // ② WebSocket 实时追加
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    const unsub = ws.subscribe(`issue:${issueId}`, (msg) => {
+      if (msg.type === 'agent_log' || msg.type === 'status_change') {
+        queryClient.setQueryData(
+          ['issue-timeline', issueId],
+          (old) => [...(old || []), {
+            id: Date.now(),           // 临时 ID，刷新后由服务端 ID 替换
+            source: 'agent',          // 或 msg.source
+            event_type: msg.type,
+            content: msg.text || msg.hint,
+            created_at: new Date(msg.ts * 1000).toISOString(),
+          }]
+        )
+      }
+    })
+    return () => unsub()
+  }, [issueId])
+
+  // ③ 自动滚动到底部
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [timeline])
+
+  // ④ 前端筛选
+  const filtered = (timeline || []).filter(item => {
+    if (filter === 'all') return true
+    if (filter === 'agent') return item.source === 'agent'
+    if (filter === 'system') return item.source === 'system'
+    if (filter === 'human') return item.event_type === 'human_prompt'
+    return true
+  })
+
+  return (
+    <div className="flex-1 overflow-y-auto p-3 space-y-1">
+      {filtered.map(item => (
+        <TimelineItem key={item.id} item={item} />
+      ))}
+      <div ref={bottomRef} />
+    </div>
+  )
+}
+
+// 单条时间线
+function TimelineItem({ item }: { item: TimelineEvent }) {
+  const icon = getActionIcon(item)       // 根据 event_type + action 映射图标
+  const style = getEventStyle(item)       // 根据 event_type 映射样式类
+  return (
+    <div className={`flex items-start gap-2 text-sm py-0.5 ${style}`}>
+      <span className="text-xs text-muted-foreground w-12 shrink-0">
+        {formatTime(item.created_at)}       {/* "12:05" */}
+      </span>
+      <span className="text-xs text-muted-foreground w-14 shrink-0">
+        {item.source}                         {/* "agent" / "system" / "张三" */}
+      </span>
+      <span className="shrink-0">{icon}</span>
+      <span className="flex-1">{item.content}</span>
+    </div>
+  )
+}
+```
+
+**工具栏按钮状态控制**：
+
+| Issue 状态 | 编辑 | 暂停 | 恢复 | 停止 | 追加提示词 |
+|-----------|------|------|------|------|----------|
+| `backlog` | ✅ | - | - | - | - |
+| `todo` | ✅ | - | - | - | ✅ |
+| `in_progress` | - | ✅ | - | ✅ | ✅ |
+| `paused` | - | - | ✅ | ✅ | ✅ |
+| `in_review` | - | - | - | - | ✅（PR 被拒绝后退回 todo 时复用沙箱） |
+| `done` | - | - | - | - | - |
+
+**API 接口**：
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/issues/:id` | GET | Issue 详情（标题/状态/优先级/负责人/Token 统计） |
+| `/api/issues/:id/timeline` | GET | 时间线列表（分页，?page=1&size=50） |
+| `/api/issues/:id/pause` | POST | 暂停执行 |
+| `/api/issues/:id/resume` | POST | 恢复执行 |
+| `/api/issues/:id/stop` | POST | 停止执行 |
+| `/api/issues/:id/prompt` | POST | 追加人工提示词 |
+
 **direct 类型下的 UI 条件渲染**：
 
 | 场景 | 隐藏 | 显示 |
