@@ -18,8 +18,8 @@
 
 1. 当前交付只以 **L1-L4 路线图** 为验收范围；第十五章统一视为远期 backlog，不计入本轮完成标准。
 2. 当前 Git 平台只验收 **GitHub**；`git_platform` 仅保留数据模型兼容位，不要求本轮实现 Gitea / GitLab / Gitee Provider。
-3. 当前前端交付只闭环 **admin SPA 嵌入 Go** 与 **Tauri 桌面端独立打包**；不在本轮实现双 SPA 同进程路由分发。
-4. 当前客户端只闭环 **桌面端**；Android / iOS、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
+3. 当前前端交付闭环 **admin SPA 嵌入 Go** 与 **客户端 Web SPA（IM 聊天界面）**；统一使用 Next.js SPA 技术栈，浏览器访问。
+4. 当前客户端闭环 **Web 端**；桌面/移动端原生打包、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
 5. 文中的目录树、接口、伪代码和工作流若未在仓库中落地，默认按 **目标架构说明** 理解，不视为“仓库现状已实现”。
 
 
@@ -35,7 +35,6 @@
 │           Zustand (客户端状态)            │
 │           React Hook Form + Zod (表单)    │
 │           next-intl (国际化)              │
-│           Tauri 2.x (桌面+移动端)         │
 ├──────────────────────────────────────────┤
 │ 后端框架   Gin                           │
 │ ORM        GORM                          │
@@ -98,7 +97,6 @@
 | **date-fns** | 日期处理，轻量 tree-shakable |
 | **lucide-react** | 图标库，与 shadcn/ui 配套 |
 | **shadcn/ui** | 无捆绑、可定制、基于 Radix 的可访问组件 |
-| **Tauri 2.x** | 比 Electron 轻量、Rust 内核、支持移动端 |
 | **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
 | **swaggo/swag** | Swagger/OpenAPI 文档自动生成，便于前后端联调 |
 | **gin-contrib/cors** | Gin 官方 CORS 中间件，SPA 跨域支持 |
@@ -218,7 +216,7 @@ ci: 添加 Next.js lint 检查 workflow
 │  │  ci.yml (每次 push PR)                                │    │
 │  │  ├── Go lint + test + build                          │    │
 │  │  ├── Next.js lint + type-check + build (admin)       │    │
-│  │  └── Next.js lint + type-check + build (desktop)     │    │
+│  │  └── Next.js lint + type-check + build (client)      │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                           ↓ 合并                              │
 ├──────────────────────────────────────────────────────────────┤
@@ -233,12 +231,6 @@ ci: 添加 Next.js lint 检查 workflow
 │  │  ├── Cross-compile Go backend                        │    │
 │  │  ├── Upload anserflow binary (linux/windows/macos)   │    │
 │  │  └── Create GitHub Release                           │    │
-│  ├──────────────────────────────────────────────────────┤    │
-│  │  desktop-release.yml (push tag desktop-v*)            │    │
-│  │  ├── Cross-compile Tauri desktop                     │    │
-│  │  ├── Sign + Notarize                                 │    │
-│  │  ├── Create GitHub Release                           │    │
-│  │  └── Generate latest.json (updater)                  │    │
 │  └──────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -248,7 +240,6 @@ ci: 添加 Next.js lint 检查 workflow
 | `ci.yml` | PR / push main | ~3min | 无（仅检查） |
 | `sandbox-image.yml` | push main (Dockerfile) | ~5min | `ghcr.io/anserflow/sandbox` |
 | `go-release.yml` | tag `v*` | ~8min | 多平台二进制 + Release |
-| `desktop-release.yml` | tag `desktop-v*` | ~20min | Tauri 安装包 + `latest.json` |
 
 ### 3.3 ci.yml — Pull Request 检查
 
@@ -306,12 +297,12 @@ jobs:
       - run: npm run type-check
       - run: npm run build
 
-  # ── Next.js desktop ──
-  desktop:
+  # ── Next.js client ──
+  client:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: desktop
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -465,34 +456,15 @@ jobs:
 
 > `CGO_ENABLED=0` 编译纯静态二进制，无需 glibc 依赖。`-ldflags="-s -w"` 减小体积。
 
-### 3.6 desktop-release.yml — 桌面端发布
-
-> 完整工作流见「Tauri 桌面端补充说明 → GitHub Actions 自动发布」章节。此处摘要关键步骤：
-
-| 步骤 | 说明 |
-|------|------|
-| 触发 | tag `desktop-v*` |
-| 矩阵构建 | windows/macos-x64/macos-arm64/linux |
-| 签名 | `TAURI_SIGNING_PRIVATE_KEY` 环境变量 |
-| 产物 | MSI / DMG / AppImage + `latest.json` |
-| 公证 | macOS 需 Apple Developer 证书 |
-
-### 3.7 GitHub Secrets 清单
+### 3.6 GitHub Secrets 清单
 
 所有 CI/CD Secrets 需在 `Repository Settings → Secrets and variables → Actions` 中配置：
 
 | Secret | 用途 | 触发工作流 |
-|--------|------|-----------|
+|--------|------|----------|
 | `GITHUB_TOKEN` | 自动提供，无需手动配置 | 所有 |
-| `TAURI_PRIVATE_KEY` | Tauri updater 签名私钥 | `desktop-release` |
-| `TAURI_KEY_PASSWORD` | 私钥密码（可选） | `desktop-release` |
-| `APPLE_CERTIFICATE` | macOS 签名证书 (base64) | `desktop-release` |
-| `APPLE_CERTIFICATE_PASSWORD` | 证书密码 | `desktop-release` |
-| `APPLE_ID` | Apple Developer 账号 | `desktop-release` |
-| `APPLE_PASSWORD` | App 专用密码 | `desktop-release` |
-| `APPLE_TEAM_ID` | Team ID | `desktop-release` |
 
-### 3.8 分支保护规则
+### 3.7 分支保护规则
 
 在 GitHub Repository Settings → Branches 中配置 `main` 分支保护：
 
@@ -500,7 +472,7 @@ jobs:
 |------|-----|
 | Require a pull request before merging | ✅ |
 | Require approvals | 1 |
-| Require status checks to pass | ✅ `ci.yml` (go / admin / desktop) |
+| Require status checks to pass | ✅ `ci.yml` (go / admin / client) |
 | Require conversation resolution | ✅ |
 | Do not allow bypassing | ✅ (包括 admins) |
 
@@ -688,7 +660,7 @@ func runUpgrade(channel string, dryRun bool) {
 
 ### 4.5 项目目录结构（Monorepo）
 
-Gin 后端、两套 Next.js 前端（后台管理 + 桌面客户端）、Tauri 放在同一个仓库。
+Gin 后端、两套 Next.js 前端（后台管理 admin + 客户端 client）放在同一个仓库，统一使用 Web SPA 技术栈。
 
 ```
 anserflow/
@@ -713,10 +685,10 @@ anserflow/
 ├── config/                     # Go 配置加载（Viper）
 ├── admin/                      # ① npm workspace: @anserflow/admin
 │   ├── package.json            #   "name": "@anserflow/admin"
-│   ├── next.config.js          #   output: "export"
+│   ├── next.config.js          #   output: "export", basePath: "/admin"
 │   ├── tsconfig.json
 │   ├── src/                    #   Next.js 源码
-│   │   ├── app/                #     /login /dashboard /agents /projects ...
+│   │   ├── app/                #     /admin/login /admin/dashboard /admin/agents ...
 │   │   ├── components/         #     共享 UI 组件
 │   │   ├── features/           #     业务模块
 │   │   ├── hooks/              #     自定义 Hook
@@ -724,30 +696,19 @@ anserflow/
 │   │   ├── lib/                #     工具函数 & API Client
 │   │   └── types/              #     TypeScript 类型
 │   └── dist/                   #   构建产物 → //go:embed admin/dist/*
-├── desktop/                    # ② npm workspace: @anserflow/desktop
-│   ├── package.json            #   "name": "@anserflow/desktop"
-│   ├── next.config.js          #   output: "export"
+├── client/                     # ② npm workspace: @anserflow/client（IM 聊天界面）
+│   ├── package.json            #   "name": "@anserflow/client"
+│   ├── next.config.js          #   output: "export", basePath: "/client"
 │   ├── tsconfig.json
-│   ├── src/                    #   Next.js 源码（客户端视角）
-│   │   ├── app/                #     /dashboard /projects/:id /chat ...
+│   ├── src/                    #   Next.js 源码（IM 聊天视角）
+│   │   ├── app/                #     /dashboard /projects/:id /chat /invite/:token
 │   │   ├── components/
 │   │   ├── features/
 │   │   ├── hooks/
 │   │   ├── stores/
 │   │   ├── lib/
-│   │   │   └── tauri.ts        #     isTauri() 环境检测
 │   │   └── types/
-│   ├── dist/                   #   构建产物 → Tauri frontendDist
-│   └── src-tauri/              #   Tauri Rust 项目
-│       ├── Cargo.toml
-│       ├── tauri.conf.json     #     frontendDist: "../dist"
-│       ├── capabilities/
-│       │   └── default.json
-│       ├── icons/
-│       └── src/
-│           ├── main.rs         #     桌面入口
-│           ├── lib.rs          #     核心 + 移动端入口
-│           └── commands.rs     #     IPC 命令
+│   └── dist/                   #   构建产物 → //go:embed client/dist/*
 ├── packages/                   # ③ npm workspace: packages/*
 │   └── shared-ui/              #   @anserflow/shared-ui
 │       ├── package.json        #     公共组件 / 类型 / lib
@@ -756,7 +717,7 @@ anserflow/
 │       │   ├── lib/            #     公共工具函数
 │       │   └── types/          #     公共 TypeScript 类型
 │       └── tsconfig.json
-├── embed.go                    # //go:embed admin/dist/*
+├── embed.go                    # //go:embed admin/dist/* client/dist/*
 ├── main.go                     # Go 入口
 ├── go.mod
 ├── go.sum
@@ -771,7 +732,7 @@ anserflow/
 {
   "name": "anserflow",
   "private": true,
-  "workspaces": ["admin", "desktop", "packages/*"]
+  "workspaces": ["admin", "client", "packages/*"]
 }
 ```
 
@@ -779,8 +740,8 @@ anserflow/
 // admin/package.json
 { "name": "@anserflow/admin", "dependencies": { "@anserflow/shared-ui": "*" } }
 
-// desktop/package.json
-{ "name": "@anserflow/desktop", "dependencies": { "@anserflow/shared-ui": "*" } }
+// client/package.json
+{ "name": "@anserflow/client", "dependencies": { "@anserflow/shared-ui": "*" } }
 
 // packages/shared-ui/package.json
 { "name": "@anserflow/shared-ui", "main": "./src/index.ts" }
@@ -788,24 +749,22 @@ anserflow/
 
 > 所有前端依赖统一提升到根 `node_modules/`，React / Next.js / shadcn/ui 只安装一份。
 
-**三种产物、两个前端入口**：
+**两种产物、两个前端入口**：
 
 | 产物 | 前端 | 用户 | 部署方式 |
 |------|------|------|----------|
-| `anserflow` 二进制 | `admin/` 嵌入 | 管理员/团队负责人（浏览器） | 服务器部署 |
-| Tauri 安装包 | `desktop/` 打包 | 普通成员/被邀请者（桌面） | MSI/DMG/AppImage |
-| 移动端 | `desktop/` + Tauri mobile | 移动用户 | APK/IPA |
+| `anserflow` 二进制 | `admin/` + `client/` 嵌入 | 管理员 & 普通成员（浏览器） | 服务器部署，浏览器访问 |
 
-**`admin/` vs `desktop/` 职责划分**：
+**`admin/` vs `client/` 职责划分**：
 
-| | `admin/` 后台管理 | `desktop/` 桌面客户端 |
+| | `admin/` 后台管理 | `client/` 客户端 |
 |------|------|------|
-| 访问方式 | 浏览器 `http://host:8080/admin/dashboard` | Tauri 原生窗口 |
-| 嵌入 Go | ✅ `//go:embed admin/dist/*` | ❌ 由 Tauri 加载 |
+| 访问方式 | 浏览器 `http://host:8080/admin/dashboard` | 浏览器 `http://host:8080/client/chat` |
+| 嵌入 Go | ✅ `//go:embed admin/dist/*` | ✅ `//go:embed client/dist/*` |
 | 目标用户 | 管理员、组织负责人 | 普通成员、被邀请者 |
-| 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | Issue 状态Tab / 群聊 / 个人工作台 |
-| 路由前缀 | `/admin/*` | `/dashboard` `/projects/:id` `/chat` `/invite/:token` |
-| API 地址 | 同源 `/api/*`（无跨域） | 配置的远程 `https://<server>/api/*`；开发环境可指向 `http://localhost:8080/api/*` |
+| 核心页面 | Agent管理 / Skills管理 / 项目创建 / 组织设置 / 系统配置 | IM 聊天界面 / Issue 状态Tab / 群聊 / 个人工作台 |
+| 路由前缀 | `/admin/*` | `/client/*`（`/client/dashboard` `/client/projects/:id` `/client/chat` `/client/invite/:token`） |
+| API 地址 | 同源 `/api/*`（无跨域） | 同源 `/api/*`（无跨域） |
 
 
 ---
@@ -821,33 +780,33 @@ npm install
 终端2: npm run dev -w @anserflow/admin              # Next.js :3000
 #     浏览器打开 http://localhost:3000
 
-# ====== 桌面端开发 ======
+# ====== 客户端开发 ======
 终端1: go run main.go server                        # Gin :8080
-终端2: npm run dev -w @anserflow/desktop            # Next.js :3001
-终端3: npm run tauri -w @anserflow/desktop          # Tauri 窗口加载 :3001
+终端2: npm run dev -w @anserflow/client             # Next.js :3001
+#     浏览器打开 http://localhost:3001
 ```
 
 **构建流程**：
 
 ```bash
-# ====== 纯 Web 部署 ======
+# ====== 全量 Web 部署 ======
 npm run build -w @anserflow/admin    # → admin/dist/
-go build -o anserflow                 # 嵌入 admin/dist/
-./anserflow server                    # 浏览器访问 :8080
-
-# ====== 桌面端打包 ======
-npm run build -w @anserflow/desktop   # → desktop/dist/
-npm run tauri build -w @anserflow/desktop  # → MSI/DMG/AppImage
+npm run build -w @anserflow/client   # → client/dist/
+go build -o anserflow                 # 嵌入 admin/dist/ + client/dist/
+./anserflow server                    # 浏览器访问 :8080/admin 或 :8080/client
 ```
 
-**当前实现决策**：Go 后端本阶段只嵌入 `admin/dist`。`desktop/dist` 由 Tauri 桌面应用自行加载，不在 Go 进程内同时嵌入两套 SPA，也不做路径前缀分发。
+**当前实现决策**：Go 后端嵌入 `admin/dist` 和 `client/dist` 两套 SPA，通过路由前缀 `/admin/*` 和 `/client/*` 分发。
 
 ```go
 //go:embed admin/dist
 var adminFiles embed.FS
+
+//go:embed client/dist
+var clientFiles embed.FS
 ```
 
-> 💡 后期可从 `admin/` 和 `desktop/` 中提取公共 UI 组件/类型/API Client 到 `packages/shared-ui/`，减少重复代码。
+> 后期可从 `admin/` 和 `client/` 中提取公共 UI 组件/类型/API Client 到 `packages/shared-ui/`，减少重复代码。
 
 ---
 
@@ -899,8 +858,8 @@ var adminFiles embed.FS
 | 编号 | 任务 | 验收标准 |
 |------|------|----------|
 | T23 | 交叉编译 + CI 构建（win/mac/linux） | 三平台产出单文件 |
-| T24 | Tauri 桌面端打包 | Windows/macOS 安装包 |
-| T25 | 通知系统（WebSocket Push + 原生 + 邮箱） | 状态变更实时通知 |
+| T24 | 客户端 Web SPA（IM 聊天界面） | 浏览器访问，聊天/Issue/项目功能完整 |
+| T25 | 通知系统（WebSocket Push + 浏览器通知 + 邮箱） | 状态变更实时通知 |
 | T26 | 权限精细化 + 操作审计日志 | RBAC 权限生效 |
 | T27 | 管理后台完整 UI | 所有页面可交互 |
 | T28 | 性能优化 + 压力测试 | 100 并发 WS 连接稳定 |
@@ -916,7 +875,6 @@ var adminFiles embed.FS
 | **前端组件测试** | Vitest + Testing Library | 核心组件（AgentForm / IssueCard / TodoKanban） | PR |
 | **E2E 测试** | Playwright | 关键流程：注册→登录→创建Agent→创建Issue→状态流转→邀请 | main push / 发布前 |
 | **WebSocket 测试** | `gorilla/websocket` 客户端 + testify | 消息格式 / 心跳 / 重连 / 分布式 Pub/Sub | PR |
-| **Tauri E2E** | WebDriver (tauri-driver) | 登录 / Issue 创建 / 邀请接受 | desktop-release 前 |
 | **压力测试** | k6 / vegeta | WS 并发连接 > 100、API QPS > 500 | L4 阶段 |
 | **合约测试** | Pact | 前后端 API 契约一致性 | Phase 2 独立立项 |
 
@@ -1085,15 +1043,13 @@ internal/seed/
 | Agent 自动编码质量不可控 | 🔴 高 | 先做半自动：Agent 生成代码 → 创建 PR → 人工审核合并 |
 | 多 Agent 讨论无限循环 | 🟡 中 | `/backlog` 指令触发方案讨论而非实时监听，限制对话轮数 |
 | Docker 沙箱安全 | 🟡 中 | 网络白名单 + 资源限额 + 执行超时 + 无特权模式 |
-| Tauri 移动端成熟度 | 🟡 中 | 先交付桌面端，移动端作为 Phase 2 |
 | Eino 框架迭代不稳定 | 🟢 低 | 字节内部大规模使用，稳定性有保障 |
 
 ### 13.2 简化策略
 
 1. **Agent 执行优先做"半自动"**：编码 → PR → 人工 Review → 合并，而非全自动合入 main
-2. **讨论先做"指令触发"**：Agent 不实时监听所有消息，通过 `/backlog` 触发，避免 Token 浪费
-3. **Tauri 先桌面后移动**：降低初期复杂度
-4. **Skills 系统复用现有模式**：项目已有 `flowcode_design/executor/todo/wiki` Skill 定义，直接复用 YAML frontmatter + Markdown body 的格式
+2. **讨论先做“指令触发”**：Agent 不实时监听所有消息，通过 `/backlog` 触发，避免 Token 浪费
+3. **Skills 系统复用现有模式**：项目已有 `flowcode_design/executor/todo/wiki` Skill 定义，直接复用 YAML frontmatter + Markdown body 的格式
 
 ---
 

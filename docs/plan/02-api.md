@@ -71,11 +71,11 @@ func main() { /* ... */ }
 
 #### CORS — 跨域支持
 
-`github.com/gin-contrib/cors` 允许 SPA 前端和 Tauri WebView 跨域访问 API：
+`github.com/gin-contrib/cors` 允许 SPA 前端跨域访问 API：
 
 ```go
 r.Use(cors.New(cors.Config{
-    AllowOrigins: []string{"http://localhost:3000", "tauri://localhost"},
+    AllowOrigins: []string{"http://localhost:3000", "http://localhost:3001"},
     AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
     AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
 }))
@@ -2088,7 +2088,7 @@ func (s *NotificationService) NotifyAgentComplete(
         s.smtp.SendAgentNotification(assigneeID, agent, issue, success)
     }
 
-    // 桌面端原生通知（通过 WebSocket 推送到 Tauri 客户端触发）
+    // 浏览器通知（通过 WebSocket 推送到客户端触发）
     s.ws.SendToUser(assigneeID, map[string]interface{}{
         "type":   "native_notification",
         "title":  title,
@@ -2125,7 +2125,7 @@ func (s *NotificationService) NotifyMention(
         s.smtp.SendMentionEmail(mentionedUserID, byUserName, message)
     }
 
-    // 桌面端原生通知
+    // 浏览器通知
     s.ws.SendToUser(mentionedUserID, map[string]interface{}{
         "type":   "native_notification",
         "title":  fmt.Sprintf("💬 %s 提到了你", byUserName),
@@ -2181,7 +2181,7 @@ func (s *NotificationService) NotifyOfflineMembers(
             s.smtp.SendDMNotification(member.UserID, senderName, messageText)
         }
 
-        // 桌面端原生通知
+        // 浏览器通知
         s.ws.SendToUser(member.UserID, map[string]interface{}{
             "type":   "native_notification",
             "title":  fmt.Sprintf("💬 %s", title),
@@ -2228,7 +2228,7 @@ func (s *NotificationService) NotifyInvite(
 
 #### 完整通知触发场景矩阵
 
-| 触发场景 | type | WS 推送 | 桌面原生通知 | 邮件通知 | 触发位置 |
+| 触发场景 | type | WS 推送 | 浏览器通知 | 邮件通知 | 触发位置 |
 |---------|------|---------|------------|---------|---------|
 | Issue 分配 | `issue_assigned` | ✅ | ✅ | ✅ (受 notify_issue_assigned 控制) | `IssueService.Assign` |
 | Issue 状态变更 | `issue_status_changed` | ✅ | ❌ | ✅ (受 notify_issue_assigned 控制) | `IssueService.TransitionStatus` |
@@ -2241,7 +2241,7 @@ func (s *NotificationService) NotifyInvite(
 | PR 被拒绝 | `issue_status_changed` | ✅ | ❌ | ✅ | `WebhookHandler.HandleGitHub` |
 | 重试次数耗尽 | `system` | ✅ | ❌ | ✅ | `IssueScheduler.Run` |
 
-> **双重推送说明**：桌面端同时收到 WS 消息和原生通知（通过 Tauri notification 插件）。WS 消息用于更新 UI（如通知 bell 红点），原生通知用于 OS 级弹窗提示。用户可通过 `user_settings` 表控制邮件和通知偏好。
+> **推送说明**：客户端通过 WS 消息更新 UI（如通知 bell 红点），浏览器 Notification API 用于 OS 级弹窗提示。用户可通过 `user_settings` 表控制邮件和通知偏好。
 
 ---
 

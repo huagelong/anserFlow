@@ -62,7 +62,6 @@ cors:
   allow_origins:
     - http://localhost:3000
     - http://localhost:3001
-    - tauri://localhost
 
 log:
   level: info
@@ -471,5 +470,5 @@ function apiFetch(path: string, init?: RequestInit) {
     └── #runtimes              运行时管理（注册/编辑/启停 + 默认Skills绑定）
 ```
 
-公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接和桌面端 deep link 最终都落到该页面。
+公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接最终落到该页面。
 

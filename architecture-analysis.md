@@ -14,8 +14,8 @@
 
 1. 当前交付只以 **L1-L4 路线图** 为验收范围；第十五章统一视为远期 backlog，不计入本轮完成标准。
 2. 当前 Git 平台只验收 **GitHub**；`git_platform` 仅保留数据模型兼容位，不要求本轮实现 Gitea / GitLab / Gitee Provider。
-3. 当前前端交付只闭环 **admin SPA 嵌入 Go** 与 **Tauri 桌面端独立打包**；不在本轮实现双 SPA 同进程路由分发。
-4. 当前客户端只闭环 **桌面端**；Android / iOS、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
+3. 当前前端交付闭环 **admin SPA 嵌入 Go** 与 **客户端 Web SPA（IM 聊天界面）**；统一使用 Next.js SPA 技术栈，浏览器访问。
+4. 当前客户端闭环 **Web 端**；桌面/移动端原生打包、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
 5. 文中的目录树、接口、伪代码和工作流若未在仓库中落地，默认按 **目标架构说明** 理解，不视为“仓库现状已实现”。
 
 ---
@@ -30,7 +30,6 @@
 │           Zustand (客户端状态)            │
 │           React Hook Form + Zod (表单)    │
 │           next-intl (国际化)              │
-│           Tauri 2.x (桌面+移动端)         │
 ├──────────────────────────────────────────┤
 │ 后端框架   Gin                           │
 │ ORM        GORM                          │
@@ -93,7 +92,6 @@
 | **date-fns** | 日期处理，轻量 tree-shakable |
 | **lucide-react** | 图标库，与 shadcn/ui 配套 |
 | **shadcn/ui** | 无捆绑、可定制、基于 Radix 的可访问组件 |
-| **Tauri 2.x** | 比 Electron 轻量、Rust 内核、支持移动端 |
 | **gomail** | Go 邮件发送库，支持 SMTP/SSL，用于邮箱邀请和通知 |
 | **swaggo/swag** | Swagger/OpenAPI 文档自动生成，便于前后端联调 |
 | **gin-contrib/cors** | Gin 官方 CORS 中间件，SPA 跨域支持 |
@@ -168,11 +166,11 @@ func main() { /* ... */ }
 
 #### CORS — 跨域支持
 
-`github.com/gin-contrib/cors` 允许 SPA 前端和 Tauri WebView 跨域访问 API：
+`github.com/gin-contrib/cors` 允许 SPA 前端跨域访问 API：
 
 ```go
 r.Use(cors.New(cors.Config{
-    AllowOrigins: []string{"http://localhost:3000", "tauri://localhost"},
+    AllowOrigins: []string{"http://localhost:3000", "http://localhost:3001"},
     AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
     AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
 }))
@@ -516,7 +514,7 @@ src/
 ┌──────────────────────────────────────────────┐
 │ 前端 (next-intl)                              │
 │ ├── admin/messages/   ← 后台管理翻译           │
-│ ├── desktop/messages/ ← 桌面端翻译             │
+│ ├── client/messages/  ← 客户端翻译             │
 │ └── packages/shared-ui/messages/ ← 公共翻译    │
 ├──────────────────────────────────────────────┤
 │ 后端 (go-i18n)                                │
@@ -761,8 +759,8 @@ admin/
 │       ├── agents/
 │       └── projects/
 
-desktop/
-├── messages/               # 桌面端翻译（同上结构）
+client/
+├── messages/               # 客户端翻译（同上结构）
 
 packages/shared-ui/
 ├── messages/               # 公共翻译（按钮、校验提示等）
@@ -882,35 +880,45 @@ goi18n extract           # 从 Go 源码提取待翻译消息 → translate.zh-C
 goi18n merge active.*.json translate.*.json  # 合并新增 key
 ```
 
-### Tauri 桌面端补充说明
+### 客户端（Web SPA）
 
-> Tauri 2.x 负责将 Next.js SPA 打包为桌面应用（Windows/macOS/Linux）+ 移动端（Android/iOS）。以下为 Tauri 项目核心架构、安全模型、插件体系和分发流程。
+客户端统一使用 Next.js 14 SPA（static export），浏览器直接访问，界面以 IM 聊天为核心交互模式。
 
 #### 进程模型
 
-Tauri 采用多进程架构，遵循最小权限原则：
+- **技术栈**：与 admin 一致（Next.js SPA + shadcn/ui + Tailwind CSS + TanStack Query + Zustand）
+- **核心路由**：`/dashboard`、`/projects/:id`、`/chat`、`/invite/:token`
+- **部署方式**：Go embed 嵌入或独立部署，浏览器访问
+- **通知方式**：浏览器 Notification API + WebSocket 实时推送
+
+**`/chat` IM 两栏布局**：
 
 ```
-┌─────────────────────────────────┐
-│  Core 进程 (Rust)                │
-│  ├── 唯一拥有 OS 完整访问权限     │
-│  ├── 窗口管理 / 系统托盘          │
-│  ├── IPC 消息路由与拦截           │
-│  ├── 全局状态管理                 │
-│  └── 插件调度                    │
-├─────────────────────────────────┤
-│  WebView 进程 (JS/TS)            │
-│  ├── 渲染 Next.js SPA            │
-│  ├── 通过 IPC 调用 Core 能力      │
-│  └── 受 CSP + Capabilities 限制  │
-└─────────────────────────────────┘
+/chat                          ← 主聊天页面（两栏布局）
+  左侧：会话列表（side panel）
+    ├── 搜索/新建双人聊（支持搜索用户和 Agent）
+    ├── 双人聊列表项
+    │     - 人+人：对方用户头像 + 昵称 + 最后消息 + 未读数
+    │     - 人+Agent：Agent 头像 + 名称 + Agent 标识 + 最后消息 + 未读数
+    ├── 群聊列表项（群名 + 最后消息 + 未读数）
+    │     - 按最后消息时间统一排序（双人聊和群聊混合排列）
+    │
+  右侧：聊天窗口
+    /chat/:group_id            ← 选中会话后展示聊天内容
+      - 顶部：会话标题（direct: 对方昵称/Agent名称，从成员信息派生；group: 群名）
+      - 中部：消息列表（复用现有 MessageList 组件）
+      - 底部：输入框（条件渲染，见下方）
 ```
 
-- **Core 进程**：Rust 编写，管理窗口、托盘、通知，路由所有 IPC 消息
-- **WebView 进程**：操作系统原生 WebView（Windows: Edge WebView2, macOS: WKWebView, Linux: webkitgtk）
-- **安全隔离**：前端无法直接访问 OS，必须通过 Capabilities 声明的命令才能调用 Core 能力
+**direct 类型下的 UI 条件渲染**：
 
-#### 项目结构
+| 场景 | 隐藏 | 显示 |
+|------|------|------|
+| 人+人（direct, 无 Agent） | @Agent 选择器、/backlog 按钮、Agent 成员头像、成员管理面板 | 纯文本输入框、/new 按钮 |
+| 人+Agent（direct, 有 Agent） | @Agent 选择器（只有 1 个 Agent，无需 @）、成员管理面板 | /backlog 按钮、/new 按钮、Agent 头像标识、Agent 回复消息 |
+| 群聊（group） | — | 全部功能 |
+
+
 
 Tauri 项目位于 `desktop/src-tauri/`，与 `desktop/package.json` 同级，符合 Tauri 默认约定：
 
