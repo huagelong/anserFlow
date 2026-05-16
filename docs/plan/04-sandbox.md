@@ -1880,7 +1880,7 @@ func (w *Worker) StopIssue(issueID uint) error {
 
 #### 暂停/恢复与 Asynq 任务生命周期
 
-暂停/恢复操作直接操作 Docker 容器，但 Asynq 中的任务**已经出队**（dequeue），不再受 Redis 队列管理。为保证状态一致性，Worker 采用以下机制：
+暂停/恢复操作直接操作 Docker 容器，但 Asynq 中的任务**已经出队**（dequeue），不再受 Redis 队列管理。为保证状态一致性，Worker 采用 **Redis Pub/Sub 事件驱动** 机制（替代 DB 轮询）：
 
 ```go
 // internal/sandbox/control.go — 暂停时持久化任务上下文
@@ -1888,7 +1888,6 @@ func (w *Worker) PauseIssue(issueID uint) error {
     // ... ContainerPause ...
     
     // 关键：写入 issue_timeline 记录当前执行进度
-    // Worker 会在心跳循环中定期检查 issue.status，若发现变为 paused 则挂起自身
     w.issueRepo.UpdateStatus(issueID, "paused")
     
     // 将当前 opencode 进度写入 agent_logs（标记暂停点）
@@ -1898,40 +1897,93 @@ func (w *Worker) PauseIssue(issueID uint) error {
         Status:  "running",
         Output:  json.RawMessage(`{"event":"paused","sandbox_id":"` + containerID + `"}`),
     })
+
+    // 发布暂停事件（通知 Worker goroutine 挂起）
+    w.redis.Publish(ctx, "issue:control:"+strconv.Itoa(int(issueID)),
+        `{"action":"pause","issue_id":`+strconv.Itoa(int(issueID))+"}")
     return nil
 }
 ```
 
-**Worker 心跳与状态监听**：Worker 在执行循环中每 10 秒检查一次对应 Issue 的状态，若变为 `paused` 则挂起自身 goroutine，等待 Issue 恢复信号：
+**Worker 事件驱动状态监听**：Worker 在执行循环中通过 Redis Pub/Sub 订阅 Issue 控制频道，收到控制事件时立即响应（替代原先 10s DB 轮询 + 3s 暂停轮询）：
 
 ```go
-// internal/worker/executor.go — Worker 心跳检查
-func (w *Worker) executeWithHeartbeat(ctx context.Context, issueID uint, runFn func() error) error {
-    ticker := time.NewTicker(10 * time.Second)
-    defer ticker.Stop()
+// internal/worker/executor.go — Worker 事件驱动控制
+func (w *Worker) executeWithControl(ctx context.Context, issueID uint, runFn func() error) error {
+    // 订阅 Issue 控制频道
+    controlCh := "issue:control:" + strconv.Itoa(int(issueID))
+    sub := w.redis.Subscribe(ctx, controlCh)
+    defer sub.Close()
+    ch := sub.Channel()
+
+    // 执行业务逻辑（捕获 stdout 流等）
+    done := make(chan error, 1)
+    go func() { done <- runFn() }()
 
     for {
         select {
-        case <-ticker.C:
-            issue, _ := w.issueRepo.FindByID(issueID)
-            switch issue.Status {
-            case "paused":
-                // 进入等待循环，直到恢复或停止
-                for {
-                    time.Sleep(3 * time.Second)
-                    current, _ := w.issueRepo.FindByID(issueID)
-                    if current.Status == "in_progress" {
-                        break // 恢复执行
-                    }
-                    if current.Status != "paused" {
-                        return errors.New("issue was stopped during pause") // 已停止
-                    }
+        case msg := <-ch:
+            var ctrl struct{ Action string `json:"action"` }
+            json.Unmarshal([]byte(msg.Payload), &ctrl)
+            switch ctrl.Action {
+            case "pause":
+                // Docker 暂停已在 PauseIssue 中完成
+                // Worker goroutine 进入等待，直到收到 resume 或 stop
+                if err := w.waitForResume(ctx, sub, issueID); err != nil {
+                    return err
                 }
-            case "backlog", "done":
+            case "stop":
                 return errors.New("issue was stopped externally")
             }
+        case err := <-done:
+            return err // 业务逻辑正常结束
         }
     }
+}
+
+// waitForResume 等待恢复信号（事件驱动，不轮询 DB）
+func (w *Worker) waitForResume(ctx context.Context, sub *redis.PubSub, issueID uint) error {
+    ch := sub.Channel()
+    for {
+        select {
+        case msg := <-ch:
+            var ctrl struct{ Action string `json:"action"` }
+            json.Unmarshal([]byte(msg.Payload), &ctrl)
+            switch ctrl.Action {
+            case "resume":
+                return nil // 恢复执行
+            case "stop":
+                return errors.New("issue was stopped during pause")
+            }
+        case <-ctx.Done():
+            return ctx.Err()
+        }
+    }
+}
+```
+
+> **优势对比**：
+>
+> | 方案 | 响应延迟 | DB 压力 | Worker 资源占用 |
+> |------|---------|---------|----------------|
+> | DB 轮询（旧） | 3-10s | 每 Issue 3-10次/s | CPU 占用（循环轮询） |
+> | Redis Pub/Sub（新） | <100ms | 0 | 零开销（channel 阻塞等待） |
+
+**恢复/停止操作同样发布事件**：
+
+```go
+func (w *Worker) ResumeIssue(issueID uint) error {
+    // ... ContainerUnpause + 状态更新 ...
+    w.redis.Publish(ctx, "issue:control:"+strconv.Itoa(int(issueID)),
+        `{"action":"resume","issue_id":`+strconv.Itoa(int(issueID))+"}")
+    return nil
+}
+
+func (w *Worker) StopIssue(issueID uint) error {
+    // ... ContainerStop + Remove + 状态更新 ...
+    w.redis.Publish(ctx, "issue:control:"+strconv.Itoa(int(issueID)),
+        `{"action":"stop","issue_id":`+strconv.Itoa(int(issueID))+"}")
+    return nil
 }
 ```
 
@@ -1944,7 +1996,7 @@ Worker 启动
 扫描 issues 表 WHERE status='paused' AND sandbox_container_id IS NOT NULL
     │
     ├── 存在 → Docker API Inspect 检查容器是否存活
-    │           ├── 存活 → 恢复 Attach stdout 流，继续心跳监听
+    │           ├── 存活 → 恢复 Attach stdout 流，订阅控制频道继续监听
     │           └── 已销毁 → Issue → backlog + 记录异常时间线
     │
     └── 不存在 → 无操作
@@ -1970,12 +2022,12 @@ func (w *Worker) RecoverPausedIssues(ctx context.Context) {
             w.timelineRepo.Append(issue.ID, "system", "status_change",
                 "paused", "backlog", "沙箱容器已不存在，已自动回退")
         }
-        // 容器存活 → 重新 Attach 并继续心跳监听
+        // 容器存活 → 重新 Attach + 订阅控制频道，继续事件驱动监听
     }
 }
 ```
 
-> **设计要点**：暂停/恢复的可靠性依赖于 `sandbox_container_id` 持久化到 DB。只要容器未被销毁，Worker 重启后总能重新 Attach 并恢复上下文。
+> **设计要点**：暂停/恢复的可靠性依赖于 `sandbox_container_id` 持久化到 DB + Redis Pub/Sub 事件驱动。只要容器未被销毁，Worker 重启后总能重新 Attach、订阅控制频道并恢复上下文。控制频道 `issue:control:{id}` 仅在有 Worker 消费时存在，无额外资源开销。
 
 ### 7.2 安全策略
 

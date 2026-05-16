@@ -295,6 +295,8 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 
 ### 5.1 WebSocket 分布式方案
 
+#### 5.1.1 架构拓扑
+
 ```
                     ┌─────────────┐
                     │  Redis       │
@@ -306,21 +308,104 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
     ┌──────────┐    ┌──────────┐    ┌──────────┐
     │ Gin #1   │    │ Gin #2   │    │ Gin #3   │
     │ WS连接池 │    │ WS连接池 │    │ WS连接池 │
+    │ Hub      │    │ Hub      │    │ Hub      │
     └──────────┘    └──────────┘    └──────────┘
 ```
 
-**原理**：每个 Gin 实例维护自己的 WebSocket 连接池。消息发送时，先推送给本地连接的客户端，再通过 Redis Pub/Sub 广播到其他实例，各实例转发给自己持有的客户端。
+**原理**：每个 Gin 实例维护自己的 WebSocket Hub（连接池）。消息发送时，先推送给本地连接的客户端，再通过 Redis Pub/Sub 广播到其他实例，各实例转发给自己持有的客户端。
 
 **Go 库**：`github.com/gorilla/websocket` + `github.com/redis/go-redis/v9`
 
-**消息协议**：所有 WebSocket 通信统一采用 JSON 信封格式：
+#### 5.1.2 连接建立与频道订阅
+
+WebSocket 连接建立时仅需认证，**不绑定任何频道**。连接建立后，客户端通过 `subscribe` 消息动态订阅感兴趣的资源频道：
+
+**连接地址**：`/ws?token=xxx`（仅认证，不含 group_id）
+
+**频道类型**：
+
+| 频道格式 | 说明 | 推送内容 |
+|---------|------|----------|
+| `group:{id}` | 群聊/双人聊 | 聊天消息、指令响应、系统通知 |
+| `issue:{id}` | Issue 时间线 | agent_log、status_change、执行控制 |
+| `project:{id}` | 项目通知 | Issue 状态变更摘要、调度通知 |
+| `user:{id}` | 用户私信 | 个人通知（浏览器通知、@提及等） |
+
+**订阅协议**：
+
+```json
+// 客户端订阅
+{ "type": "subscribe", "channels": ["group:42", "issue:7", "project:3", "user:1"] }
+
+// 客户端取消订阅
+{ "type": "unsubscribe", "channels": ["issue:7"] }
+
+// 服务端确认
+{ "type": "subscribe_ack", "channels": ["group:42", "issue:7", "project:3", "user:1"] }
+```
+
+> **设计说明**：连接建立后默认自动订阅 `user:{自身ID}` 频道，其余频道需显式订阅。前端路由切换时（如从群聊页进入 Issue 详情页）发送 `subscribe` / `unsubscribe` 动态调整。
+
+**Hub 内部路由**：
+
+```go
+// internal/ws/hub.go
+type Hub struct {
+    // 连接 → 已订阅频道集合
+    connChannels map[*Conn]map[string]bool
+    // 频道 → 已订阅连接集合
+    channelConns map[string]map[*Conn]bool
+    // Redis Pub/Sub 订阅
+    redisSub *redis.PubSub
+}
+
+// Subscribe 添加频道订阅
+func (h *Hub) Subscribe(c *Conn, channels []string) {
+    for _, ch := range channels {
+        h.connChannels[c][ch] = true
+        h.channelConns[ch][c] = true
+    }
+    // 如果是本实例首次订阅该频道，加入 Redis Pub/Sub
+    h.ensureRedisSubscription(channels)
+}
+
+// SendToChannel 向指定频道推送消息（核心方法）
+func (h *Hub) SendToChannel(channel string, msg interface{}) {
+    // 1. 本地推送
+    for conn := range h.channelConns[channel] {
+        conn.WriteJSON(msg)
+    }
+    // 2. Redis Pub/Sub 广播到其他实例
+    h.redis.Publish(context.Background(), "ws:"+channel, msg)
+}
+
+// 便捷方法：基于 SendToChannel 派生
+func (h *Hub) SendToGroup(groupID uint, msg interface{}) {
+    h.SendToChannel(fmt.Sprintf("group:%d", groupID), msg)
+}
+func (h *Hub) SendToIssue(issueID uint, msg interface{}) {
+    h.SendToChannel(fmt.Sprintf("issue:%d", issueID), msg)
+}
+func (h *Hub) SendToProject(projectID uint, msg interface{}) {
+    h.SendToChannel(fmt.Sprintf("project:%d", projectID), msg)
+}
+func (h *Hub) SendToUser(userID uint, msg interface{}) {
+    h.SendToChannel(fmt.Sprintf("user:%d", userID), msg)
+}
+```
+
+> **权限校验**：`Subscribe` 时需校验用户是否有权订阅该频道（如 `group:42` 需要用户是该群成员，`issue:7` 需要用户是关联项目的成员）。校验失败返回 `subscribe_nack`。
+
+#### 5.1.3 消息协议
+
+所有 WebSocket 通信统一采用 JSON 信封格式：
 
 ```json
 {
   "type": "string",       // 消息类型（见下表）
-  "seq": 12345,           // 消息序号（客户端递增，用于去重/重放检测）
+  "seq": 12345,           // 消息序号（服务端分配，全局递增）
   "ts": 1715678900,       // 服务端时间戳（Unix 秒）
-  "group_id": 42,         // 群组 ID（群聊消息必填）
+  "channel": "group:42",  // 所属频道（group/issue/project/user）
   "sender": {
     "type": "user|agent",
     "id": 1,
@@ -332,20 +417,29 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 }
 ```
 
-| type | 说明 | content 关键字段 |
-|------|------|-----------------|
-| `message` | 普通聊天消息 | `text: string` |
-| `annotation` | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` |
-| `backlog` | 方案产出（`/backlog` 指令触发，Issue 状态=backlog，需人工确认） | `issue: {title, status: "backlog", priority, assignee, description}` |
-| `todo` | 直接建任务（`/todo` 指令触发，Eino 编排产出方案，Issue 状态=todo，跳过人工确认） | `issue: {title, status: "todo", priority, assignee, description}` |
-| `system` | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` |
-| `ping` | 心跳请求（客户端每 30s 发送） | 无 |
-| `pong` | 心跳响应 | 无 |
-| `typing` | 正在输入状态 | `is_typing: bool` |
-| `backlog_ack` | 方案确认/拒绝 | `backlog_id: string`, `accepted: bool` |
-| `agent_assign` | Agent @其他 Agent 布置任务 | `target_agent_id: int`, `task: string`, `context: string` |
-| `new_session` | 自然人 `/new` 开启新会话 | `session_id: string` |
-| `error` | 错误响应 | `error.code: string`, `error.message: string` |
+**消息类型全景**：
+
+| type | 方向 | 说明 | content 关键字段 | 持久化 |
+|------|------|------|-----------------|--------|
+| `message` | C→S / S→C | 普通聊天消息 | `text: string` | ✅ messages 表 |
+| `annotation` | S→C | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` | ✅ messages 表 |
+| `backlog` | S→C | 方案产出（`/backlog` 指令触发，Issue 状态=backlog，需人工确认） | `issue: {title, status: "backlog", priority, assignee, description}` | ✅ messages 表 |
+| `todo` | S→C | 直接建任务（`/todo` 指令触发，Issue 状态=todo） | `issue: {title, status: "todo", priority, assignee, description}` | ✅ messages 表 |
+| `backlog_ack` | C→S | 方案确认/拒绝 | `backlog_id: string`, `accepted: bool` | ❌ 不持久化 |
+| `system` | S→C | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` | ✅ messages 表 |
+| `agent_log` | S→C | 沙箱执行日志（推送到 issue 频道） | `text: string`, `ts: int64` | ✅ agent_logs + issue_timeline 表 |
+| `status_change` | S→C | 执行控制状态变更（暂停/恢复/停止） | `status: string`, `hint: string` | ✅ issue_timeline 表 |
+| `agent_assign` | S→C | Agent @其他 Agent 布置任务 | `target_agent_id: int`, `task: string`, `context: string` | ❌ 不持久化（走 message） |
+| `new_session` | S→C | 自然人 `/new` 开启新会话 | `session_id: string` | ✅ messages 表 |
+| `subscribe` | C→S | 订阅频道 | `channels: string[]` | ❌ |
+| `subscribe_ack` | S→C | 订阅确认 | `channels: string[]` | ❌ |
+| `unsubscribe` | C→S | 取消订阅 | `channels: string[]` | ❌ |
+| `ping` | C→S | 心跳请求（客户端每 30s 发送） | 无 | ❌ |
+| `pong` | S→C | 心跳响应 | 无 | ❌ |
+| `typing` | C→S / S→C | 正在输入状态 | `is_typing: bool` | ❌ |
+| `error` | S→C | 错误响应 | `error.code: string`, `error.message: string` | ❌ |
+| `command` | S→C | 指令消息回显（用户输入的 /xxx 指令原文） | `text: string`, `command: string` | ✅ messages 表 |
+| `native_notification` | S→C | 浏览器原生通知触发 | `title: string`, `body: string`, `channel: string` | ❌ |
 
 **`/todo` 直接建任务指令**：群内自然人发送 `/todo` 后，Eino 编排 Agent 从群聊讨论上下文中自动总结生成 Issue 标题和方案，直接创建状态为 `todo` 的 Issue，跳过 backlog 人工确认环节，创建后即可进入执行队列。Issue 标题由 Eino Agent 自动生成，用户无需手动指定。与 `/backlog` 的区别：两者都需 Agent 参与 Eino 编排，Issue 标题均由 Agent 自动总结生成；但 `/backlog` 创建后状态为 `backlog` 需人工确认转为 todo；`/todo` 创建后状态直接为 `todo`，无需人工确认，适合需求已明确、希望快速推进到执行的场景。
 
@@ -353,14 +447,23 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 
 **`/new` 新会话指令**：群内自然人发送 `/new` 后，系统在当前群组内创建一个新的会话上下文（`session_id`）。新会话之前的消息不再作为 Agent 讨论的上下文窗口内容，Agent 仅感知 `/new` 之后的消息历史。这使自然人可以在同一群组内切换讨论主题，避免上下文混淆和 Token 浪费。`/new` 不清除历史消息（历史仍可滚动查看），仅重置 Agent 上下文窗口的起点。
 
-**心跳与重连**：
+#### 5.1.4 心跳与重连
 
 - 客户端每 30s 发送 `ping`，服务端回复 `pong`
-- 90s 内未收到任何消息视为断连，服务端主动关闭连接
+- 90s 内未收到任何消息视为断连，服务端主动关闭连接并清理所有频道订阅
 - 客户端重连采用指数退避：`1s → 2s → 4s → 8s → 16s → 32s (max)`
-- 重连后客户端发送 `seq` 字段为上次收到的最后序号，服务端据此推送遗漏消息
+- 重连后客户端需重新发送 `subscribe` 恢复频道订阅，并携带 `last_seq` 请求遗漏消息
 
-**消息持久化**：所有 `message` / `system` / `annotation` / `backlog` / `todo` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
+#### 5.1.5 消息持久化规则
+
+| 类别 | 持久化目标 | 说明 |
+|------|-----------|------|
+| `message` / `system` / `annotation` / `backlog` / `todo` / `new_session` / `command` | `messages` 表 | 聊天记录、系统通知、方案产出、指令回显 |
+| `agent_log` | `agent_logs` + `issue_timeline` 表 | 沙箱执行日志（不写入 messages 表） |
+| `status_change` | `issue_timeline` 表 | 执行控制事件（暂停/恢复/停止） |
+| `typing` / `ping` / `pong` / `subscribe` / `unsubscribe` / `backlog_ack` / `native_notification` | 不持久化 | 瞬时状态/控制信令 |
+
+> **原则**：需要历史回看的消息写 `messages` 表；仅 Issue 维度的执行记录写 `agent_logs` / `issue_timeline` 表；瞬时状态和信令不持久化。
 
 **Hub 消息路由 — Agent 编排判断**：
 
@@ -370,11 +473,20 @@ Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Ein
 func (h *Hub) OnMessage(msg *Message) {
     group := h.groupRepo.FindByID(msg.GroupID)
 
-    // 持久化 + 广播（所有类型都需要）
-    h.persistAndBroadcast(msg)
+    // ① 分配服务端 seq（全局递增，用于排序和断线续传）
+    msg.Seq = h.seqCounter.Incr()
 
-    // /new、/backlog、/todo 指令处理（/new 全模式可用，/backlog 和 /todo 仅含 Agent 时可用）
-    h.commandHandler.OnMessage(msg, group)
+    // ② 指令消息：标记为 command 类型后持久化+广播，不进入 Eino 编排
+    if isCommand(msg.Content.Text) {
+        originalText := msg.Content.Text
+        msg.Type = "command"
+        h.persistAndBroadcast(msg)            // 以 command 类型广播，前端可选择性展示
+        h.commandHandler.OnMessage(msg, group) // 处理指令逻辑
+        return                                 // ← 提前返回，不触发 Eino 编排
+    }
+
+    // ③ 非指令消息：正常持久化+广播
+    h.persistAndBroadcast(msg)
 
     if group.HasAgentMember() {
         // 有 Agent 成员：触发 Eino 编排
@@ -387,9 +499,19 @@ func (h *Hub) OnMessage(msg *Message) {
         h.notifyOfflineMembers(msg)
     }
 }
+
+// isCommand 判断是否为指令消息（以 / 开头）
+func isCommand(text string) bool {
+    return strings.HasPrefix(text, "/new") ||
+        strings.HasPrefix(text, "/todo") ||
+        strings.HasPrefix(text, "/backlog")
+}
 ```
 
-> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。`commandHandler` 内部根据 `HasAgentMember()` 决定 `/backlog` 和 `/todo` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
+> **设计说明**：
+> - `HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。
+> - **指令消息以 `command` 类型广播后立即返回**，避免同时触发 Eino 编排导致 Agent 重复响应。CommandHandler 内部根据 `HasAgentMember()` 决定 `/backlog` 和 `/todo` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
+> - `seq` 由服务端统一分配（Redis INCR `ws:seq:global`），客户端不参与序号生成，避免多客户端 seq 冲突。
 
 ```go
 // CommandHandler 内部分发逻辑
@@ -427,46 +549,111 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
 | `/new` 全模式可用 | CommandHandler 独立于 HasAgentMember()，在 Hub 层直接调用 |
 | `/todo` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态直接为 todo，跳过人工确认 |
 | `/backlog` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态为 backlog，需人工确认 |
+| 指令消息不触发 Eino 编排 | Hub 检测到指令后 `return`，避免 CommandHandler 内部编排和 Orchestrator 双重触发 |
 | 无 Agent 时不触发 `MentionResolver` | 群聊无 Agent 时同样跳过，双人聊天然无 @场景 |
 | direct 成员不可变更 | Handler 层对 direct 类型返回 400（group 类型不受此限制） |
 
+**`backlog_ack` 确认闭环**：
+
+用户在群聊中对 `/backlog` 方案进行确认或拒绝，Hub 收到 `backlog_ack` 消息后触发状态流转：
+
+```go
+// Hub.OnMessage 中的 backlog_ack 处理（在指令消息判断之前）
+if msg.Type == "backlog_ack" {
+    h.handleBacklogAck(msg)
+    return // 控制信令，不持久化、不广播、不触发编排
+}
+
+func (h *Hub) handleBacklogAck(msg *Message) {
+    accepted := msg.Content["accepted"].(bool)
+    issueID := uint(msg.Content["issue_id"].(float64)) // 前端发送关联的 Issue ID
+
+    issue, _ := h.issueRepo.FindByID(issueID)
+    if issue.Status != "backlog" {
+        h.ws.Reply(msg, "该 Issue 已不在 backlog 状态")
+        return
+    }
+
+    if accepted {
+        // 确认：backlog → todo
+        h.statusMgr.Transition(context.Background(), issueID, "backlog", "todo")
+        h.ws.SendToGroup(msg.GroupID, map[string]interface{}{
+            "type":    "system",
+            "content": map[string]interface{}{"text": fmt.Sprintf("Issue #%d 已确认为 todo，等待调度执行", issueID)},
+        })
+    } else {
+        // 拒绝：标记拒绝原因，Issue 保持 backlog（可编辑后重新确认）
+        h.timelineRepo.Append(issueID, "system", "backlog_rejected", "backlog", "backlog",
+            fmt.Sprintf("方案被拒绝：%s", msg.Content["reason"]))
+        h.ws.SendToGroup(msg.GroupID, map[string]interface{}{
+            "type":    "system",
+            "content": map[string]interface{}{"text": fmt.Sprintf("Issue #%d 方案已拒绝，可编辑后重新确认", issueID)},
+        })
+    }
+}
+```
+
+> **前端交互**：`/backlog` 指令产出方案后，群聊中展示 Issue 卡片 + [确认] [拒绝] 按钮。用户点击后发送 `backlog_ack` 消息。确认后 Issue 进入 `todo` 状态，调度器自动拾取执行。
+
 **Redis 消息缓存**（断线重连恢复）：
 
-断线重连时客户端通过 `seq` 号请求遗漏消息。为减少 MySQL 查询压力，在 Redis 中维护每个群组的最近消息滑动窗口：
+断线重连时客户端通过 `seq` 号请求遗漏消息。为减少 MySQL 查询压力，在 Redis 中维护每个频道的最近消息滑动窗口：
 
 ```go
 // 消息写入时双写
-func (h *Hub) SendMessage(msg *Message) {
-    // 1. 写入 MySQL（持久化）
-    h.repo.InsertMessage(ctx, msg)
+func (h *Hub) persistAndBroadcast(msg *Message) {
+    // 1. 持久化到 MySQL（仅需要持久化的类型）
+    if shouldPersist(msg.Type) {
+        h.repo.InsertMessage(ctx, msg)
+    }
 
-    // 2. 写入 Redis 滑动缓存（ZSET，按 seq 排序）
-    key := fmt.Sprintf("msg:cache:%d", msg.GroupID)
+    // 2. 服务端分配 seq
+    msg.Seq = h.seqCounter.Incr() // Redis INCR ws:seq:global
+
+    // 3. 写入 Redis 滑动缓存（ZSET，按 seq 排序）
+    channel := msg.Channel // 如 "group:42"
+    key := fmt.Sprintf("msg:cache:%s", channel)
     h.redis.ZAdd(ctx, key, redis.Z{
         Score:  float64(msg.Seq),
         Member: msg.JSON(),
     })
     h.redis.Expire(ctx, key, 24*time.Hour) // 续期 TTL
-    // 3. 裁剪：仅保留最近 500 条（超出则移除最旧）
+    // 4. 裁剪：仅保留最近 500 条（超出则移除最旧）
     h.redis.ZRemRangeByRank(ctx, key, 0, -501)
+
+    // 5. 广播到频道
+    h.SendToChannel(channel, msg)
+}
+
+// shouldPersist 判断消息类型是否需要持久化
+func shouldPersist(msgType string) bool {
+    switch msgType {
+    case "message", "system", "annotation", "backlog", "todo", "new_session", "command":
+        return true
+    default:
+        return false // typing/ping/pong/subscribe/unsubscribe/backlog_ack/native_notification 不持久化
+    }
 }
 ```
 
 | 参数 | 值 | 理由 |
 |------|-----|------|
-| 缓存条目数 | 最近 500 条/群组 | 覆盖极端断线（30min × 60msg/min = 1800 条，500 条覆盖正常离线窗口 5-10min） |
-| TTL | 24 小时（每次写入续期） | 活跃群组保持缓存，冷群组自动过期释放内存 |
+| 缓存条目数 | 最近 500 条/频道 | 覆盖正常离线窗口 5-10min |
+| TTL | 24 小时（每次写入续期） | 活跃频道保持缓存，冷频道自动过期释放内存 |
 | 数据结构 | Redis ZSET（seq → JSON） | 按 seq 范围查询 O(logN+ M)，比 List 更适合续传场景 |
-| 内存估算 | 500 条 × 100 群组 × 2KB ≈ 100MB | 生产环境足够 |
+| 内存估算 | 500 条 × 200 频道 × 2KB ≈ 200MB | 生产环境足够 |
+| seq 生成 | Redis INCR `ws:seq:global` | 服务端统一分配，全局递增，避免多客户端冲突 |
 
 **重连流程**：
 
 ```
 客户端断线重连
-    → 发送最后 seq=1230
+    → 建立 WS 连接（/ws?token=xxx）
+    → 发送 subscribe 恢复频道订阅
+    → 发送 {type: "resync", channels: [{channel: "group:42", last_seq: 1230}]}
     → 服务端从 Redis ZSET 拉取 seq > 1230 的消息（最多 500 条）
     → Redis 命中 → 直接返回（~2ms）
-    → Redis 未命中（冷群组或超 500 条）→ 回退 MySQL 查询
+    → Redis 未命中（冷频道或超 500 条）→ 回退 MySQL 查询
 ```
 
 ### 5.2 任务队列方案
@@ -1813,8 +2000,8 @@ func (s *Sender) SendAgentNotification(
 ├── /webhook                                 Webhook 接收
 │   └── /github                             POST → GitHub Webhook（PR merge → Issue→done）
 │
-└── /ws                                    WebSocket（认证参数化）
-    └── ?token=xxx&group_id=42             → 群聊/双人聊连接（兼容 group 和 direct 类型）
+└── /ws                                    WebSocket（认证，不绑定频道）
+    └── ?token=xxx                         → 认证后通过 subscribe 消息动态订阅 group/issue/project/user 频道
 
 /invite/:token [公开]                      GET  → 查看邀请详情 → 注册/登录后接受
 ```
@@ -2017,10 +2204,10 @@ func (r *DashboardRepo) GetAgentActivity(ctx context.Context, orgID uint) (*Agen
 
 ```go
 // internal/service/notification_service.go
+// 所有通知统一通过 ChannelManager 分发，不直接调用 ws/smtp
 type NotificationService struct {
-    repo *repository.NotificationRepo
-    ws   *ws.Hub          // WebSocket 推送
-    smtp *email.Sender    // 邮件推送
+    repo   *repository.NotificationRepo
+    chMgr  *notification.ChannelManager  // 统一通知渠道管理器
 }
 
 // 典型触发场景：Issue 状态变更时自动生成通知
@@ -2040,15 +2227,19 @@ func (s *NotificationService) NotifyIssueStatusChanged(
     }
     s.repo.Create(ctx, notif)
 
-    // 2. WebSocket 实时推送
-    s.ws.SendToUser(assigneeID, notif)
-
-    // 3. 邮件通知（根据 user_settings.notify_issue_assigned）
-    if s.shouldEmail(assigneeID, "notify_issue_assigned") {
-        s.smtp.SendIssueNotification(assigneeID, issue)
-    }
+    // 2. 统一分发：ChannelManager 根据用户偏好自动路由到 WS/Email/浏览器通知
+    s.chMgr.Notify(ctx, &notification.NotifyPayload{
+        UserID:  assigneeID,
+        Title:   notif.Title,
+        Body:    notif.Title,
+        Event:   notification.EventIssueStatusChange,
+        Data:    map[string]interface{}{"issue_id": issue.ID, "status": issue.Status},
+        GroupID: issue.SourceGroupID, // 群聊系统消息用
+    })
 }
 ```
+
+> **设计原则**：`NotificationService` 不再直接调用 `s.ws.SendToUser()` 或 `s.smtp.SendXxx()`，所有推送统一走 `ChannelManager.Notify()`。ChannelManager 内部根据用户偏好自动决定通过哪些渠道推送（WebSocket / Email / 浏览器通知 / 群聊系统消息）。新增渠道只需注册 Channel，无需修改业务代码。
 
 触发场景覆盖：Issue 分配/状态变更、Agent 执行完成/失败、群聊 @提及、组织邀请。
 
@@ -2081,19 +2272,15 @@ func (s *NotificationService) NotifyAgentComplete(
         ResourceID:   issue.ID,
     }
     s.repo.Create(ctx, notif)
-    s.ws.SendToUser(assigneeID, notif)
 
-    // 邮件通知
-    if s.shouldEmail(assigneeID, "notify_agent_completed") {
-        s.smtp.SendAgentNotification(assigneeID, agent, issue, success)
-    }
-
-    // 浏览器通知（通过 WebSocket 推送到客户端触发）
-    s.ws.SendToUser(assigneeID, map[string]interface{}{
-        "type":   "native_notification",
-        "title":  title,
-        "body":   detail,
-        "channel": "agent",
+    // 统一分发
+    s.chMgr.Notify(ctx, &notification.NotifyPayload{
+        UserID:  assigneeID,
+        Title:   title,
+        Body:    detail,
+        Event:   notification.EventAgentCompleted,
+        Data:    map[string]interface{}{"issue_id": issue.ID, "agent_id": agent.ID, "success": success},
+        GroupID: issue.SourceGroupID,
     })
 }
 ```
@@ -2119,18 +2306,14 @@ func (s *NotificationService) NotifyMention(
         ResourceID:   groupID,
     }
     s.repo.Create(ctx, notif)
-    s.ws.SendToUser(mentionedUserID, notif)
-
-    if s.shouldEmail(mentionedUserID, "notify_mention") {
-        s.smtp.SendMentionEmail(mentionedUserID, byUserName, message)
-    }
-
-    // 浏览器通知
-    s.ws.SendToUser(mentionedUserID, map[string]interface{}{
-        "type":   "native_notification",
-        "title":  fmt.Sprintf("💬 %s 提到了你", byUserName),
-        "body":   message,
-        "channel": "issues",
+    // 统一分发
+    s.chMgr.Notify(ctx, &notification.NotifyPayload{
+        UserID:  mentionedUserID,
+        Title:   fmt.Sprintf("%s 提到了你", byUserName),
+        Body:    message,
+        Event:   notification.EventMention,
+        Data:    map[string]interface{}{"group_id": groupID, "by_user": byUserName},
+        GroupID: groupID,
     })
 }
 ```
@@ -2155,7 +2338,7 @@ func (s *NotificationService) NotifyOfflineMembers(
             continue
         }
         // 已在线且正在该会话页面 → 不推送
-        if s.ws.IsUserConnectedToGroup(member.UserID, groupID) {
+        if s.chMgr.IsUserConnectedToGroup(member.UserID, groupID) {
             continue
         }
 
@@ -2175,18 +2358,13 @@ func (s *NotificationService) NotifyOfflineMembers(
             ResourceID:   groupID,
         }
         s.repo.Create(ctx, notif)
-        s.ws.SendToUser(member.UserID, notif)
-
-        if s.shouldEmail(member.UserID, "notify_dm") {
-            s.smtp.SendDMNotification(member.UserID, senderName, messageText)
-        }
-
-        // 浏览器通知
-        s.ws.SendToUser(member.UserID, map[string]interface{}{
-            "type":   "native_notification",
-            "title":  fmt.Sprintf("💬 %s", title),
-            "body":   truncate(messageText, 100),
-            "channel": "dm",
+        // 统一分发
+        s.chMgr.Notify(ctx, &notification.NotifyPayload{
+            UserID:  member.UserID,
+            Title:   title,
+            Body:    truncate(messageText, 100),
+            Event:   notification.EventNewDM,
+            Data:    map[string]interface{}{"group_id": groupID, "sender_id": senderID},
         })
     }
 }
@@ -2208,8 +2386,7 @@ func (s *NotificationService) NotifyInvite(
     org, _ := s.orgRepo.FindByID(ctx, invitation.OrgID)
     inviteLink := fmt.Sprintf("%s/invite/%s", s.inviteBaseURL, invitation.Token)
 
-    s.smtp.SendInviteEmail(recipientEmail, inviterName, org.Name, inviteLink, recipientLocale)
-
+    // 统一分发（ChannelManager 自动处理邮件 + WS 推送）
     // 同时写入 notifications 表（如果被邀请者已是平台用户）
     if existingUser := s.userRepo.FindByEmail(ctx, invitation.Email); existingUser != nil {
         notif := &model.Notification{
@@ -2221,7 +2398,21 @@ func (s *NotificationService) NotifyInvite(
             ResourceID:   invitation.OrgID,
         }
         s.repo.Create(ctx, notif)
-        s.ws.SendToUser(existingUser.ID, notif)
+        // 邮件由 ChannelManager 内部的 EmailChannel 统一处理
+        s.chMgr.Notify(ctx, &notification.NotifyPayload{
+            UserID: existingUser.ID,
+            Title:  notif.Title,
+            Body:   inviteLink,
+            Event:  notification.Event("invite"),
+            Data:   map[string]interface{}{"invite_link": inviteLink, "org_name": org.Name},
+        })
+    } else {
+        // 非平台用户：仅发邮件（ChannelManager 的 EmailChannel 直接发送）
+        s.chMgr.NotifyEmailOnly(ctx, invitation.Email, &notification.NotifyPayload{
+            Title:  fmt.Sprintf("%s 邀请你加入组织 %s", inviterName, org.Name),
+            Body:   inviteLink,
+            Event:  notification.Event("invite"),
+        })
     }
 }
 ```
