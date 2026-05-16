@@ -2413,9 +2413,12 @@ ENTRYPOINT ["/entrypoint.sh"]
 ```
 ```
 
-**opencode 配置注入流程**（Worker 侧伪代码）：
+**opencode 配置注入流程**（已由 RuntimeAdapter 接口替代，此为旧代码参考）：
+
+> 以下硬编码逻辑已迁移至 `OpenCodeAdapter.RenderConfig()` + `OpenCodeAdapter.EnvMapping()`。新运行时只需实现 `RuntimeAdapter` 接口，无需修改 Worker。
 
 ```go
+// [已废弃] 旧版硬编码注入，保留作为参考
 // Worker 从 Agent runtime_config 读取 opencode 配置，写入沙箱
 func injectOpenCodeConfig(ctx context.Context, containerID string, agent *model.Agent) error {
     cfg := agent.RuntimeConfig.OpenCode
@@ -2482,11 +2485,16 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     // 根据运行时选择镜像
     image := cfg.Runtime.DockerImage       // 来自 runtimes.docker_image
 
-    // 项目根目录（含 .opencode/skills）
+    // 项目根目录（含 Skills 目录，具体路径由适配器决定）
     projectRoot := cfg.WorkspaceRoot
 
     // Named Volume：按项目隔离，容器销毁后代码保留，避免大仓库重复 clone
     workspaceVol := fmt.Sprintf("anserflow-workspace-%d", cfg.ProjectID)
+
+    // 通过 RuntimeAdapter 获取 Skills 挂载路径（运行时无关）
+    // opencode → /home/sandbox/.config/opencode/skills
+    // claude-code → /home/sandbox/.claude/skills
+    skillsPath := cfg.Runtime.SkillsMountPath  // 由 RuntimeAdapter.SkillsMountPath() 提供
 
     resp, _ := cli.ContainerCreate(ctx, &container.Config{
         Image: image,
@@ -2495,10 +2503,9 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
         Memory:     512 * 1024 * 1024,
         NanoCPUs:   2 * 1e9,
         AutoRemove: false,
-        // bind mount: 宿主机 .opencode/skills → 容器内 opencode 全局 Skills 搜索路径（只读）
-        // opencode 原生搜索 ~/.config/opencode/skills/<name>/SKILL.md
+        // bind mount: 宿主机 .opencode/skills → 容器内适配器指定路径（只读）
         Binds: []string{
-            projectRoot + "/.opencode/skills:/home/sandbox/.config/opencode/skills:ro",
+            projectRoot + "/.opencode/skills:" + skillsPath + ":ro",
         },
         Mounts: []mount.Mount{
             {
