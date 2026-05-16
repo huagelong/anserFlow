@@ -682,7 +682,13 @@ anserflow/
 │   ├── agent/                  #   Agent 编排（Eino 封装）
 │   ├── sandbox/                #   Docker 沙箱
 │   ├── invite/                 #   邀请服务
-│   └── prompts/                #   提示词统一管理（硬编码模板）
+│   ├── prompts/                #   提示词统一管理（硬编码模板）
+│   ├── status/                 #   Issue 状态机管理器
+│   ├── sandbox/                #   Docker 沙箱（含 SandboxManager）
+│   ├── runtime/                #   运行时管理器（配置构建/命令渲染）
+│   ├── notification/           #   通知渠道路由管理器
+│   ├── git/                    #   Git 平台抽象（含 GitProviderManager）
+│   └── token/                  #   Token 配额管理器（用量追踪/归档）
 ├── config/                     # Go 配置加载（Viper）
 ├── admin/                      # ① npm workspace: @anserflow/admin
 │   ├── package.json            #   "name": "@anserflow/admin"

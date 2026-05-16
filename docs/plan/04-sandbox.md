@@ -34,6 +34,24 @@
 │  ├── notification.go      通知标题/正文模板  │
 │  └── error_templates.go   错误消息模板     │
 ├──────────────────────────────────────────┤
+│  anserflow/internal/status/  (状态机)      │
+│  └── status_manager.go  Issue 状态流转管理  │
+├──────────────────────────────────────────┤
+│  anserflow/internal/sandbox/ (沙箱生命周期) │
+│  └── sandbox_manager.go 创建/暂停/恢复/销毁 │
+├──────────────────────────────────────────┤
+│  anserflow/internal/runtime/ (运行时管理)   │
+│  └── runtime_manager.go 配置构建/命令渲染   │
+├──────────────────────────────────────────┤
+│  anserflow/internal/notification/ (通知)   │
+│  └── channel_manager.go 多渠道路由分发      │
+├──────────────────────────────────────────┤
+│  anserflow/internal/git/  (Git 平台抽象)   │
+│  └── provider_manager.go GitProvider 路由  │
+├──────────────────────────────────────────┤
+│  anserflow/internal/token/  (Token 配额)   │
+│  └── token_manager.go   用量追踪/配额/归档  │
+├──────────────────────────────────────────┤
 │  Eino (底层 LLM 引擎)                    │
 │  ├── ChatModel         模型调用           │
 │  ├── Tool              工具/Skills 抽象   │
@@ -437,6 +455,544 @@ s.messageService.SendSystemMessage(ctx, issue.SourceGroupID, fmt.Sprintf(
 // 替换后：
 s.messageService.SendSystemMessage(ctx, issue.SourceGroupID,
     prompts.Get(fmt.Sprintf("system.issue.%s", statusKey), issue.ID))
+```
+
+### IssueStatusManager — Issue 状态机管理器
+
+Issue 状态流转逻辑分散在 `IssueService`、`Worker`、`Scheduler`、`WebhookHandler` 四处，通过 `StatusManager` 集中管理状态机规则和副作用触发。
+
+**设计原则**：
+
+- 状态流转合法表集中定义，不散落在 if/switch 中
+- 每次流转的副作用（群聊通知、时间线、通知推送）统一 Hook 回调
+- 新增状态或修改流转规则只需改一处
+
+**状态流转合法表**：
+
+| from | to | 触发方 | 副作用 |
+|------|----|--------|--------|
+| `backlog` | `todo` | 人工确认 | 群聊通知 + 时间线 |
+| `todo` | `in_progress` | Scheduler 分配 | 群聊通知 + 时间线 + 通知被分配人 |
+| `in_progress` | `in_review` | Worker PR 提交 | 群聊通知 + 时间线 + 通知 Reviewer |
+| `in_progress` | `paused` | 人工暂停 | 群聊通知 + 时间线 |
+| `in_progress` | `todo` | Worker 执行失败 | 群聊通知 + 时间线 + retry_count++ |
+| `in_review` | `done` | GitHub Webhook merge | 群聊通知 + 时间线 |
+| `in_review` | `todo` | GitHub Webhook reject | 群聊通知 + 时间线（沙箱保留） |
+| `todo` | `backlog` | 人工退回 | 时间线 |
+
+**实现**：
+
+```go
+// internal/status/status_manager.go
+package status
+
+import (
+    "context"
+    "fmt"
+)
+
+// Transition 表示一次状态流转
+// type Transition struct {
+//     From string
+//     To   string
+// }
+
+type TransitionHook func(ctx context.Context, issueID uint, from, to string) error
+
+type StatusManager struct {
+    transitions map[string]map[string]bool   // from -> to -> allowed
+    hooks       map[string][]TransitionHook   // "from->to" -> hooks
+}
+
+func NewStatusManager() *StatusManager {
+    m := &StatusManager{
+        transitions: make(map[string]map[string]bool),
+        hooks:       make(map[string][]TransitionHook),
+    }
+    // 注册合法流转
+    m.allow("backlog", "todo")
+    m.allow("todo", "in_progress")
+    m.allow("todo", "backlog")
+    m.allow("in_progress", "in_review")
+    m.allow("in_progress", "paused")
+    m.allow("in_progress", "todo")
+    m.allow("in_review", "done")
+    m.allow("in_review", "todo")
+    m.allow("paused", "in_progress")
+    return m
+}
+
+func (m *StatusManager) allow(from, to string) {
+    if m.transitions[from] == nil {
+        m.transitions[from] = make(map[string]bool)
+    }
+    m.transitions[from][to] = true
+}
+
+// OnTransition 注册流转副作用 Hook
+func (m *StatusManager) OnTransition(from, to string, hook TransitionHook) {
+    key := from + "->" + to
+    m.hooks[key] = append(m.hooks[key], hook)
+}
+
+// CanTransition 检查流转是否合法
+func (m *StatusManager) CanTransition(from, to string) bool {
+    return m.transitions[from][to]
+}
+
+// Transition 执行状态流转（校验 + 触发 hooks）
+func (m *StatusManager) Transition(ctx context.Context, issueID uint, from, to string) error {
+    if !m.CanTransition(from, to) {
+        return fmt.Errorf("invalid transition: %s -> %s", from, to)
+    }
+    key := from + "->" + to
+    for _, hook := range m.hooks[key] {
+        if err := hook(ctx, issueID, from, to); err != nil {
+            return fmt.Errorf("hook failed for %s: %w", key, err)
+        }
+    }
+    return nil
+}
+```
+
+**业务代码接入**：
+
+```go
+// 初始化时注册 hooks
+statusMgr := status.NewStatusManager()
+
+// 所有含群聊通知的流转都注册群聊 Hook
+statusMgr.OnTransition("backlog", "todo",
+    func(ctx context.Context, issueID uint, from, to string) error {
+        issue, _ := issueRepo.FindByID(ctx, issueID)
+        if issue.SourceGroupID != 0 {
+            msgService.SendSystemMessage(ctx, issue.SourceGroupID,
+                prompts.Get("system.issue.to_todo", issueID))
+        }
+        return nil
+    },
+)
+
+// 业务代码调用：一行代替多处 if/通知/时间线
+statusMgr.Transition(ctx, issueID, "backlog", "todo")
+```
+
+### SandboxManager — 沙箱生命周期管理器
+
+沙箱创建、暂停、恢复、销毁、复用的逻辑分散在 Worker 和 executor.go 中，通过 `SandboxManager` 统一 Docker API 调用。
+
+**设计原则**：
+
+- Worker 只调 `SandboxManager.Create/Resume/Destroy`，不直接操作 Docker SDK
+- 资源限额、网络隔离、超时清理等策略集中管理
+- 便于替换沙箱方案（如 Firecracker）
+
+**实现**：
+
+```go
+// internal/sandbox/sandbox_manager.go
+package sandbox
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/docker/docker/api/types/container"
+    "github.com/docker/docker/client"
+)
+
+type SandboxConfig struct {
+    IssueID        uint
+    Image          string
+    AllowedDomains []string
+    MaxMemoryMB    int
+    TimeoutMinutes int
+    EnvVars        map[string]string
+    ExistingID     string // 复用已有容器
+}
+
+type SandboxHandle struct {
+    ContainerID string
+    CreatedAt    time.Time
+}
+
+type SandboxManager struct {
+    cli    *client.Client
+    config Config
+}
+
+func NewSandboxManager(cli *client.Client, cfg Config) *SandboxManager {
+    return &SandboxManager{cli: cli, config: cfg}
+}
+
+// Create 创建沙箱容器（网络隔离 + 资源限额）
+func (m *SandboxManager) Create(ctx context.Context, cfg SandboxConfig) (*SandboxHandle, error) {
+    if cfg.ExistingID != "" {
+        return &SandboxHandle{ContainerID: cfg.ExistingID}, nil
+    }
+    // 创建容器 + 网络隔离 + 资源限额
+    resp, err := m.cli.ContainerCreate(ctx,
+        &container.Config{Image: cfg.Image, Env: buildEnv(cfg.EnvVars)},
+        &container.HostConfig{
+            Memory:     int64(cfg.MaxMemoryMB) * 1024 * 1024,
+            AutoRemove: true,
+        },
+        nil, nil, fmt.Sprintf("anserflow-issue-%d", cfg.IssueID),
+    )
+    if err != nil {
+        return nil, fmt.Errorf("create sandbox: %w", err)
+    }
+    return &SandboxHandle{ContainerID: resp.ID, CreatedAt: time.Now()}, nil
+}
+
+// Pause 冻结容器（进程挂起，内存保留）
+func (m *SandboxManager) Pause(ctx context.Context, containerID string) error {
+    return m.cli.ContainerPause(ctx, containerID)
+}
+
+// Resume 解冻容器
+func (m *SandboxManager) Resume(ctx context.Context, containerID string) error {
+    return m.cli.ContainerUnpause(ctx, containerID)
+}
+
+// Destroy 销毁容器
+func (m *SandboxManager) Destroy(ctx context.Context, containerID string) error {
+    return m.cli.ContainerRemove(ctx, containerID,
+        container.RemoveOptions{Force: true})
+}
+
+// IsAlive 检查容器是否运行中
+func (m *SandboxManager) IsAlive(ctx context.Context, containerID string) bool {
+    _, err := m.cli.ContainerInspect(ctx, containerID)
+    return err == nil
+}
+```
+
+### RuntimeManager — 运行时管理器
+
+运行时配置构建（解密 API Key、拼接 execute_template、写 config.json）当前直接写在 Worker 中，通过 `RuntimeManager` 抽象运行时差异。
+
+**设计原则**：
+
+- `RuntimeManager` 持有 `execute_template` 模板解析能力
+- API Key 加解密、环境变量注入统一入口
+- 新运行时注册后自动支持
+
+**实现**：
+
+```go
+// internal/runtime/runtime_manager.go
+package runtime
+
+import (
+    "context"
+    "fmt"
+    "strings"
+    "text/template"
+)
+
+type RuntimeConfig struct {
+    Provider      string
+    Model         string
+    Agent         string
+    APIKey        string // 已解密
+    MaxIterations int
+    Thinking      bool
+}
+
+type ResolvedSandboxConfig struct {
+    ExecCommand   string            // 最终执行命令
+    ContainerEnvs map[string]string // 注入容器的环境变量
+    ConfigJSON    string            // 写入容器的 config.json
+}
+
+type RuntimeManager struct {
+    crypto CryptoService
+}
+
+// ResolveConfig 解密密钥 + 渲染 execute_template → 最终配置
+func (m *RuntimeManager) ResolveConfig(
+    ctx context.Context,
+    executeTemplate string,
+    runtimeConfig map[string]interface{},
+    prompt string,
+) (*ResolvedSandboxConfig, error) {
+    // 1. 解密 API Key
+    apiKey, _ := m.crypto.Decrypt(runtimeConfig["api_key_encrypted"].(string))
+
+    // 2. 渲染 execute_template
+    tmpl, _ := template.New("exec").Parse(executeTemplate)
+    var buf strings.Builder
+    tmpl.Execute(&buf, map[string]string{
+        "provider": runtimeConfig["provider"].(string),
+        "model":   runtimeConfig["model"].(string),
+        "agent":   runtimeConfig["agent"].(string),
+        "prompt":  prompt,
+    })
+
+    // 3. 构建容器环境变量
+    envs := map[string]string{
+        fmt.Sprintf("%s_API_KEY", strings.ToUpper(runtimeConfig["provider"].(string))): apiKey,
+    }
+
+    return &ResolvedSandboxConfig{
+        ExecCommand:   buf.String(),
+        ContainerEnvs: envs,
+    }, nil
+}
+```
+
+**Worker 调用**：
+
+```go
+// 替换前：Worker 中手动拼接命令
+resolved, _ := runtimeMgr.ResolveConfig(ctx, runtime.ExecuteTemplate, agent.RuntimeConfig, issue.Prompt)
+sandboxMgr.Create(ctx, SandboxConfig{...})
+// 注入 resolved 到沙箱
+```
+
+### NotificationChannelManager — 通知渠道管理器
+
+`NotificationService` 中 WS 推送、浏览器通知、群聊系统消息、邮件通知四种渠道的触发逻辑硬编码在多个方法里，通过 `ChannelManager` 统一分发。
+
+**设计原则**：
+
+- 统一入口：`manager.Notify(event, payload)` → 自动分发到用户开通的渠道
+- 新增渠道只需注册新 Channel，不改业务代码
+- 用户通知偏好统一查询
+
+**实现**：
+
+```go
+// internal/notification/channel_manager.go
+package notification
+
+import (
+    "context"
+)
+
+type Event string
+
+const (
+    EventIssueAssigned     Event = "issue_assigned"
+    EventIssueStatusChange Event = "issue_status_changed"
+    EventAgentCompleted    Event = "agent_completed"
+    EventMention           Event = "mention"
+    EventNewDM             Event = "new_dm"
+)
+
+type NotifyPayload struct {
+    UserID  uint
+    Title   string
+    Body    string
+    Data    map[string]interface{}
+    GroupID uint   // 群聊系统消息用
+    Event   Event
+}
+
+// Channel 通知渠道接口
+type Channel interface {
+    Name() string
+    Send(ctx context.Context, userID uint, payload *NotifyPayload) error
+}
+
+type ChannelManager struct {
+    channels  []Channel
+    userPrefs UserPreferenceService
+}
+
+func NewChannelManager(prefs UserPreferenceService) *ChannelManager {
+    return &ChannelManager{userPrefs: prefs}
+}
+
+// Register 注册渠道
+func (m *ChannelManager) Register(ch Channel) {
+    m.channels = append(m.channels, ch)
+}
+
+// Notify 统一通知入口：查询用户偏好 → 按渠道分发
+func (m *ChannelManager) Notify(ctx context.Context, payload *NotifyPayload) error {
+    prefs := m.userPrefs.GetNotificationPrefs(ctx, payload.UserID)
+    for _, ch := range m.channels {
+        if prefs.IsEnabled(ch.Name(), string(payload.Event)) {
+            ch.Send(ctx, payload.UserID, payload)
+        }
+    }
+    return nil
+}
+
+// NotifyGroup 向群聊发送系统消息（不受用户偏好控制）
+func (m *ChannelManager) NotifyGroup(ctx context.Context, groupID uint, message string) {
+    // 直接写入 messages 表 type=system
+}
+```
+
+**渠道注册**：
+
+```go
+// 初始化
+chMgr := notification.NewChannelManager(userPrefService)
+chMgr.Register(&WebSocketChannel{hub: wsHub})
+chMgr.Register(&EmailChannel{smtp: smtpClient})
+chMgr.Register(&BrowserChannel{hub: wsHub})
+// 群聊系统消息通过 NotifyGroup 独立发送
+```
+
+### GitProviderManager — Git 平台管理器
+
+当前只有 GitHub 集成，`git_platform` 字段保留了扩展位，通过 `GitProviderManager` 做平台路由。
+
+**设计原则**：
+
+- `manager.GetProvider(platform)` → 返回对应实现
+- 业务代码不感知具体平台
+- Phase 2 接入 Gitea/GitLab 时零侵入
+
+**实现**：
+
+```go
+// internal/git/provider_manager.go
+package git
+
+import (
+    "context"
+    "fmt"
+)
+
+// GitProvider 平台无关接口
+// （已在架构文档中定义，此处由 Manager 持有路由）
+type GitProvider interface {
+    CreateIssue(ctx context.Context, repo, title, body string, labels []string) (issueID string, err error)
+    CreatePR(ctx context.Context, repo, title, head, base, body string) (prURL string, err error)
+    GetRepoInfo(ctx context.Context, repo string) (*RepoInfo, error)
+    ListBranches(ctx context.Context, repo string) ([]string, error)
+}
+
+type GitProviderManager struct {
+    providers map[string]GitProvider
+    defaultID string
+}
+
+func NewGitProviderManager() *GitProviderManager {
+    return &GitProviderManager{
+        providers: make(map[string]GitProvider),
+        defaultID: "github",
+    }
+}
+
+// Register 注册平台实现
+func (m *GitProviderManager) Register(platform string, provider GitProvider) {
+    m.providers[platform] = provider
+}
+
+// GetProvider 获取平台实现（默认返回 github）
+func (m *GitProviderManager) GetProvider(platform string) (GitProvider, error) {
+    if platform == "" {
+        platform = m.defaultID
+    }
+    p, ok := m.providers[platform]
+    if !ok {
+        return nil, fmt.Errorf("unsupported git platform: %s", platform)
+    }
+    return p, nil
+}
+```
+
+**初始化**：
+
+```go
+gitMgr := git.NewGitProviderManager()
+gitMgr.Register("github", &GitHubProvider{token: cfg.GitHubToken})
+// Phase 2: gitMgr.Register("gitea", &GiteaProvider{...})
+// Phase 2: gitMgr.Register("gitlab", &GitLabProvider{...})
+```
+
+### TokenManager — Token 配额管理器
+
+在现有 `TokenTracker` 基础上升级，增加配额检查、周期归档、用量报告能力。
+
+**设计原则**：
+
+- 配额检查：`manager.CheckQuota(orgID)` → 超额时暂停 Agent 执行
+- 周期归档：每天凌晨 Redis → MySQL 持久化
+- 用量报告：按组织/项目/Agent/日期多维度查询
+
+**实现**：
+
+```go
+// internal/token/token_manager.go
+package token
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/redis/go-redis/v9"
+)
+
+type Usage struct {
+    PromptTokens     int64
+    CompletionTokens int64
+    Source           string // "eino" | "opencode"
+}
+
+type DailyReport struct {
+    Date             string
+    PromptTokens     int64
+    CompletionTokens int64
+    TotalCost        float64
+    BySource         map[string]Usage
+}
+
+type TokenManager struct {
+    redis  *redis.Client
+    quota  QuotaService
+}
+
+func NewTokenManager(rdb *redis.Client, quota QuotaService) *TokenManager {
+    return &TokenManager{redis: rdb, quota: quota}
+}
+
+// Record 记录单次调用用量（按 Agent + 日期 + 来源聚合）
+func (m *TokenManager) Record(ctx context.Context, agentID uint, usage *Usage) {
+    key := fmt.Sprintf("tokens:agent:%d:date:%s", agentID, time.Now().Format("2006-01-02"))
+    pipe := m.redis.Pipeline()
+    pipe.HIncrBy(ctx, key, "prompt_tokens", usage.PromptTokens)
+    pipe.HIncrBy(ctx, key, "completion_tokens", usage.CompletionTokens)
+    pipe.HIncrBy(ctx, key, "source_"+usage.Source, 1)
+    pipe.Expire(ctx, key, 7*24*time.Hour)
+    pipe.Exec(ctx)
+}
+
+// CheckQuota 检查组织配额（超额返回 false）
+func (m *TokenManager) CheckQuota(ctx context.Context, orgID uint) bool {
+    limit := m.quota.GetMonthlyLimit(ctx, orgID)
+    used := m.quota.GetMonthlyUsage(ctx, orgID)
+    return used < limit
+}
+
+// GetDailyUsage 获取指定日期用量
+func (m *TokenManager) GetDailyUsage(ctx context.Context, agentID uint, date string) (*DailyReport, error) {
+    key := fmt.Sprintf("tokens:agent:%d:date:%s", agentID, date)
+    result, err := m.redis.HGetAll(ctx, key).Result()
+    if err != nil {
+        return nil, err
+    }
+    report := &DailyReport{
+        Date:     date,
+        BySource: make(map[string]Usage),
+    }
+    // 解析 result 到 report...
+    return report, nil
+}
+
+// Archive 归档到 MySQL（定时任务调用）
+func (m *TokenManager) Archive(ctx context.Context, date string) error {
+    // 扫描 tokens:agent:*:date:{date} → 写入 token_usage 表
+    return nil
+}
 ```
 
 ### Eino Tool 系统（Skill 与系统通信）
