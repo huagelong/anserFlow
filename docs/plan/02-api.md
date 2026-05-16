@@ -1217,7 +1217,7 @@ INSERT INTO runtimes (name, display_name, description, docker_image, install_cmd
 ('opencode', 'OpenCode', '开源 AI 编码代理，TypeScript，160k+ Stars',
  'ghcr.io/anserflow/sandbox:latest',
  'npm install -g opencode-ai@latest',
- 'opencode run "{prompt}" --model {provider}/{model} --agent {agent} --dangerously-skip-permissions',
+ 'opencode run "{prompt}" --model {provider}/{model} --agent {agent} --dangerously-skip-permissions --format json',
  '{"type":"object","properties":{"provider":{"type":"string","enum":["openai","anthropic","google","deepseek"]},"model":{"type":"string"},"agent":{"type":"string","enum":["build","plan"]},"api_key_encrypted":{"type":"string"},"max_iterations":{"type":"number","default":20},"thinking":{"type":"boolean","default":true}}}',
  '{"provider":"openai","model":"gpt-4o","agent":"build","max_iterations":20,"thinking":true}',
  1);

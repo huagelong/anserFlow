@@ -2968,21 +2968,53 @@ func parseIssueRefs(text string) []uint {
 
 ### Token 用量与成本追踪
 
+系统 Token 消耗来自两个阶段，需要分别追踪后汇总：
+
+| 阶段 | 谁调 LLM | 追踪方式 | 占比（典型） |
+|------|---------|---------|------------|
+| **Eino 调度** | Go 后端进程 | `TokenTracker.Record(agentID, usage, "eino")` | ~10-20% |
+| **opencode 执行** | Docker 沙箱内 | 解析 stdout JSON + session 文件 | ~80-90% |
+
+#### TokenTracker — 统一记录（区分来源）
+
 ```go
 // internal/agent/token_tracker.go
 type TokenTracker struct {
     redis *redis.Client
 }
 
-// Record 记录单次调用用量（按 Agent + 日期聚合）
-func (t *TokenTracker) Record(agentID uint, usage *schema.TokenUsage) {
+// TokenRecord 单次用量记录
+type TokenRecord struct {
+    Source           string // "eino" 或 "opencode"
+    PromptTokens     int64
+    CompletionTokens int64
+}
+
+// Record 记录单次调用用量（按 Agent + 日期 + 来源聚合）
+func (t *TokenTracker) Record(agentID uint, usage *schema.TokenUsage, source string) {
     key := fmt.Sprintf("tokens:agent:%d:date:%s", agentID, time.Now().Format("2006-01-02"))
     t.redis.HIncrBy(ctx, key, "prompt_tokens", int64(usage.PromptTokens))
     t.redis.HIncrBy(ctx, key, "completion_tokens", int64(usage.CompletionTokens))
+    t.redis.HIncrBy(ctx, key, "eino_prompt_tokens", func() int64 {
+        if source == "eino" { return int64(usage.PromptTokens) }
+        return 0
+    }())
+    t.redis.HIncrBy(ctx, key, "eino_completion_tokens", func() int64 {
+        if source == "eino" { return int64(usage.CompletionTokens) }
+        return 0
+    }())
+    t.redis.HIncrBy(ctx, key, "opencode_prompt_tokens", func() int64 {
+        if source == "opencode" { return int64(usage.PromptTokens) }
+        return 0
+    }())
+    t.redis.HIncrBy(ctx, key, "opencode_completion_tokens", func() int64 {
+        if source == "opencode" { return int64(usage.CompletionTokens) }
+        return 0
+    }())
     t.redis.Expire(ctx, key, 30*24*time.Hour) // 保留 30 天
 }
 
-// GetDailyUsage 获取指定日期用量
+// GetDailyUsage 获取指定日期用量（含来源明细）
 func (t *TokenTracker) GetDailyUsage(
     agentID uint, date string,
 ) (prompt, completion int64, err error) {
@@ -2991,6 +3023,152 @@ func (t *TokenTracker) GetDailyUsage(
     // ...
 }
 ```
+
+#### Eino 调度阶段 — 回调记录（已有）
+
+```go
+// 群聊讨论 / /backlog / PromptOptimizer 中的 Eino 调用
+resp, err := GetChatModel().Generate(ctx, chatInput,
+    model.WithCallbacks(&callbacks.Handler{
+        OnEnd: func(ctx context.Context, info *callbacks.RunInfo, output model.CallbackOutput) context.Context {
+            o.tokenTracker.Record(agent.ID, output.TokenUsage, "eino")
+            return ctx
+        },
+    }),
+)
+```
+
+#### opencode 执行阶段 — 双通道采集
+
+**通道 ① 实时：`opencode run --format json` stdout 解析**
+
+```go
+// internal/worker/executor.go — Worker 执行 opencode
+func (w *Worker) executeWithTokenTracking(
+    ctx context.Context,
+    containerID string,
+    cmd string,
+    agentID uint,
+) error {
+    // opencode run 命令追加 --format json
+    cmd += " --format json"
+    exec, _ := w.docker.ContainerExecCreate(ctx, containerID, types.ExecConfig{
+        Cmd:          []string{"sh", "-c", cmd},
+        AttachStdout: true,
+        AttachStderr: true,
+    })
+   
+    hijack, _ := w.docker.ContainerExecAttach(ctx, exec.ID, types.ExecStartCheck{})
+    defer hijack.Close()
+
+    scanner := bufio.NewScanner(hijack.Reader)
+    for scanner.Scan() {
+        line := scanner.Bytes()
+        
+        // 尝试解析为 JSON 事件
+        var event map[string]interface{}
+        if err := json.Unmarshal(line, &event); err == nil {
+            // 解析 token_usage 字段
+            if usage, ok := event["token_usage"]; ok {
+                tu := parseTokenUsage(usage)
+                w.tokenTracker.Record(agentID, &schema.TokenUsage{
+                    PromptTokens:     tu.InputTokens,
+                    CompletionTokens: tu.OutputTokens,
+                }, "opencode")
+            }
+            
+            // 解析文本内容 → 推送到 issue_timeline
+            if content, ok := event["content"]; ok {
+                w.timelineRepo.Append(issueID, "agent", "opencode_output", "", "", fmt.Sprintf("%v", content))
+            }
+        } else {
+            // 非 JSON 行 → 原有的 stdout 解析逻辑（兼容）
+            w.parseStdoutLine(string(line), issueID)
+        }
+    }
+    return nil
+}
+
+// parseTokenUsage 从 opencode JSON 事件中提取 token 用量
+func parseTokenUsage(raw interface{}) *TokenUsageDetail {
+    m, ok := raw.(map[string]interface{})
+    if !ok { return nil }
+    return &TokenUsageDetail{
+        InputTokens:       toInt64(m["input_tokens"]),
+        OutputTokens:      toInt64(m["output_tokens"]),
+        CacheReadTokens:   toInt64(m["cache_read_input_tokens"]),
+        CacheWriteTokens:  toInt64(m["cache_creation_input_tokens"]),
+    }
+}
+```
+
+**通道 ② 事后汇总：opencode session 文件解析**
+
+opencode 在 `~/.local/share/opencode/sessions/` 下保存 JSONL 格式的会话文件，每条消息包含 `token_usage` 字段。Worker 在执行完成后从容器中提取：
+
+```go
+// internal/worker/session_parser.go — 执行完成后调用
+func (w *Worker) collectSessionTokens(
+    ctx context.Context,
+    containerID string,
+    agentID uint,
+    issueID uint,
+) error {
+    // 从容器中读取最新 session 文件的 token 汇总
+    exec, _ := w.docker.ContainerExecCreate(ctx, containerID, types.ExecConfig{
+        Cmd: []string{"sh", "-c",
+            "cat $(ls -t ~/.local/share/opencode/sessions/*.jsonl | head -1)"},
+    })
+    // ... 读取输出 ...
+
+    var totalInput, totalOutput int64
+    scanner := bufio.NewScanner(bytes.NewReader(output))
+    for scanner.Scan() {
+        var msg struct {
+            TokenUsage *struct {
+                InputTokens  int64 `json:"input_tokens"`
+                OutputTokens int64 `json:"output_tokens"`
+            } `json:"token_usage"`
+        }
+        if json.Unmarshal(scanner.Bytes(), &msg) == nil && msg.TokenUsage != nil {
+            totalInput += msg.TokenUsage.InputTokens
+            totalOutput += msg.TokenUsage.OutputTokens
+        }
+    }
+
+    // 最终汇总写入（与实时采集去重：取 max 而非累加）
+    w.tokenTracker.RecordFinal(agentID, issueID, &schema.TokenUsage{
+        PromptTokens:     totalInput,
+        CompletionTokens: totalOutput,
+    }, "opencode")
+
+    // 写入 agent_logs
+    w.logRepo.Create(ctx, &model.AgentLog{
+        AgentID: agentID,
+        Action:  "token_summary",
+        Input:   json.RawMessage(fmt.Sprintf(`{"source":"opencode","issue_id":%d}`, issueID)),
+        Output:  json.RawMessage(fmt.Sprintf(
+            `{"input_tokens":%d,"output_tokens":%d,"total_tokens":%d}`,
+            totalInput, totalOutput, totalInput+totalOutput)),
+        Status:  "success",
+    })
+    return nil
+}
+```
+
+> **双通道去重策略**：实时通道在 opencode 执行过程中持续累加 token，事后通道在执行完成后读取 session 文件获得最终精确值。取 `max(实时, 事后)` 作为最终值，覆盖 Redis 中的 opencode 部分（通过 `RecordFinal` 实现）。这样即使实时通道部分 JSON 解析失败，事后通道也能兜底。
+
+#### Token 总量公式
+
+```
+Agent 总 Token = Eino 调度 Token + opencode 执行 Token
+              = (讨论 + /backlog + 提示词优化) + (编码 + 测试 + 修复 + PR)
+```
+
+| 来源 | 包含的 LLM 调用 | 触发位置 |
+|------|---------------|---------|
+| `eino` | 群聊 Agent 讨论、`/backlog` 方案拆解、`PromptOptimizer.Enhance()` | `GroupOrchestrator.InvokeAgent` / `CommandHandler.HandleBacklog` |
+| `opencode` | `opencode run` 全过程（读取代码、生成代码、运行测试、修复错误、commit） | `Worker.executeWithTokenTracking` |
 
 > **LLM API Key 安全模型**：API Key 在 `agents.runtime_config.llm.api_key_encrypted` 中以 AES-256 加密存储；Agent 执行时 Worker 解密后通过环境变量注入 Docker 沙箱，不写入容器文件系统。
 
@@ -3001,13 +3179,17 @@ func (t *TokenTracker) GetDailyUsage(
 ```go
 // internal/handler/token_handler.go
 type TokenUsageResponse struct {
-    AgentID          uint    `json:"agent_id"`
-    AgentName        string  `json:"agent_name"`
-    Date             string  `json:"date"`              // "2026-05-14"
-    PromptTokens     int64   `json:"prompt_tokens"`
-    CompletionTokens int64   `json:"completion_tokens"`
-    TotalTokens      int64   `json:"total_tokens"`
-    EstimatedCostUSD float64 `json:"estimated_cost_usd"` // 按 provider 单价估算
+    AgentID                 uint    `json:"agent_id"`
+    AgentName               string  `json:"agent_name"`
+    Date                    string  `json:"date"`              // "2026-05-14"
+    PromptTokens            int64   `json:"prompt_tokens"`
+    CompletionTokens        int64   `json:"completion_tokens"`
+    TotalTokens             int64   `json:"total_tokens"`
+    EinoPromptTokens        int64   `json:"eino_prompt_tokens"`        // Eino 调度阶段
+    EinoCompletionTokens    int64   `json:"eino_completion_tokens"`
+    OpencodePromptTokens    int64   `json:"opencode_prompt_tokens"`    // opencode 执行阶段
+    OpencodeCompletionTokens int64  `json:"opencode_completion_tokens"`
+    EstimatedCostUSD        float64 `json:"estimated_cost_usd"` // 按 provider 单价估算
 }
 
 type OrgTokenSummary struct {
@@ -4518,7 +4700,7 @@ INSERT INTO runtimes (name, display_name, description, docker_image, install_cmd
 ('opencode', 'OpenCode', '开源 AI 编码代理，TypeScript，160k+ Stars',
  'ghcr.io/anserflow/sandbox:latest',
  'npm install -g opencode-ai@latest',
- 'opencode run "{prompt}" --model {provider}/{model} --agent {agent} --dangerously-skip-permissions',
+ 'opencode run "{prompt}" --model {provider}/{model} --agent {agent} --dangerously-skip-permissions --format json',
  '{"type":"object","properties":{"provider":{"type":"string","enum":["openai","anthropic","google","deepseek"]},"model":{"type":"string"},"agent":{"type":"string","enum":["build","plan"]},"api_key_encrypted":{"type":"string"},"max_iterations":{"type":"number","default":20},"thinking":{"type":"boolean","default":true}}}',
  '{"provider":"openai","model":"gpt-4o","agent":"build","max_iterations":20,"thinking":true}',
  1);
