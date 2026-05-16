@@ -42,6 +42,9 @@ redis:
   password: ""
   db: 0
   pool_size: 50
+  # ↓ 部署时需在 redis.conf 中配置 AOF 持久化（保障 Asynq 任务队列不丢失）
+  # appendonly yes
+  # appendfsync everysec
 
 # ═══════════════════════════════════════════════════════════════
 # 🟡 服务级（config.yaml 提供默认值，后台 /admin/settings 可覆盖）

@@ -636,7 +636,7 @@ func (m *SandboxManager) Create(ctx context.Context, cfg SandboxConfig) (*Sandbo
         &container.Config{Image: cfg.Image, Env: buildEnv(cfg.EnvVars)},
         &container.HostConfig{
             Memory:     int64(cfg.MaxMemoryMB) * 1024 * 1024,
-            AutoRemove: true,
+            AutoRemove: false,  // 不自动销毁，保障 Worker 重启后可恢复
         },
         nil, nil, fmt.Sprintf("anserflow-issue-%d", cfg.IssueID),
     )
@@ -1880,7 +1880,7 @@ func estimateCost(providerKey string, promptTokens, completionTokens int64) floa
 │  │  ├── BindMount: project-runtime→home (rw)│  │
 │  │  │   /var/lib/.../projects/{id}/runtime/ → /home/sandbox/.opencode│  │
 │  │  │   (项目级运行时数据：Skills + 配置 + 插件，读写)│  │
-│  │  └── AutoRemove: true          │  │
+│  │  └── AutoRemove: false (保障重启后可恢复) │  │
 │  │                                │  │
 │  │  Step 3: 注入运行时配置         │  │
 │  │  ├── 读取 Agent runtime_config  │  │
@@ -2247,23 +2247,97 @@ func (w *Worker) StopIssue(issueID uint) error {
 }
 ```
 
-**Worker 重启后恢复**：Worker 进程重启时，通过以下方式找回暂停的容器：
+**Worker 重启后恢复**：Worker 进程重启时，需恢复两类异常状态的 Issue：
 
 ```
 Worker 启动
     │
-    ▼
-扫描 issues 表 WHERE status='paused' AND sandbox_container_id IS NOT NULL
+    ├── 1. RecoverRunningIssues — 恢复 in_progress
+    │       │
+    │       ▼
+    │   扫描 issues WHERE status='in_progress' AND sandbox_container_id IS NOT NULL
+    │       │
+    │       ├── 容器 running → 重新 Attach stdout 流 + 订阅控制频道，继续处理
+    │       │
+    │       ├── 容器 stopped（Docker 重启导致容器停止）
+    │       │       ├── 检查 opencode 退出码（docker inspect .State.ExitCode）
+    │       │       │   ├── exit 0 → 成功但未来得及提交 → 执行 commit/PR 流程 → in_review
+    │       │       │   └── exit 非0 / unknown → 标记失败，Issue → todo，记录异常时间线
+    │       │       └── 更新 Issue 状态 + 通知前端
+    │       │
+    │       └── 容器已销毁 → Issue → backlog + 记录异常时间线
     │
-    ├── 存在 → Docker API Inspect 检查容器是否存活
-    │           ├── 存活 → 恢复 Attach stdout 流，订阅控制频道继续监听
-    │           └── 已销毁 → Issue → backlog + 记录异常时间线
-    │
-    └── 不存在 → 无操作
+    └── 2. RecoverPausedIssues — 恢复 paused（原有逻辑）
+            │
+            ▼
+        扫描 issues WHERE status='paused' AND sandbox_container_id IS NOT NULL
+            │
+            ├── 容器存活（paused）→ 恢复 Attach + 订阅控制频道
+            └── 容器已销毁 → Issue → backlog + 记录异常时间线
 ```
 
 ```go
 // internal/worker/recovery.go
+
+// RecoverRunningIssues 恢复服务器重启前正在执行的 Issue
+// 场景：服务器重启 → Docker 守护进程重启 → 容器停止（AutoRemove=false，容器还在）
+func (w *Worker) RecoverRunningIssues(ctx context.Context) {
+    runningIssues, _ := w.issueRepo.FindByStatus(ctx, "in_progress")
+    for _, issue := range runningIssues {
+        if issue.SandboxContainerID == "" {
+            // 异常：in_progress 但没有容器 → 回退到 todo
+            w.issueRepo.UpdateStatus(issue.ID, "todo")
+            w.timelineRepo.Append(issue.ID, "system", "status_change",
+                "in_progress", "todo", "Worker 重启后未找到沙箱容器，已自动回退等待重试")
+            continue
+        }
+
+        info, err := w.cli.ContainerInspect(ctx, issue.SandboxContainerID)
+        if err != nil {
+            // 容器已销毁
+            w.issueRepo.UpdateStatus(issue.ID, "todo")
+            w.issueRepo.ClearContainerID(issue.ID)
+            w.timelineRepo.Append(issue.ID, "system", "status_change",
+                "in_progress", "todo", "沙箱容器已不存在，已自动回退等待重试")
+            continue
+        }
+
+        switch info.State.Status {
+        case "running":
+            // 容器仍在运行（Docker 先于 Worker 重启完成）
+            // → 重新 Attach stdout 流 + 订阅控制频道
+            go w.attachAndProcess(ctx, issue)
+            w.timelineRepo.Append(issue.ID, "system", "system_note",
+                "", "", "Worker 重启，已重新连接到运行中的沙箱")
+
+        case "exited", "dead":
+            // 容器已退出（Docker 重启导致容器停止）
+            exitCode := info.State.ExitCode
+            if exitCode == 0 {
+                // opencode 成功退出但未提交 → 执行 commit/PR 流程
+                go w.commitAndCreatePR(ctx, issue)
+                w.timelineRepo.Append(issue.ID, "system", "system_note",
+                    "", "", "Worker 重启，检测到沙箱已完成编码，正在提交")
+            } else {
+                // 执行失败 → 回退到 todo，等待重试
+                w.issueRepo.UpdateStatus(issue.ID, "todo")
+                w.issueRepo.ClearContainerID(issue.ID)
+                w.timelineRepo.Append(issue.ID, "system", "status_change",
+                    "in_progress", "todo",
+                    fmt.Sprintf("沙箱执行失败（退出码 %d），已自动回退等待重试", exitCode))
+            }
+
+        case "paused":
+            // 容器被 Docker 暂停但 Issue 状态是 in_progress（状态不一致）
+            // → 归并到 paused 恢复流程
+            w.issueRepo.UpdateStatus(issue.ID, "paused")
+            w.timelineRepo.Append(issue.ID, "system", "system_note",
+                "", "", "检测到状态不一致（容器 paused 但 Issue in_progress），已修正为 paused")
+        }
+    }
+}
+
+// RecoverPausedIssues 恢复暂停的 Issue（原有逻辑）
 func (w *Worker) RecoverPausedIssues(ctx context.Context) {
     pausedIssues, _ := w.issueRepo.FindByStatus(ctx, "paused")
     for _, issue := range pausedIssues {
@@ -2287,7 +2361,11 @@ func (w *Worker) RecoverPausedIssues(ctx context.Context) {
 }
 ```
 
-> **设计要点**：暂停/恢复的可靠性依赖于 `sandbox_container_id` 持久化到 DB + Redis Pub/Sub 事件驱动。只要容器未被销毁，Worker 重启后总能重新 Attach、订阅控制频道并恢复上下文。控制频道 `issue:control:{id}` 仅在有 Worker 消费时存在，无额外资源开销。
+> **设计要点**：
+> - **恢复优先级**：先恢复 `in_progress`（可能需要继续执行），再恢复 `paused`（等待人工操作）
+> - **幂等安全**：所有恢复操作基于 DB 中的 `sandbox_container_id`，重复执行不会产生副作用
+> - **容器保护**：`AutoRemove: false` 确保容器不会随 Docker 重启被自动清理
+> - **暂停/恢复的可靠性**依赖于 `sandbox_container_id` 持久化到 DB + Redis Pub/Sub 事件驱动。只要容器未被销毁，Worker 重启后总能重新 Attach、订阅控制频道并恢复上下文。控制频道 `issue:control:{id}` 仅在有 Worker 消费时存在，无额外资源开销。
 
 ### 7.2 安全策略
 
@@ -2300,6 +2378,33 @@ func (w *Worker) RecoverPausedIssues(ctx context.Context) {
 | 自动清理 | 执行成功 → 立即销毁容器；执行失败 → 保留容器等待人工介入重试，Issue done 时最终销毁 |
 | 非 root 运行 | User `sandbox` (uid 1000)，无 sudo 权限 |
 | 镜像最小化 | Alpine 3.21 基础，预装 Node/Python/Git，不含 Go 运行时 |
+
+### 7.2.1 数据持久化保障
+
+服务器重启、Worker 进程崩溃等异常场景下的数据保护：
+
+| 数据类型 | 存储位置 | 重启后 | 保障机制 |
+|---------|---------|--------|----------|
+| Issue / Agent / 配置 / 日志 | MySQL | ✅ 不丢失 | InnoDB WAL + binlog，ACID 事务保证 |
+| 代码仓库（/workspace） | Docker Named Volume | ✅ 不丢失 | 生命周期独立于容器，Docker 重启后卷自动恢复 |
+| 运行时数据（Skills/插件/配置） | 宿主机 bind mount | ✅ 不丢失 | 本地文件系统，与容器/进程生命周期解耦 |
+| Asynq 未消费任务 | Redis（AOF） | ✅ 不丢失 | `appendonly yes` + `fsync everysec`，重启后自动重放 |
+| Asynq 已出队未完成任务 | MySQL（Issue 状态） | ✅ 不丢失 | 任务出队时 Issue 已标记 `in_progress`，Worker 重启时 `RecoverRunningIssues` 兜底 |
+| 容器内进程内存状态 | 容器内存 | ❌ 丢失 | 容器停止 → opencode 进程上下文丢失，回退到 `todo` 重试 |
+
+**部署要求**（config.yaml 或部署文档注明）：
+
+```yaml
+# Redis 必须开启 AOF 持久化，否则 Asynq 未消费任务在 Redis 重启后丢失
+redis:
+  host: 127.0.0.1
+  port: 6379
+  # ↓ 部署时需在 redis.conf 中配置：
+  # appendonly yes
+  # appendfsync everysec
+```
+
+> **容器重启策略**：沙箱容器设置 `AutoRemove: false`，**不设置** `RestartPolicy`。原因：容器停止后由 Worker 的 `RecoverRunningIssues` 统一处理，避免容器自启动后无 Worker 监听导致 stdout 丢失。
 
 **网络白名单实现**：
 
