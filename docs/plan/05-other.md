@@ -164,7 +164,7 @@ graph TD
 
     R --> R1["运行时注册（名称/Docker镜像/执行命令模板）"]
     R --> R2["运行时配置 Schema 定义"]
-    R --> R3["运行时默认 Skill 绑定（flowcode-executor 内置不可关）"]
+    R --> R3["运行时默认 Skill 绑定（anser-coder 内置不可关）"]
     R --> R4["Agent 绑定运行时 + 继承默认 Skills"]
 ```
 
@@ -1015,9 +1015,9 @@ func init() {
 
 ```
 internal/seed/
-├── 001_default_skills.sql     # 系统预置 Skill（flowcode-executor + 6个角色Skill）
+├── 001_default_skills.sql     # 系统预置 Skill（anser-coder + 6个角色Skill）
 ├── 002_casbin_policies.sql    # Casbin RBAC 角色权限策略
-├── 003_runtime_skills.sql     # 各运行时默认 Skill 绑定（opencode→flowcode-executor）
+├── 003_runtime_skills.sql     # 各运行时默认 Skill 绑定（opencode→anser-coder）
 └── 004_example_agent.sql      # 可选：示例 Agent 配置
 ```
 
@@ -1025,7 +1025,7 @@ internal/seed/
 
 | Skill 名称 | 用途 | Eino 调度环节 | 核心内容 |
 |-----------|------|-------------|---------|
-| `flowcode-executor` | 编码执行规范 | opencode 沙箱执行 | 代码风格、提交规范、PR 格式 |
+| `anser-coder` | 编码执行规范 | opencode 沙箱执行 | 代码风格、提交规范、PR 格式 |
 | `eino-discuss` | 群聊讨论调度 | 群聊 Agent 编排 | 如何组织讨论、轮次控制、何时收敛结论 |
 | `eino-backlog` | 方案拆解 | /backlog 指令 | 如何从讨论生成 Issue、描述格式、优先级/负责人判定 |
 | `eino-optimizer` | 提示词优化 | 人工提示词改写 | 自然语言→编码指令的转换规则、技术细节补充要求 |

@@ -1275,7 +1275,7 @@ CREATE TABLE skills (
     zip_hash VARCHAR(64),              -- ZIP 的 SHA256
     file_tree JSON,                    -- ZIP 文件树
     enabled TINYINT(1) DEFAULT 1,      -- 全局开关
-    is_builtin TINYINT(1) DEFAULT 0,   -- 是否系统内置（内置 Skill 不可删除，如 flowcode-executor）
+    is_builtin TINYINT(1) DEFAULT 0,   -- 是否系统内置（内置 Skill 不可删除，如 anser-coder）
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

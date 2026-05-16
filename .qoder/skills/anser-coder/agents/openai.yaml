@@ -1,0 +1,4 @@
+interface:
+  display_name: "AnserCoder"
+  short_description: "AnserFlow 沙箱编码执行规范，定义代码风格、提交规范和 PR 格式。"
+  default_prompt: "严格按照 anser-coder 规范执行编码任务。"
