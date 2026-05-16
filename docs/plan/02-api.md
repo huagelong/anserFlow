@@ -2228,20 +2228,30 @@ func (s *NotificationService) NotifyInvite(
 
 #### 完整通知触发场景矩阵
 
-| 触发场景 | type | WS 推送 | 浏览器通知 | 邮件通知 | 触发位置 |
-|---------|------|---------|------------|---------|---------|
-| Issue 分配 | `issue_assigned` | ✅ | ✅ | ✅ (受 notify_issue_assigned 控制) | `IssueService.Assign` |
-| Issue 状态变更 | `issue_status_changed` | ✅ | ❌ | ✅ (受 notify_issue_assigned 控制) | `IssueService.TransitionStatus` |
-| Agent 执行完成 | `agent_completed` | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
-| Agent 执行失败 | `agent_completed` | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
-| 群聊 @提及 | `mention` | ✅ | ✅ | ✅ (受 notify_mention 控制) | `MessageService.Send` (解析 @) |
-| 无 Agent 会话新消息（人+人 双人聊 / 无 Agent 群聊） | `dm_message` | ✅ | ✅ | ✅ (受 notify_dm 控制) | `Hub.OnMessage` `notifyOfflineMembers` 分支（仅未连接该会话 WS 的成员推送）|
-| 组织邀请 (邮箱) | `invite` | ✅ | ❌ | ✅ (直接发送，不受偏好控制) | `InviteService.Create` |
-| PR 已合并 (Issue done) | `issue_status_changed` | ✅ | ❌ | ✅ | `WebhookHandler.HandleGitHub` |
-| PR 被拒绝 | `issue_status_changed` | ✅ | ❌ | ✅ | `WebhookHandler.HandleGitHub` |
-| 重试次数耗尽 | `system` | ✅ | ❌ | ✅ | `IssueScheduler.Run` |
+| 触发场景 | type | WS 推送 | 浏览器通知 | 群聊系统消息 | 邮件通知 | 触发位置 |
+|---------|------|---------|------------|------------|---------|---------|
+| Issue 分配 | `issue_assigned` | ✅ | ✅ | ❌ | ✅ (受 notify_issue_assigned 控制) | `IssueService.Assign` |
+| Issue 状态变更 | `issue_status_changed` | ✅ | ❌ | ✅ | ✅ (受 notify_issue_assigned 控制) | `IssueService.TransitionStatus` |
+| Agent 执行完成 | `agent_completed` | ✅ | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
+| Agent 执行失败 | `agent_completed` | ✅ | ✅ | ✅ | ✅ (受 notify_agent_completed 控制) | `Worker.handleCompletion` |
+| 群聊 @提及 | `mention` | ✅ | ✅ | ❌ | ✅ (受 notify_mention 控制) | `MessageService.Send` (解析 @) |
+| 无 Agent 会话新消息（人+人 双人聊 / 无 Agent 群聊） | `dm_message` | ✅ | ✅ | ❌ | ✅ (受 notify_dm 控制) | `Hub.OnMessage` `notifyOfflineMembers` 分支（仅未连接该会话 WS 的成员推送）|
+| 组织邀请 (邮箱) | `invite` | ✅ | ❌ | ❌ | ✅ (直接发送，不受偏好控制) | `InviteService.Create` |
+| PR 已合并 (Issue done) | `issue_status_changed` | ✅ | ❌ | ✅ | ✅ | `WebhookHandler.HandleGitHub` |
+| PR 被拒绝 | `issue_status_changed` | ✅ | ❌ | ✅ | ✅ | `WebhookHandler.HandleGitHub` |
+| 重试次数耗尽 | `system` | ✅ | ❌ | ✅ | ✅ | `IssueScheduler.Run` |
 
 > **推送说明**：客户端通过 WS 消息更新 UI（如通知 bell 红点），浏览器 Notification API 用于 OS 级弹窗提示。用户可通过 `user_settings` 表控制邮件和通知偏好。
+>
+> **群聊系统消息**：Issue 的 `source_group_id` 记录了来源群聊。每次 Issue 状态变更时，`TransitionStatus` 向该群聊发送 `type: system` 消息（写入 `messages` 表），群聊成员在聊天窗口实时可见状态变更通知。实现：
+>
+> ```go
+> // TransitionStatus 中，每次状态变更后
+> if issue.SourceGroupID != 0 {
+>     s.messageService.SendSystemMessage(ctx, issue.SourceGroupID, fmt.Sprintf(
+>         "Issue #%d %s → %s", issue.ID, oldStatus, newStatus))
+> }
+> ```
 
 ---
 
@@ -2421,12 +2431,14 @@ sequenceDiagram
     participant D as Docker 沙箱
     participant GH as GitHub
     participant WS as WebSocket
+    participant G as 群聊
 
     Note over H,ISS: ① backlog Tab 点击 [转为 todo]
     H->>ISS: 点击 Issue #1 的 [转为 todo]
     ISS->>ISS: 记录状态变更（issue_timeline）
     ISS->>Q: 加入排队（按优先级+创建时间）
     ISS->>WS: 推送 "Issue #1 已排队等待执行"
+    ISS->>G: 系统消息: "Issue #1 已确认转为 todo，排队等待执行"
 
     Note over ISS,Q: ② 自动调度 todo → in_progress
     Q->>Q: 调度器检查队列 + 资源可用
@@ -2436,6 +2448,7 @@ sequenceDiagram
     ISS->>Q: enqueue("agent:execute", {issue_id, agent_id, human_prompts})
     Q-->>ISS: task_id
     ISS->>WS: 推送 "Agent 开始执行 Issue #1"
+    ISS->>G: 系统消息: "Issue #1 开始执行，Agent 已启动"
 
     Note over W,D: ③ Worker 执行
     W->>Q: dequeue → "agent:execute"
@@ -2452,6 +2465,7 @@ sequenceDiagram
     W->>D: 冻结容器（内存保留）
     ISS->>ISS: Issue → paused + 时间线
     ISS->>WS: 推送 "执行已暂停"
+    ISS->>G: 系统消息: "Issue #1 执行已暂停"
     H->>ISS: 点击 [恢复]
     ISS->>W: ContainerUnpause
     W->>D: 解冻容器
@@ -2462,6 +2476,7 @@ sequenceDiagram
         W->>D: 终止 + 销毁容器
         ISS->>ISS: Issue → backlog + 时间线
         ISS->>WS: 推送 "执行已停止"
+        ISS->>G: 系统消息: "Issue #1 执行已停止"
     end
 
     Note over W,GH: ④ opencode 自检查 → PR
@@ -2472,10 +2487,12 @@ sequenceDiagram
         W->>GH: 创建 Pull Request
         W->>ISS: 更新 Issue status → in_review + 写入 pr_url
         W->>WS: 推送通知 "PR 已提交，等待审核"
+        W->>G: 系统消息: "Issue #1 PR 已提交，等待审核"
     else opencode 检查失败
         W->>ISS: 写入失败原因到时间线
         W->>ISS: Issue 状态 → todo（保留沙箱）
         W->>WS: 推送 "执行失败: {原因}，等待人工介入"
+        W->>G: 系统消息: "Issue #1 执行失败: {原因}"
         Note over H,D: 人工在时间线追加提示词 → Eino 优化 → 重新调度
         ISS->>ISS: 收到人工提示词 → Issue → in_progress
         ISS->>Q: enqueue("agent:execute", {issue_id, human_prompts_optimized})
@@ -2489,6 +2506,7 @@ sequenceDiagram
     ISS->>ISS: Issue 状态 → done
     ISS->>ISS: 记录状态变更
     ISS->>WS: 推送 "Issue #1 已完成"
+    ISS->>G: 系统消息: "Issue #1 已完成 ✅"
     W->>D: 容器自动销毁
 ```
 
