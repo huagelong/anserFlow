@@ -19,7 +19,7 @@
 1. 当前交付只以 **L1-L4 路线图** 为验收范围；第十五章统一视为远期 backlog，不计入本轮完成标准。
 2. 当前 Git 平台只验收 **GitHub**；`git_platform` 仅保留数据模型兼容位，不要求本轮实现 Gitea / GitLab / Gitee Provider。
 3. 当前前端交付闭环 **admin SPA 嵌入 Go** 与 **客户端 Web SPA（IM 聊天界面）**；统一使用 Next.js SPA 技术栈，浏览器访问。
-4. 当前客户端闭环 **Web 端**；桌面/移动端原生打包、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
+4. 当前客户端闭环 **Web 端**；Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
 5. 文中的目录树、接口、伪代码和工作流若未在仓库中落地，默认按 **目标架构说明** 理解，不视为“仓库现状已实现”。
 
 
@@ -681,7 +681,8 @@ anserflow/
 │   ├── ws/                     #   WebSocket Hub
 │   ├── agent/                  #   Agent 编排（Eino 封装）
 │   ├── sandbox/                #   Docker 沙箱
-│   └── invite/                 #   邀请服务
+│   ├── invite/                 #   邀请服务
+│   └── prompts/                #   提示词统一管理（硬编码模板）
 ├── config/                     # Go 配置加载（Viper）
 ├── admin/                      # ① npm workspace: @anserflow/admin
 │   ├── package.json            #   "name": "@anserflow/admin"

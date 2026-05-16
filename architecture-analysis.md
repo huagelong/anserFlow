@@ -15,7 +15,7 @@
 1. 当前交付只以 **L1-L4 路线图** 为验收范围；第十五章统一视为远期 backlog，不计入本轮完成标准。
 2. 当前 Git 平台只验收 **GitHub**；`git_platform` 仅保留数据模型兼容位，不要求本轮实现 Gitea / GitLab / Gitee Provider。
 3. 当前前端交付闭环 **admin SPA 嵌入 Go** 与 **客户端 Web SPA（IM 聊天界面）**；统一使用 Next.js SPA 技术栈，浏览器访问。
-4. 当前客户端闭环 **Web 端**；桌面/移动端原生打包、Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
+4. 当前客户端闭环 **Web 端**；Crowdin / Lokalise、Pact 合约测试、`golang-migrate`、文档自动生成与 wiki 拆分均归入 Phase 2 或单独立项，不阻塞本轮验收。
 5. 文中的目录树、接口、伪代码和工作流若未在仓库中落地，默认按 **目标架构说明** 理解，不视为“仓库现状已实现”。
 
 ---
@@ -1893,7 +1893,8 @@ anserflow/
 │   ├── ws/                     #   WebSocket Hub
 │   ├── agent/                  #   Agent 编排（Eino 封装）
 │   ├── sandbox/                #   Docker 沙箱
-│   └── invite/                 #   邀请服务
+│   ├── invite/                 #   邀请服务
+│   └── prompts/                #   提示词统一管理（硬编码模板）
 ├── config/                     # Go 配置加载（Viper）
 ├── admin/                      # ① npm workspace: @anserflow/admin
 │   ├── package.json            #   "name": "@anserflow/admin"
@@ -2426,6 +2427,7 @@ func (s *IssueService) TransitionToTodo(ctx context.Context, issueID uint) error
 │  ├── group_discuss.go   群聊 Agent 调度   │
 │  ├── backlog_parser.go   方案→Issue 拆解   │
 │  ├── prompt_optimizer.go 人工提示词 Eino 优化│
+│  ├── prompt_manager.go  提示词统一管理     │
 │  └── tool/                                 │
 │       ├── registry.go    Tool 注册中心     │
 │       ├── dispatch.go    LLM 输出解析→执行 │
@@ -2433,6 +2435,15 @@ func (s *IssueService) TransitionToTodo(ctx context.Context, issueID uint) error
 │       ├── send_message.go  群聊发言       │
 │       ├── read_timeline.go 读取时间线     │
 │       └── change_status.go 状态流转       │
+├──────────────────────────────────────────┤
+│  anserflow/prompts/  (提示词统一管理)      │
+│  ├── eino_optimizer.go    提示词优化器系统提示词│
+│  ├── eino_mention.go      @Agent 任务注入模板│
+│  ├── eino_skill_load.go   Skill 加载提示词模板│
+│  ├── eino_new_session.go  新会话提示词      │
+│  ├── system_messages.go   群聊系统消息模板   │
+│  ├── notification.go      通知标题/正文模板  │
+│  └── error_templates.go   错误消息模板     │
 ├──────────────────────────────────────────┤
 │  Eino (底层 LLM 引擎)                    │
 │  ├── ChatModel         模型调用           │
@@ -2656,6 +2667,188 @@ func (sl *SkillLoader) LoadForSandbox(ctx context.Context, agent *model.Agent) (
 | `flowcode-executor` | Runtime 默认（opencode） | ❌ 不可关闭 | `is_builtin=1`，前端灰掉开关 |
 | 用户创建的 Skill | Runtime 默认 / Agent 绑定 | ✅ 可开关 | 后台自由管理 |
 | Agent 主动关闭 Runtime Skill | Agent 级覆盖 | ✅ | `agent_skills.enabled=false` 覆盖 Runtime 默认 |
+
+### 提示词管理器（PromptManager）
+
+系统中除 Agent System Prompt（DB 存储）和 Skill 定义（DB 存储）外，所有硬编码的提示词模板统一抽到 `prompts/` 目录，由 `PromptManager` 集中加载和管理。
+
+**设计原则**：
+
+- 提示词模板与业务逻辑分离，便于调优、国际化、版本管理
+- 运行时通过 `PromptManager.Get("key")` 获取，不直接拼接字符串
+- DB 存储的 Agent System Prompt 和 Skill 定义不动，仍走后台 CRUD
+
+**提示词文件清单**：
+
+| 文件 | key | 用途 | 原硬编码位置 |
+|------|-----|------|------------|
+| `eino_optimizer.go` | `eino.optimizer.system` | 提示词优化器系统提示词 | `prompt_optimizer.go` |
+| `eino_optimizer.go` | `eino.optimizer.user` | 提示词优化器用户消息模板 | `prompt_optimizer.go` |
+| `eino_mention.go` | `eino.mention.system` | @Agent 任务注入系统提示词 | `group_discuss.go` |
+| `eino_skill_load.go` | `eino.skill_load` | Skill 加载注入模板 | `skill_loader.go` |
+| `eino_new_session.go` | `eino.new_session.hint` | 新会话 Agent 感知提示词 | `group_discuss.go` |
+| `system_messages.go` | `system.issue.{status_change}` | 群聊系统消息模板（按状态变更） | `IssueService` |
+| `notification.go` | `notify.issue_status_changed.title` | 通知标题模板 | `notification_service.go` |
+| `error_templates.go` | `error.backlog_empty` | /backlog 错误提示 | `command_handler.go` |
+| `error_templates.go` | `error.backlog_insufficient` | /backlog 上下文不足 | `command_handler.go` |
+| `error_templates.go` | `error.backlog_no_plan` | /backlog 生成失败 | `command_handler.go` |
+
+**实现**：
+
+```go
+// prompts/prompt_manager.go
+package prompts
+
+import (
+    "embed"
+    "sync"
+)
+
+//go:embed *.go
+var promptsFS embed.FS
+
+type PromptManager struct {
+    mu       sync.RWMutex
+    prompts  map[string]string
+}
+
+var defaultManager *PromptManager
+
+func init() {
+    defaultManager = &PromptManager{prompts: make(map[string]string)}
+    defaultManager.loadAll()
+}
+
+// Get 获取提示词模板（支持占位符替换）
+func Get(key string, args ...interface{}) string {
+    defaultManager.mu.RLock()
+    defer defaultManager.mu.RUnlock()
+    tmpl, ok := defaultManager.prompts[key]
+    if !ok {
+        return key // fallback: 返回 key 本身
+    }
+    if len(args) > 0 {
+        return fmt.Sprintf(tmpl, args...)
+    }
+    return tmpl
+}
+
+// MustGet 获取提示词模板（找不到则 panic）
+func MustGet(key string, args ...interface{}) string {
+    result := Get(key, args...)
+    if result == key {
+        panic(fmt.Sprintf("prompt not found: %s", key))
+    }
+    return result
+}
+
+// Reload 热重载（开发/运维调试用）
+func Reload() {
+    defaultManager.mu.Lock()
+    defer defaultManager.mu.Unlock()
+    defaultManager.loadAll()
+}
+```
+
+```go
+// prompts/eino_optimizer.go
+package prompts
+
+func init() {
+    defaultManager.prompts["eino.optimizer.system"] = `你是提示词优化器。将用户反馈改写为精确的编码指令。
+规则：保留用户原意；补充技术细节；如果用户提到具体文件/组件，添加文件路径。
+如果提供了关联 Issue 的内容，确保生成代码时保持与关联 Issue 的技术方案一致。`
+
+    defaultManager.prompts["eino.optimizer.user"] = `Issue 上下文：
+%s
+
+关联 Issue 内容：
+%s
+
+用户提示词：%s
+
+输出优化后的编码指令：`
+}
+```
+
+```go
+// prompts/eino_mention.go
+package prompts
+
+func init() {
+    defaultManager.prompts["eino.mention.system"] = `你是 %s。%s 正在群聊中向你布置任务。`
+}
+```
+
+```go
+// prompts/eino_new_session.go
+package prompts
+
+func init() {
+    defaultManager.prompts["eino.new_session.hint"] = `这是一个新讨论主题的开端`
+}
+```
+
+```go
+// prompts/system_messages.go
+package prompts
+
+func init() {
+    defaultManager.prompts["system.issue.backlog_created"] = `已生成 Issue #%d（backlog），请到 backlog Tab 确认细节并启动`
+    defaultManager.prompts["system.issue.to_todo"] = `Issue #%d 已确认转为 todo，排队等待执行`
+    defaultManager.prompts["system.issue.start"] = `Issue #%d 开始执行，Agent 已启动`
+    defaultManager.prompts["system.issue.paused"] = `Issue #%d 执行已暂停`
+    defaultManager.prompts["system.issue.stopped"] = `Issue #%d 执行已停止`
+    defaultManager.prompts["system.issue.pr_submitted"] = `Issue #%d PR 已提交，等待审核`
+    defaultManager.prompts["system.issue.failed"] = `Issue #%d 执行失败: %s`
+    defaultManager.prompts["system.issue.done"] = `Issue #%d 已完成 ✅`
+    defaultManager.prompts["system.issue.pr_rejected"] = `Issue #%d PR 被拒绝，已退回 todo`
+}
+```
+
+```go
+// prompts/notification.go
+package prompts
+
+func init() {
+    defaultManager.prompts["notify.issue_status_changed.title"] = `Issue #%d 状态变更为 %s`
+}
+```
+
+```go
+// prompts/error_templates.go
+package prompts
+
+func init() {
+    defaultManager.prompts["error.backlog_empty"] = `❌ 需要描述需求或先进行群聊讨论，不能为空。`
+    defaultManager.prompts["error.backlog_insufficient"] = `❌ 群聊讨论内容不足，请先描述需求或补充更多讨论后再试。`
+    defaultManager.prompts["error.backlog_no_plan"] = `❌ 未能产出有效方案，请补充更多需求细节后重试。`
+}
+```
+
+**业务代码调用示例**（原硬编码替换为 PromptManager）：
+
+```go
+// 替换前（硬编码）：
+Schema.SystemMessage(`你是提示词优化器。将用户反馈改写为精确的编码指令。...`)
+
+// 替换后（从 PromptManager 获取）：
+schema.SystemMessage(prompts.Get("eino.optimizer.system"))
+
+// 替换前：
+h.ws.Reply(msg, "❌ 需要描述需求或先进行群聊讨论，不能为空。")
+
+// 替换后：
+h.ws.Reply(msg, prompts.Get("error.backlog_empty"))
+
+// 替换前：
+s.messageService.SendSystemMessage(ctx, issue.SourceGroupID, fmt.Sprintf(
+    "Issue #%d %s → %s", issue.ID, oldStatus, newStatus))
+
+// 替换后：
+s.messageService.SendSystemMessage(ctx, issue.SourceGroupID,
+    prompts.Get(fmt.Sprintf("system.issue.%s", statusKey), issue.ID))
+```
 
 ### Eino Tool 系统（Skill 与系统通信）
 
@@ -6410,7 +6603,7 @@ internal/seed/
 
 1. **Agent 执行优先做"半自动"**：编码 → PR → 人工 Review → 合并，而非全自动合入 main
 2. **讨论先做"指令触发"**：Agent 不实时监听所有消息，通过 `/backlog` 触发，避免 Token 浪费
-3. **客户端统一 Web SPA**：浏览器直接访问，无原生打包复杂度
+3. **客户端统一 Web SPA**：浏览器直接访问
 4. **Skills 系统复用现有模式**：项目已有 `flowcode_design/executor/todo/wiki` Skill 定义，直接复用 YAML frontmatter + Markdown body 的格式
 
 ---
