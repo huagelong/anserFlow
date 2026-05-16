@@ -336,7 +336,8 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 |------|------|-----------------|
 | `message` | 普通聊天消息 | `text: string` |
 | `annotation` | Agent 分析/技术评审（非对话消息） | `text: string`, `role: "analysis"\|"review"\|"estimate"` |
-| `backlog` | 方案产出（`/backlog` 指令触发，每次产出一个 Issue） | `issue: {title, status: "backlog", priority, assignee, description}` |
+| `backlog` | 方案产出（`/backlog` 指令触发，Issue 状态=backlog，需人工确认） | `issue: {title, status: "backlog", priority, assignee, description}` |
+| `todo` | 直接建任务（`/todo` 指令触发，Eino 编排产出方案，Issue 状态=todo，跳过人工确认） | `issue: {title, status: "todo", priority, assignee, description}` |
 | `system` | 系统通知（Issue 创建/状态变更） | `text: string`, `resource_type: "issue"\|"agent"`, `resource_id` |
 | `ping` | 心跳请求（客户端每 30s 发送） | 无 |
 | `pong` | 心跳响应 | 无 |
@@ -345,6 +346,8 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 | `agent_assign` | Agent @其他 Agent 布置任务 | `target_agent_id: int`, `task: string`, `context: string` |
 | `new_session` | 自然人 `/new` 开启新会话 | `session_id: string` |
 | `error` | 错误响应 | `error.code: string`, `error.message: string` |
+
+**`/todo` 直接建任务指令**：群内自然人发送 `/todo` 后，Eino 编排 Agent 从群聊讨论上下文中自动总结生成 Issue 标题和方案，直接创建状态为 `todo` 的 Issue，跳过 backlog 人工确认环节，创建后即可进入执行队列。Issue 标题由 Eino Agent 自动生成，用户无需手动指定。与 `/backlog` 的区别：两者都需 Agent 参与 Eino 编排，Issue 标题均由 Agent 自动总结生成；但 `/backlog` 创建后状态为 `backlog` 需人工确认转为 todo；`/todo` 创建后状态直接为 `todo`，无需人工确认，适合需求已明确、希望快速推进到执行的场景。
 
 **@Agent 任务布置**：群内 Agent 在讨论或执行过程中，可根据其他 Agent 的角色定义（`agents.system_prompt` + 绑定的 Skills），通过 `@AgentName` 语法向指定 Agent 布置子任务。被 @ 的 Agent 接收消息后，由 Eino Orchestrator 根据其角色人设和 Skill 自动生成响应或执行操作。典型场景：CTO Agent 在讨论中说 `@前端Agent 你负责登录页 UI 实现`，系统解析 `@前端Agent` 匹配群内 Agent 成员，将任务描述注入该 Agent 的上下文。
 
@@ -357,11 +360,11 @@ other = "Docker sandbox execution timed out (exceeded {{.Timeout}} seconds)"
 - 客户端重连采用指数退避：`1s → 2s → 4s → 8s → 16s → 32s (max)`
 - 重连后客户端发送 `seq` 字段为上次收到的最后序号，服务端据此推送遗漏消息
 
-**消息持久化**：所有 `message` / `system` / `annotation` / `backlog` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
+**消息持久化**：所有 `message` / `system` / `annotation` / `backlog` / `todo` 类型消息在发送前先写入 `messages` 表，确保消息不丢失。
 
 **Hub 消息路由 — Agent 编排判断**：
 
-Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，`commandHandler` 独立调用以确保 `/new` 全模式可用：
+Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，`commandHandler` 独立调用以确保 `/new` 全模式可用（`/backlog` 和 `/todo` 仅含 Agent 时可用）：
 
 ```go
 func (h *Hub) OnMessage(msg *Message) {
@@ -370,7 +373,7 @@ func (h *Hub) OnMessage(msg *Message) {
     // 持久化 + 广播（所有类型都需要）
     h.persistAndBroadcast(msg)
 
-    // /new 和 /backlog 指令处理（/new 全模式可用，/backlog 仅含 Agent 时可用）
+    // /new、/backlog、/todo 指令处理（/new 全模式可用，/backlog 和 /todo 仅含 Agent 时可用）
     h.commandHandler.OnMessage(msg, group)
 
     if group.HasAgentMember() {
@@ -386,7 +389,7 @@ func (h *Hub) OnMessage(msg *Message) {
 }
 ```
 
-> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。`commandHandler` 内部根据 `HasAgentMember()` 决定 `/backlog` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
+> **设计说明**：`HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。`commandHandler` 内部根据 `HasAgentMember()` 决定 `/backlog` 和 `/todo` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
 
 ```go
 // CommandHandler 内部分发逻辑
@@ -395,12 +398,20 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
         h.HandleNewSession(msg)            // 全模式可用
         return
     }
+    if strings.HasPrefix(msg.Content.Text, "/todo") {
+        if !group.HasAgentMember() {
+            h.ws.Reply(msg, "需要 Agent 参与才能使用 /todo 功能")
+            return
+        }
+        h.HandleBacklog(msg, "todo")       // 复用 Eino 编排，Issue 状态直接为 todo
+        return
+    }
     if strings.HasPrefix(msg.Content.Text, "/backlog") {
         if !group.HasAgentMember() {
             h.ws.Reply(msg, "需要 Agent 参与才能使用 /backlog 功能")
             return
         }
-        h.HandleBacklog(msg)               // 仅含 Agent 时可用
+        h.HandleBacklog(msg, "backlog")    // Eino 编排，Issue 状态为 backlog
         return
     }
 }
@@ -412,9 +423,10 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
 
 | 约束 | 说明 |
 |------|------|
-| `HasAgentMember()` 决定 Eino 编排和 /backlog | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
+| `HasAgentMember()` 决定 Eino 编排和 /backlog、/todo | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
 | `/new` 全模式可用 | CommandHandler 独立于 HasAgentMember()，在 Hub 层直接调用 |
-| `/backlog` 仅含 Agent 时可用 | CommandHandler 内部检查 HasAgentMember()，无 Agent 返回提示 |
+| `/todo` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态直接为 todo，跳过人工确认 |
+| `/backlog` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态为 backlog，需人工确认 |
 | 无 Agent 时不触发 `MentionResolver` | 群聊无 Agent 时同样跳过，双人聊天然无 @场景 |
 | direct 成员不可变更 | Handler 层对 direct 类型返回 400（group 类型不受此限制） |
 
