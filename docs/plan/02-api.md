@@ -1500,6 +1500,7 @@ CREATE TABLE projects (
     git_repo_name VARCHAR(256),                                              -- 仓库名（org/repo）
     git_auth_type ENUM('http','ssh') DEFAULT 'http',                         -- 授权方式
     git_auth_credential TEXT,                                                   -- HTTP:Token / SSH:私钥 (RSA 4096 > 1024 字符)
+    runtime_data_dir VARCHAR(512),                                              -- 项目运行时数据目录（空=未初始化，由 initProjectRuntime 填充）
     created_by BIGINT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (org_id) REFERENCES organizations(id),

@@ -692,8 +692,14 @@ type RuntimeAdapter interface {
     // Name 运行时标识（对应 runtimes.name）
     Name() string
 
-    // ConfigPath 配置文件写入路径（容器内）
-    // opencode → /home/sandbox/.config/opencode/config.json
+    // HomeDir 运行时在容器内的主目录（bind mount 目标）
+    // 项目级 runtime 目录会整体 bind mount 到此路径（读写）
+    // opencode → /home/sandbox/.opencode
+    // claude-code → /home/sandbox/.claude
+    HomeDir() string
+
+    // ConfigPath 配置文件写入路径（容器内，HomeDir 的子路径）
+    // opencode → /home/sandbox/.opencode/config.json
     // claude-code → /home/sandbox/.claude/settings.json
     ConfigPath() string
 
@@ -706,8 +712,8 @@ type RuntimeAdapter interface {
     // claude-code → ANTHROPIC_API_KEY
     EnvMapping(config map[string]interface{}, decryptedKey string) map[string]string
 
-    // SkillsMountPath Skills 目录在容器内的挂载路径（只读）
-    // opencode → /home/sandbox/.config/opencode/skills
+    // SkillsMountPath Skills 目录在容器内的路径（HomeDir 子路径）
+    // opencode → /home/sandbox/.opencode/skills
     // claude-code → /home/sandbox/.claude/skills
     SkillsMountPath() string
 
@@ -789,11 +795,12 @@ package adapters
 type OpenCodeAdapter struct{}
 
 func (a *OpenCodeAdapter) Name() string { return "opencode" }
+func (a *OpenCodeAdapter) HomeDir() string  { return "/home/sandbox/.opencode" }
 func (a *OpenCodeAdapter) ConfigPath() string {
-    return "/home/sandbox/.config/opencode/config.json"
+    return "/home/sandbox/.opencode/config.json"
 }
 func (a *OpenCodeAdapter) SkillsMountPath() string {
-    return "/home/sandbox/.config/opencode/skills"
+    return "/home/sandbox/.opencode/skills"
 }
 func (a *OpenCodeAdapter) SessionPath() string {
     return "/home/sandbox/.local/share/opencode/sessions/*.jsonl"
@@ -874,6 +881,7 @@ package adapters
 type ClaudeCodeAdapter struct{}
 
 func (a *ClaudeCodeAdapter) Name() string { return "claude-code" }
+func (a *ClaudeCodeAdapter) HomeDir() string  { return "/home/sandbox/.claude" }
 func (a *ClaudeCodeAdapter) ConfigPath() string {
     return "/home/sandbox/.claude/settings.json"
 }
@@ -921,8 +929,9 @@ type ResolvedSandboxConfig struct {
     ExecCommand   string            // 最终执行命令
     ContainerEnvs map[string]string // 注入容器的环境变量
     ConfigJSON    string            // 写入容器的 config.json
-    ConfigPath    string            // 配置文件路径
-    SkillsPath    string            // Skills 容器内挂载路径
+    ConfigPath    string            // 配置文件路径（HomeDir 子路径）
+    HomeDir       string            // 运行时主目录（bind mount 目标）
+    SkillsPath    string            // Skills 容器内路径（HomeDir 子路径）
     SessionPath   string            // 会话文件路径
 }
 
@@ -966,6 +975,7 @@ func (m *RuntimeManager) ResolveConfig(
         ContainerEnvs: envs,
         ConfigJSON:    configJSON,
         ConfigPath:    adapter.ConfigPath(),
+        HomeDir:       adapter.HomeDir(),
         SkillsPath:    adapter.SkillsMountPath(),
         SessionPath:   adapter.SessionPath(),
     }, nil
@@ -985,7 +995,8 @@ resolved, _ := runtimeMgr.ResolveConfig(ctx, runtime.Name, runtime.ExecuteTempla
 parser := runtimeMgr.GetParser(runtime.Name)
 
 sandboxMgr.Create(ctx, SandboxConfig{
-    SkillsMountPath: resolved.SkillsPath,  // 由适配器决定
+    HomeDir:        resolved.HomeDir,     // 运行时主目录（bind mount 目标）
+    SkillsMountPath: resolved.SkillsPath, // 由适配器决定（HomeDir 子路径）
     // ...
 })
 
@@ -1866,11 +1877,12 @@ func estimateCost(providerKey string, promptTokens, completionTokens int64) floa
 │  │  ├── CPU: 2 cores              │  │
 │  │  ├── NamedVol: workspace-{projectID}:/workspace  │  │
 │  │  │   (代码持久化，容器销毁后不丢失，避免重复 clone)│  │
-│  │  ├── BindMount: .opencode/skills→~/.config/opencode/skills (ro)│  │
-│  │  │   (opencode 原生全局 Skills 搜索路径，只读)│  │
+│  │  ├── BindMount: project-runtime→home (rw)│  │
+│  │  │   /var/lib/.../projects/{id}/runtime/ → /home/sandbox/.opencode│  │
+│  │  │   (项目级运行时数据：Skills + 配置 + 插件，读写)│  │
 │  │  └── AutoRemove: true          │  │
 │  │                                │  │
-│  │  Step 3: 注入 opencode 配置     │  │
+│  │  Step 3: 注入运行时配置         │  │
 │  │  ├── 读取 Agent runtime_config  │  │
 │  │  ├── 解密 API Key → 环境变量    │  │
 │  │  ├── 写入 config.json 到容器    │  │
@@ -2485,16 +2497,13 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     // 根据运行时选择镜像
     image := cfg.Runtime.DockerImage       // 来自 runtimes.docker_image
 
-    // 项目根目录（含 Skills 目录，具体路径由适配器决定）
-    projectRoot := cfg.WorkspaceRoot
+    // 项目级运行时数据目录（从全局模板复制而来）
+    // 路径格式: /var/lib/anserflow/projects/{projectID}/runtime/
+    projectRuntimeDir := cfg.ProjectRuntimeDir  // 来自 projects.runtime_data_dir
+    homeDir := cfg.Runtime.HomeDir              // 由 RuntimeAdapter.HomeDir() 提供
 
     // Named Volume：按项目隔离，容器销毁后代码保留，避免大仓库重复 clone
     workspaceVol := fmt.Sprintf("anserflow-workspace-%d", cfg.ProjectID)
-
-    // 通过 RuntimeAdapter 获取 Skills 挂载路径（运行时无关）
-    // opencode → /home/sandbox/.config/opencode/skills
-    // claude-code → /home/sandbox/.claude/skills
-    skillsPath := cfg.Runtime.SkillsMountPath  // 由 RuntimeAdapter.SkillsMountPath() 提供
 
     resp, _ := cli.ContainerCreate(ctx, &container.Config{
         Image: image,
@@ -2503,9 +2512,13 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
         Memory:     512 * 1024 * 1024,
         NanoCPUs:   2 * 1e9,
         AutoRemove: false,
-        // bind mount: 宿主机 .opencode/skills → 容器内适配器指定路径（只读）
+        // bind mount: 项目级 runtime 目录 → 容器内运行时主目录（读写）
+        // 目录结构（opencode 示例）:
+        //   projectRuntimeDir/skills/   → /home/sandbox/.opencode/skills/
+        //   projectRuntimeDir/config.json → /home/sandbox/.opencode/config.json
+        //   projectRuntimeDir/plugins/  → /home/sandbox/.opencode/plugins/
         Binds: []string{
-            projectRoot + "/.opencode/skills:" + skillsPath + ":ro",
+            projectRuntimeDir + ":" + homeDir + ":rw",
         },
         Mounts: []mount.Mount{
             {
@@ -2521,7 +2534,7 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     // 首次：git clone；后续：git fetch 增量更新
     prepareRepo(ctx, resp.ID, cfg)
 
-    // 注入运行时配置 + 执行
+    // 注入运行时配置 + 执行（写入 homeDir 子路径的 config.json）
     injectRuntimeConfig(ctx, resp.ID, cfg.Runtime)
     // 根据 execute_template 渲染命令: "opencode run \"...\" --model ..."
     cmd := renderTemplate(cfg.Runtime.ExecuteTemplate, cfg.Runtime.Config, cfg.TaskPrompt)
@@ -2553,6 +2566,109 @@ func destroySandbox(ctx context.Context, containerID string) {
 func destroyWorkspaceVolume(ctx context.Context, projectID uint) error {
     cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
     return cli.VolumeRemove(ctx, fmt.Sprintf("anserflow-workspace-%d", projectID), true)
+}
+}```
+
+### 7.3.1 运行时数据目录 — 三层架构
+
+```
+宿主机目录结构（由 config.yaml sandbox.runtime_data_dir 指定根目录）
+
+/var/lib/anserflow/                                ← runtime_data_dir
+├── runtimes/                                      ← Layer 1: 全局模板（管理员维护）
+│   └── opencode/                                  ← 对应 runtimes.name
+│       ├── skills/                                ← 默认 Skills（如 anser-coder）
+│       │   └── anser-coder/SKILL.md
+│       ├── config.json                            ← 默认配置模板
+│       └── plugins/                               ← 预装插件（如 opencode-agent-memory）
+│
+├── projects/                                      ← Layer 2: 项目实例
+│   └── 42/                                        ← projects.id
+│       └── runtime/                               ← projects.runtime_data_dir
+│           ├── skills/                            ← 项目级 Skills（可增删）
+│           ├── config.json                        ← 项目级配置（可自定义）
+│           └── plugins/                           ← 项目级插件（可安装）
+│
+沙箱容器                                          ← Layer 3: bind mount
+└── /home/sandbox/.opencode/                       ← RuntimeAdapter.HomeDir()
+    ├── skills/                                    ← ← bind mount 自 projects/42/runtime/
+    ├── config.json
+    └── plugins/
+```
+
+```go
+// internal/sandbox/runtime_init.go
+
+// initProjectRuntime 项目创建时调用：从全局模板复制到项目实例目录
+// 1. runtime_data_dir 为空 → 首次初始化，从全局模板复制
+// 2. runtime_data_dir 已存在 → 跳过（幂等）
+func initProjectRuntime(ctx context.Context, projectID uint, runtimeName string) (string, error) {
+    dataDir := viper.GetString("sandbox.runtime_data_dir") // /var/lib/anserflow
+
+    projectDir := filepath.Join(dataDir, "projects", strconv.Itoa(int(projectID)), "runtime")
+
+    // 幂等：已初始化则跳过
+    if _, err := os.Stat(projectDir); err == nil {
+        return projectDir, nil
+    }
+
+    // 从全局模板复制（递归）
+    templateDir := filepath.Join(dataDir, "runtimes", runtimeName)
+    if err := copyDir(templateDir, projectDir); err != nil {
+        return "", fmt.Errorf("复制运行时模板失败: %w", err)
+    }
+
+    // 确保权限正确（容器内 sandbox 用户 uid=1000）
+    filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+        os.Chown(path, 1000, 1000)
+        return nil
+    })
+
+    // 回写 projects.runtime_data_dir
+    projectRepo.UpdateRuntimeDir(ctx, projectID, projectDir)
+
+    return projectDir, nil
+}
+
+// copyDir 递归复制目录
+func copyDir(src, dst string) error {
+    os.MkdirAll(dst, 0755)
+    filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+        rel, _ := filepath.Rel(src, path)
+        target := filepath.Join(dst, rel)
+        if info.IsDir() {
+            os.MkdirAll(target, info.Mode())
+        } else {
+            data, _ := os.ReadFile(path)
+            os.WriteFile(target, data, info.Mode())
+        }
+        return nil
+    })
+    return nil
+}
+```
+
+**调用时机**：项目创建时（ProjectService.Create）或首次创建沙箱时（懒初始化）
+
+```go
+// 项目创建时调用
+project, _ := projectRepo.Create(ctx, ...)
+projectRuntimeDir, _ := initProjectRuntime(ctx, project.ID, defaultRuntimeName)
+// 后续 createSandbox 使用 projectRuntimeDir
+```
+
+**清理**：
+
+```go
+// 在项目删除时清理 Named Volume + 运行时数据目录
+func destroyWorkspaceVolume(ctx context.Context, projectID uint) error {
+    cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    cli.VolumeRemove(ctx, fmt.Sprintf("anserflow-workspace-%d", projectID), true)
+
+    // 同时清理项目运行时数据目录
+    dataDir := viper.GetString("sandbox.runtime_data_dir")
+    projectDir := filepath.Join(dataDir, "projects", strconv.Itoa(int(projectID)))
+    return os.RemoveAll(projectDir)
 }
 ```
 

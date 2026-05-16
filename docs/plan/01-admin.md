@@ -109,6 +109,7 @@ sandbox:                         # Docker 沙箱默认值
     - github.com
     - api.github.com
     - api.openai.com
+  runtime_data_dir: /var/lib/anserflow  # 运行时数据根目录（全局模板 + 项目实例）
 
 # ═══════════════════════════════════════════════════════════════
 # 🟢 纯后台管理（config.yaml 仅存默认值，运行时从 DB 读取）
