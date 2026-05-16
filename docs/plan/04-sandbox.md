@@ -1619,9 +1619,10 @@ func estimateCost(providerKey string, promptTokens, completionTokens int64) floa
 │  │  ├── Image: anserflow/sandbox  │  │
 │  │  ├── Memory: 512MB             │  │
 │  │  ├── CPU: 2 cores              │  │
-│  │  ├── Volume: /workspace        │  │
-│  │  ├── Mount: .qoder/skills→容器  │  │
-│  │  │   (opencode 可直接使用 Skill)│  │
+│  │  ├── NamedVol: workspace-{projectID}:/workspace  │  │
+│  │  │   (代码持久化，容器销毁后不丢失，避免重复 clone)│  │
+│  │  ├── BindMount: .opencode/skills→~/.config/opencode/skills (ro)│  │
+│  │  │   (opencode 原生全局 Skills 搜索路径，只读)│  │
 │  │  └── AutoRemove: true          │  │
 │  │                                │  │
 │  │  Step 3: 注入 opencode 配置     │  │
@@ -1633,7 +1634,9 @@ func estimateCost(providerKey string, promptTokens, completionTokens int64) floa
 │  │  └── 写入 Agent 绑定 Skills     │  │
 │  │                                │  │
 │  │  Step 4: 执行（编码闭环 + 消息互通）   │  │
-│  │  ├── git clone 关联仓库               │  │
+│  │  ├── /workspace/repo 已存在?             │  │
+│  │  │   ├── 是 → git fetch（增量更新）     │  │
+│  │  │   └── 否 → git clone（首次拉取）     │  │
 │  │  │                                      │  │
 │  │  │  ┌─ opencode run ←→ Worker 消息环 ─┐│  │
 │  │  │  │                                  ││  │
@@ -2234,8 +2237,11 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     // 根据运行时选择镜像
     image := cfg.Runtime.DockerImage       // 来自 runtimes.docker_image
 
-    // 项目根目录（含 .qoder/skills）
+    // 项目根目录（含 .opencode/skills）
     projectRoot := cfg.WorkspaceRoot
+
+    // Named Volume：按项目隔离，容器销毁后代码保留，避免大仓库重复 clone
+    workspaceVol := fmt.Sprintf("anserflow-workspace-%d", cfg.ProjectID)
 
     resp, _ := cli.ContainerCreate(ctx, &container.Config{
         Image: image,
@@ -2244,13 +2250,24 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
         Memory:     512 * 1024 * 1024,
         NanoCPUs:   2 * 1e9,
         AutoRemove: false,
-        // bind mount: 宿主机 .qoder/skills → 容器内 /home/sandbox/.qoder/skills（只读）
+        // bind mount: 宿主机 .opencode/skills → 容器内 opencode 全局 Skills 搜索路径（只读）
+        // opencode 原生搜索 ~/.config/opencode/skills/<name>/SKILL.md
         Binds: []string{
-            projectRoot + "/.qoder/skills:/home/sandbox/.qoder/skills:ro",
+            projectRoot + "/.opencode/skills:/home/sandbox/.config/opencode/skills:ro",
+        },
+        Mounts: []mount.Mount{
+            {
+                Type:   mount.TypeVolume,
+                Source: workspaceVol,
+                Target: "/workspace",
+            },
         },
     }, nil, nil, "")
 
     cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
+
+    // 首次：git clone；后续：git fetch 增量更新
+    prepareRepo(ctx, resp.ID, cfg)
 
     // 注入运行时配置 + 执行
     injectRuntimeConfig(ctx, resp.ID, cfg.Runtime)
@@ -2260,9 +2277,30 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     return resp.ID, nil
 }
 
-// 在 Issue→done 时销毁沙箱
+// prepareRepo 首次 clone 或增量 fetch
+func prepareRepo(ctx context.Context, containerID string, cfg SandboxConfig) {
+    check := execInContainer(ctx, containerID, "test -d /workspace/repo/.git")
+    if check == nil {
+        // 增量更新
+        execInContainer(ctx, containerID,
+            "cd /workspace/repo && git fetch --all && git checkout "+cfg.Branch+" && git pull")
+    } else {
+        // 首次 clone
+        execInContainer(ctx, containerID,
+            "git clone --branch "+cfg.Branch+" "+cfg.RepoURL+" /workspace/repo")
+    }
+}
+
+// 在 Issue→done 时销毁容器（Named Volume 保留，后续 Issue 可复用）
 func destroySandbox(ctx context.Context, containerID string) {
+    cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
     cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
+}
+
+// 在项目删除时清理 Named Volume
+func destroyWorkspaceVolume(ctx context.Context, projectID uint) error {
+    cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    return cli.VolumeRemove(ctx, fmt.Sprintf("anserflow-workspace-%d", projectID), true)
 }
 ```
 
