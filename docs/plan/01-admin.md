@@ -152,7 +152,7 @@ eino:                            # 后台 /admin/settings#eino 配置
 | **asynq** (并发/重试) | 🟡 服务级 | `/admin/settings` → 任务队列 | ✅ | ❌ 即时 |
 | **sandbox** (资源限制) | 🟡 服务级 | `/admin/settings` → 沙箱 | ✅ | ❌ 即时 |
 | **eino** (LLM/讨论/backlog/优化) | 🟢 全局 | `/admin/settings` → Eino | ✅ | ❌ 即时 |
-| **opencode** (provider/model/APIKey) | 🟢 Agent 级 | `/admin/agents/{id}/edit` | ✅ | ❌ 即时 |
+| **运行时配置** (provider/model/APIKey) | 🟢 Agent 级 | `/admin/agents/{id}/edit`（根据 config_schema 动态渲染） | ✅ | ❌ 即时 |
 | **沙箱并发上限** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
 | **Runtime 默认 Skills** | 🟢 Runtime 级 | `/admin/settings#runtimes/{id}/skills` | ✅ | ❌ 即时 |
 | **Skills 管理** | 🟢 全局/组织级 | `/admin/skills` | ✅ | ❌ 即时 |
@@ -292,10 +292,12 @@ func (h *HotConfig) StartWatch(ctx context.Context) {
 └── 其他组织级覆盖项
 
 /admin/agents/{id}/edit                  # Agent 运行时配置
-├── opencode Provider / Model / API Key
-├── 编码模式: build | plan
-├── 最大迭代次数 / thinking 开关
-└── Skills 绑定管理
+├── 运行时选择（下拉，根据 runtimes 表动态渲染）
+│   ├── 选择后根据 config_schema 动态渲染配置表单
+│   ├── API Key 加密字段（前端显示 ****，后端 AES 加解密）
+│   └── 不同运行时字段不同（opencode: provider/model/agent/thinking）
+│                          （claude-code: model/permission_mode）
+└── Skills 绑定管理（继承运行时默认 + Agent 级覆盖）
 ```
 
 
@@ -467,7 +469,16 @@ function apiFetch(path: string, init?: RequestInit) {
     ├── #sandbox               Docker 沙箱
     ├── #queue                 Asynq 任务队列
     ├── #upgrade               自动更新
-    └── #runtimes              运行时管理（注册/编辑/启停 + 默认Skills绑定）
+    └── #runtimes              运行时管理
+        ├── 运行时列表（名称/Docker镜像/状态/适配器）
+        ├── 注册新运行时
+        │   ├── 基本信息: name / display_name / docker_image / description
+        │   ├── 执行命令模板: execute_template（支持 {model}/{prompt} 等变量）
+        │   ├── 配置 Schema: config_schema（JSON Schema，前端动态渲染表单）
+        │   ├── 默认配置: default_config
+        │   ├── 安装命令: install_cmd（空=预装在镜像中）
+        │   └── 后端适配器: 需实现 RuntimeAdapter + OutputParser 接口
+        └── 默认 Skills 绑定（如 opencode→anser-coder，内置不可关）
 ```
 
 公开邀请页使用独立路由 `/invite/:token`，不挂在后台导航下；浏览器分享链接最终落到该页面。

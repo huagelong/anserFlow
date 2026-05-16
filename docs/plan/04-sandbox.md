@@ -669,87 +669,332 @@ func (m *SandboxManager) IsAlive(ctx context.Context, containerID string) bool {
 }
 ```
 
-### RuntimeManager — 运行时管理器
+### RuntimeManager — 运行时管理器（适配器模式）
 
-运行时配置构建（解密 API Key、拼接 execute_template、写 config.json）当前直接写在 Worker 中，通过 `RuntimeManager` 抽象运行时差异。
+运行时配置构建（解密 API Key、拼接 execute_template、写 config.json）当前直接写在 Worker 中，通过 `RuntimeAdapter` 接口抽象运行时差异，使切换 AI 工具只需实现接口 + 在 `runtimes` 表插入一行。
 
 **设计原则**：
 
-- `RuntimeManager` 持有 `execute_template` 模板解析能力
-- API Key 加解密、环境变量注入统一入口
-- 新运行时注册后自动支持
+- `RuntimeAdapter` 接口定义配置注入、环境变量映射等运行时差异点
+- `OutputParser` 接口定义 stdout 解析、Token 采集等输出差异点
+- 新运行时注册只需：实现接口 + 插入 `runtimes` 表
+- Worker 不感知具体运行时，只调用接口
 
-**实现**：
+**接口定义**：
+
+```go
+// internal/runtime/adapter.go
+package runtime
+
+// RuntimeAdapter 运行时适配器 — 封装不同 AI 工具的配置注入差异
+// 新运行时只需实现此接口，注册到 Registry 即可
+type RuntimeAdapter interface {
+    // Name 运行时标识（对应 runtimes.name）
+    Name() string
+
+    // ConfigPath 配置文件写入路径（容器内）
+    // opencode → /home/sandbox/.config/opencode/config.json
+    // claude-code → /home/sandbox/.claude/settings.json
+    ConfigPath() string
+
+    // RenderConfig 将通用配置渲染为该工具特有的配置 JSON
+    // 不同工具的配置结构差异封装在此方法内
+    RenderConfig(config map[string]interface{}) (string, error)
+
+    // EnvMapping API Key → 环境变量映射
+    // opencode + openai → OPENAI_API_KEY
+    // claude-code → ANTHROPIC_API_KEY
+    EnvMapping(config map[string]interface{}, decryptedKey string) map[string]string
+
+    // SkillsMountPath Skills 目录在容器内的挂载路径（只读）
+    // opencode → /home/sandbox/.config/opencode/skills
+    // claude-code → /home/sandbox/.claude/skills
+    SkillsMountPath() string
+
+    // SessionPath 会话文件路径（用于事后 Token 汇总），空字符串表示不支持
+    // opencode → /home/sandbox/.local/share/opencode/sessions/*.jsonl
+    SessionPath() string
+}
+
+// OutputParser 输出解析器 — 封装不同 AI 工具的 stdout 格式差异
+type OutputParser interface {
+    // ParseLine 解析单行 stdout 输出
+    // 返回 nil 表示该行不是结构化事件（忽略或按纯文本处理）
+    ParseLine(line []byte) *ParsedEvent
+
+    // ParseSessionFile 解析会话文件（执行完成后调用）
+    // 返回 nil 表示该运行时不支持 session 文件
+    ParseSessionFile(content []byte) (*TokenSummary, error)
+}
+
+// ParsedEvent 解析后的单行事件
+type ParsedEvent struct {
+    Type       string            // "agent_log" / "token_usage" / "error"
+    Content    string            // 文本内容（写入 issue_timeline）
+    TokenUsage *TokenUsageDetail // Token 用量（非空时写入 token_tracker）
+}
+
+// TokenUsageDetail Token 用量明细
+type TokenUsageDetail struct {
+    InputTokens      int64
+    OutputTokens     int64
+    CacheReadTokens  int64
+    CacheWriteTokens int64
+}
+
+// TokenSummary 会话文件 Token 汇总
+type TokenSummary struct {
+    TotalInput  int64
+    TotalOutput int64
+}
+```
+
+**Registry — 运行时注册表**：
+
+```go
+// internal/runtime/registry.go
+package runtime
+
+// Registry 全局运行时注册表，初始化时注册内置运行时
+type Registry struct {
+    adapters map[string]RuntimeAdapter
+    parsers  map[string]OutputParser
+}
+
+func NewRegistry() *Registry {
+    r := &Registry{
+        adapters: make(map[string]RuntimeAdapter),
+        parsers:  make(map[string]OutputParser),
+    }
+    // 注册内置运行时
+    r.Register(&OpenCodeAdapter{}, &OpenCodeParser{})
+    return r
+}
+
+func (r *Registry) Register(a RuntimeAdapter, p OutputParser) {
+    r.adapters[a.Name()] = a
+    r.parsers[a.Name()] = p
+}
+
+func (r *Registry) GetAdapter(name string) RuntimeAdapter { return r.adapters[name] }
+func (r *Registry) GetParser(name string) OutputParser    { return r.parsers[name] }
+```
+
+**内置实现 — opencode 适配器**：
+
+```go
+// internal/runtime/adapters/opencode.go
+package adapters
+
+type OpenCodeAdapter struct{}
+
+func (a *OpenCodeAdapter) Name() string { return "opencode" }
+func (a *OpenCodeAdapter) ConfigPath() string {
+    return "/home/sandbox/.config/opencode/config.json"
+}
+func (a *OpenCodeAdapter) SkillsMountPath() string {
+    return "/home/sandbox/.config/opencode/skills"
+}
+func (a *OpenCodeAdapter) SessionPath() string {
+    return "/home/sandbox/.local/share/opencode/sessions/*.jsonl"
+}
+
+func (a *OpenCodeAdapter) RenderConfig(config map[string]interface{}) (string, error) {
+    cfg := map[string]interface{}{
+        "model":    config["model"],
+        "provider": config["provider"],
+        "agent":    config["agent"],
+        "thinking":  config["thinking"],
+        "permissions": map[string]bool{
+            "read": true, "write": true, "bash": true, "glob": true, "grep": true,
+        },
+    }
+    if maxIter, ok := config["max_iterations"]; ok {
+        cfg["maxTurns"] = maxIter
+    }
+    return toJSON(cfg), nil
+}
+
+func (a *OpenCodeAdapter) EnvMapping(config map[string]interface{}, key string) map[string]string {
+    provider := config["provider"].(string)
+    return map[string]string{
+        strings.ToUpper(provider) + "_API_KEY": key,
+    }
+}
+
+type OpenCodeParser struct{}
+
+func (p *OpenCodeParser) ParseLine(line []byte) *ParsedEvent {
+    var event map[string]interface{}
+    if json.Unmarshal(line, &event) != nil {
+        return nil // 非 JSON，由 Worker 兼容逻辑处理
+    }
+    result := &ParsedEvent{}
+    if usage, ok := event["token_usage"]; ok {
+        m := usage.(map[string]interface{})
+        result.TokenUsage = &TokenUsageDetail{
+            InputTokens:      toInt64(m["input_tokens"]),
+            OutputTokens:     toInt64(m["output_tokens"]),
+            CacheReadTokens:  toInt64(m["cache_read_input_tokens"]),
+            CacheWriteTokens: toInt64(m["cache_creation_input_tokens"]),
+        }
+    }
+    if content, ok := event["content"]; ok {
+        result.Type = "agent_log"
+        result.Content = fmt.Sprintf("%v", content)
+    }
+    return result
+}
+
+func (p *OpenCodeParser) ParseSessionFile(content []byte) (*TokenSummary, error) {
+    var totalInput, totalOutput int64
+    scanner := bufio.NewScanner(bytes.NewReader(content))
+    for scanner.Scan() {
+        var msg struct {
+            TokenUsage *struct {
+                InputTokens  int64 `json:"input_tokens"`
+                OutputTokens int64 `json:"output_tokens"`
+            } `json:"token_usage"`
+        }
+        if json.Unmarshal(scanner.Bytes(), &msg) == nil && msg.TokenUsage != nil {
+            totalInput += msg.TokenUsage.InputTokens
+            totalOutput += msg.TokenUsage.OutputTokens
+        }
+    }
+    return &TokenSummary{TotalInput: totalInput, TotalOutput: totalOutput}, nil
+}
+```
+
+**内置实现 — claude-code 适配器（示例骨架）**：
+
+```go
+// internal/runtime/adapters/claude_code.go
+package adapters
+
+type ClaudeCodeAdapter struct{}
+
+func (a *ClaudeCodeAdapter) Name() string { return "claude-code" }
+func (a *ClaudeCodeAdapter) ConfigPath() string {
+    return "/home/sandbox/.claude/settings.json"
+}
+func (a *ClaudeCodeAdapter) SkillsMountPath() string {
+    return "/home/sandbox/.claude/skills"
+}
+func (a *ClaudeCodeAdapter) SessionPath() string {
+    return "" // claude-code 不支持 session 文件
+}
+
+func (a *ClaudeCodeAdapter) RenderConfig(config map[string]interface{}) (string, error) {
+    cfg := map[string]interface{}{
+        "model":            config["model"],
+        "permission_mode":  config["permission_mode"],
+    }
+    return toJSON(cfg), nil
+}
+
+func (a *ClaudeCodeAdapter) EnvMapping(config map[string]interface{}, key string) map[string]string {
+    return map[string]string{
+        "ANTHROPIC_API_KEY": key,
+    }
+}
+
+type ClaudeCodeParser struct{}
+
+func (p *ClaudeCodeParser) ParseLine(line []byte) *ParsedEvent {
+    // claude-code 输出格式不同，按实际格式解析
+    // 如不支持 --format json 则走纯文本解析
+    return nil
+}
+
+func (p *ClaudeCodeParser) ParseSessionFile(content []byte) (*TokenSummary, error) {
+    return nil, nil // 不支持 session 文件
+}
+```
+
+**RuntimeManager 使用适配器**：
 
 ```go
 // internal/runtime/runtime_manager.go
 package runtime
 
-import (
-    "context"
-    "fmt"
-    "strings"
-    "text/template"
-)
-
-type RuntimeConfig struct {
-    Provider      string
-    Model         string
-    Agent         string
-    APIKey        string // 已解密
-    MaxIterations int
-    Thinking      bool
-}
-
 type ResolvedSandboxConfig struct {
     ExecCommand   string            // 最终执行命令
     ContainerEnvs map[string]string // 注入容器的环境变量
     ConfigJSON    string            // 写入容器的 config.json
+    ConfigPath    string            // 配置文件路径
+    SkillsPath    string            // Skills 容器内挂载路径
+    SessionPath   string            // 会话文件路径
 }
 
 type RuntimeManager struct {
-    crypto CryptoService
+    registry *Registry
+    crypto   CryptoService
 }
 
-// ResolveConfig 解密密钥 + 渲染 execute_template → 最终配置
+// ResolveConfig 通过适配器解析运行时配置
 func (m *RuntimeManager) ResolveConfig(
     ctx context.Context,
+    runtimeName string,
     executeTemplate string,
     runtimeConfig map[string]interface{},
     prompt string,
 ) (*ResolvedSandboxConfig, error) {
+    adapter := m.registry.GetAdapter(runtimeName)
+    if adapter == nil {
+        return nil, fmt.Errorf("unknown runtime: %s", runtimeName)
+    }
+
     // 1. 解密 API Key
     apiKey, _ := m.crypto.Decrypt(runtimeConfig["api_key_encrypted"].(string))
 
-    // 2. 渲染 execute_template
+    // 2. 通过适配器渲染配置文件
+    configJSON, _ := adapter.RenderConfig(runtimeConfig)
+
+    // 3. 渲染 execute_template（通用，不依赖具体运行时）
     tmpl, _ := template.New("exec").Parse(executeTemplate)
     var buf strings.Builder
     tmpl.Execute(&buf, map[string]string{
-        "provider": runtimeConfig["provider"].(string),
-        "model":   runtimeConfig["model"].(string),
-        "agent":   runtimeConfig["agent"].(string),
+        "model":   fmt.Sprintf("%v", runtimeConfig["model"]),
         "prompt":  prompt,
     })
 
-    // 3. 构建容器环境变量
-    envs := map[string]string{
-        fmt.Sprintf("%s_API_KEY", strings.ToUpper(runtimeConfig["provider"].(string))): apiKey,
-    }
+    // 4. 通过适配器映射环境变量
+    envs := adapter.EnvMapping(runtimeConfig, apiKey)
 
     return &ResolvedSandboxConfig{
         ExecCommand:   buf.String(),
         ContainerEnvs: envs,
+        ConfigJSON:    configJSON,
+        ConfigPath:    adapter.ConfigPath(),
+        SkillsPath:    adapter.SkillsMountPath(),
+        SessionPath:   adapter.SessionPath(),
     }, nil
+}
+
+// GetParser 获取输出解析器
+func (m *RuntimeManager) GetParser(runtimeName string) OutputParser {
+    return m.registry.GetParser(runtimeName)
 }
 ```
 
-**Worker 调用**：
+**Worker 调用（运行时无关）**：
 
 ```go
-// 替换前：Worker 中手动拼接命令
-resolved, _ := runtimeMgr.ResolveConfig(ctx, runtime.ExecuteTemplate, agent.RuntimeConfig, issue.Prompt)
-sandboxMgr.Create(ctx, SandboxConfig{...})
-// 注入 resolved 到沙箱
+// Worker 不再硬编码 opencode，通过适配器统一处理
+resolved, _ := runtimeMgr.ResolveConfig(ctx, runtime.Name, runtime.ExecuteTemplate, agent.RuntimeConfig, issue.Prompt)
+parser := runtimeMgr.GetParser(runtime.Name)
+
+sandboxMgr.Create(ctx, SandboxConfig{
+    SkillsMountPath: resolved.SkillsPath,  // 由适配器决定
+    // ...
+})
+
+// stdout 解析也通过适配器
+for scanner.Scan() {
+    if event := parser.ParseLine(scanner.Bytes()); event != nil {
+        // 统一处理 ParsedEvent
+    }
+}
 ```
 
 ### NotificationChannelManager — 通知渠道管理器
