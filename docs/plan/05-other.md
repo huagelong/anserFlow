@@ -155,7 +155,7 @@ graph TD
     G --> G4["opencode 检查结果 → commit → PR"]
     G --> G5["监听人工提示词 → 重新执行"]
     G --> G6["结果回写时间线 / 状态流转 / 通知"]
-    G --> G7["Eino Tool 系统（Skill→Tool调度→写DB）"]
+    G --> G7["anserAgent Tool 系统（Skill→Tool调度→写DB）"]
 
     H --> H1["Skill 定义(全局)"]
     H --> H2["Skill 绑定到 Agent"]
@@ -679,7 +679,7 @@ anserflow/
 │   ├── model/                  #   GORM Model
 │   ├── middleware/             #   Gin 中间件（JWT / CORS / Casbin）
 │   ├── ws/                     #   WebSocket Hub
-│   ├── agent/                  #   Agent 编排（Eino 封装）
+│   ├── agent/                  #   anserAgent 智能体系统（详见 06-agent.md）
 │   ├── sandbox/                #   Docker 沙箱
 │   ├── invite/                 #   邀请服务
 │   ├── prompts/                #   提示词统一管理（硬编码模板）
@@ -1209,17 +1209,13 @@ internal/seed/
 └── 004_example_agent.sql      # 可选：示例 Agent 配置
 ```
 
-**预置 Eino 调度 Skill 清单**（`001_default_skills.sql`）：
+**预置 Skill 清单**（`001_default_skills.sql`）：
 
-| Skill 名称 | 用途 | Eino 调度环节 | 核心内容 |
-|-----------|------|-------------|---------|
-| `anser-coder` | 编码执行规范 | opencode 沙箱执行 | 代码风格、提交规范、PR 格式 |
-| `eino-discuss` | 群聊讨论调度 | 群聊 Agent 编排 | 如何组织讨论、轮次控制、何时收敛结论 |
-| `eino-backlog` | 方案拆解 | /backlog 指令 | 如何从讨论生成 Issue、描述格式、优先级/负责人判定 |
-| `eino-optimizer` | 提示词优化 | 人工提示词改写 | 自然语言→编码指令的转换规则、技术细节补充要求 |
-| `eino-planner` | 任务编排 | Issue 调度 + 依赖分析 | 优先级判定、依赖关系推导、并发度计算 |
+| Skill 名称 | 用途 | anserAgent 环节 | 核心内容 |
+|-----------|------|----------------|----------|
+| `anser-coder` | 编码执行规范 | opencode/hermes 沙箱执行 | 代码风格、提交规范、PR 格式 |
 
-> 以上 Skill 均为 Eino 调度专用（`is_builtin=1`）。Agent 的 System Prompt 仅写角色人设 1-2 句，具体调度行为由对应 Eino Skill 定义。
+> 预置 Skill 仅 `anser-coder`（沙箱执行规范）。调度编排能力由 anserAgent 五层记忆系统提供（L0 元规则 + L3 Skills/SOPs），不再依赖硬编码 eino-* Skills。详见 `docs/plan/06-agent.md`。
 
 ---
 
@@ -1328,13 +1324,13 @@ graph TD
 
 #### 15.2.1 Agent 驱动的智能拆分
 
-利用 Eino Agent 对需求做语义级拆解，自动推断子任务、优先级和依赖关系：
+利用 anserAgent 对需求做语义级拆解，自动推断子任务、优先级和依赖关系：
 
 ```
 需求: "做一个用户登录页"
         │
         ▼
-  Eino 拆分 Agent（分析需求语义）
+  anserAgent 拆分（分析需求语义）
         │
         ▼
   ┌─────────────────────────────────────────┐

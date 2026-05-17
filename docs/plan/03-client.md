@@ -61,7 +61,7 @@ import { z } from 'zod'
 const agentSchema = z.object({
   name: z.string().min(1, '名称不能为空').max(64),
   role_label: z.string().max(64),               // 自定义角色标签（如 PM / 前端 / 后端）
-  system_prompt: z.string().max(200, '人设 1-2 句话即可，调度行为由 Eino Skill 定义'),
+  system_prompt: z.string().max(200, '人设 1-2 句话即可，调度行为由 anserAgent 五层记忆驱动'),
   runtime_id: z.number().min(1, '请选择运行时'),
   // runtime_config 由前端根据 runtimes.config_schema 动态生成表单字段
 })

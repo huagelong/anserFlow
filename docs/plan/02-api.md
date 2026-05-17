@@ -441,9 +441,9 @@ func (h *Hub) SendToUser(userID uint, msg interface{}) {
 | `command` | S→C | 指令消息回显（用户输入的 /xxx 指令原文） | `text: string`, `command: string` | ✅ messages 表 |
 | `native_notification` | S→C | 浏览器原生通知触发 | `title: string`, `body: string`, `channel: string` | ❌ |
 
-**`/todo` 直接建任务指令**：群内自然人发送 `/todo` 后，Eino 编排 Agent 从群聊讨论上下文中自动总结生成 Issue 标题和方案，直接创建状态为 `todo` 的 Issue，跳过 backlog 人工确认环节，创建后即可进入执行队列。Issue 标题由 Eino Agent 自动生成，用户无需手动指定。与 `/backlog` 的区别：两者都需 Agent 参与 Eino 编排，Issue 标题均由 Agent 自动总结生成；但 `/backlog` 创建后状态为 `backlog` 需人工确认转为 todo；`/todo` 创建后状态直接为 `todo`，无需人工确认，适合需求已明确、希望快速推进到执行的场景。
+**`/todo` 直接建任务指令**：群内自然人发送 `/todo` 后，anserAgent 从群聊讨论上下文中自动总结生成 Issue 标题和方案，直接创建状态为 `todo` 的 Issue，跳过 backlog 人工确认环节，创建后即可进入执行队列。Issue 标题由 anserAgent 自动生成，用户无需手动指定。与 `/backlog` 的区别：两者都由 anserAgent 编排产出方案，Issue 标题均自动总结生成；但 `/backlog` 创建后状态为 `backlog` 需人工确认转为 todo；`/todo` 创建后状态直接为 `todo`，无需人工确认，适合需求已明确、希望快速推进到执行的场景。
 
-**@Agent 任务布置**：群内 Agent 在讨论或执行过程中，可根据其他 Agent 的角色定义（`agents.system_prompt` + 绑定的 Skills），通过 `@AgentName` 语法向指定 Agent 布置子任务。被 @ 的 Agent 接收消息后，由 Eino Orchestrator 根据其角色人设和 Skill 自动生成响应或执行操作。典型场景：CTO Agent 在讨论中说 `@前端Agent 你负责登录页 UI 实现`，系统解析 `@前端Agent` 匹配群内 Agent 成员，将任务描述注入该 Agent 的上下文。
+**@Agent 任务布置**：群内 Agent 在讨论或执行过程中，可根据其他 Agent 的角色定义（`agents.system_prompt` + 绑定的 Skills），通过 `@AgentName` 语法向指定 Agent 布置子任务。被 @ 的 Agent 接收消息后，由 anserAgent 根据其角色人设和记忆系统自动生成响应或执行操作。典型场景：CTO Agent 在讨论中说 `@前端Agent 你负责登录页 UI 实现`，系统解析 `@前端Agent` 匹配群内 Agent 成员，将任务描述注入该 Agent 的上下文。
 
 **`/new` 新会话指令**：群内自然人发送 `/new` 后，系统在当前群组内创建一个新的会话上下文（`session_id`）。新会话之前的消息不再作为 Agent 讨论的上下文窗口内容，Agent 仅感知 `/new` 之后的消息历史。这使自然人可以在同一群组内切换讨论主题，避免上下文混淆和 Token 浪费。`/new` 不清除历史消息（历史仍可滚动查看），仅重置 Agent 上下文窗口的起点。
 
@@ -467,7 +467,7 @@ func (h *Hub) SendToUser(userID uint, msg interface{}) {
 
 **Hub 消息路由 — Agent 编排判断**：
 
-Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 Eino 编排，`commandHandler` 独立调用以确保 `/new` 全模式可用（`/backlog` 和 `/todo` 仅含 Agent 时可用）：
+Hub 的 `OnMessage` 入口统一根据 `HasAgentMember()` 决定是否触发 anserAgent 编排，`commandHandler` 独立调用以确保 `/new` 全模式可用（`/backlog` 和 `/todo` 仅含 Agent 时可用）：
 
 ```go
 func (h *Hub) OnMessage(msg *Message) {
@@ -476,24 +476,24 @@ func (h *Hub) OnMessage(msg *Message) {
     // ① 分配服务端 seq（全局递增，用于排序和断线续传）
     msg.Seq = h.seqCounter.Incr()
 
-    // ② 指令消息：标记为 command 类型后持久化+广播，不进入 Eino 编排
+    // ② 指令消息：标记为 command 类型后持久化+广播，不进入 anserAgent 编排
     if isCommand(msg.Content.Text) {
         originalText := msg.Content.Text
         msg.Type = "command"
         h.persistAndBroadcast(msg)            // 以 command 类型广播，前端可选择性展示
         h.commandHandler.OnMessage(msg, group) // 处理指令逻辑
-        return                                 // ← 提前返回，不触发 Eino 编排
+        return                                 // ← 提前返回，不触发 anserAgent 编排
     }
 
     // ③ 非指令消息：正常持久化+广播
     h.persistAndBroadcast(msg)
 
     if group.HasAgentMember() {
-        // 有 Agent 成员：触发 Eino 编排
+        // 有 Agent 成员：触发 anserAgent 编排
         // 适用：群聊含 Agent、双人聊（人+Agent）
         h.orchestrator.OnMessage(msg)      // Agent 编排
     } else {
-        // 无 Agent 成员：纯自然人聊天，不触发 Eino
+        // 无 Agent 成员：纯自然人聊天，不触发 anserAgent
         // 适用：群聊无 Agent、双人聊（人+人）
         // 仅通知未连接该会话 WS 的离线成员
         h.notifyOfflineMembers(msg)
@@ -510,7 +510,7 @@ func isCommand(text string) bool {
 
 > **设计说明**：
 > - `HasAgentMember()` 查询 `group_members` 表中是否存在 `member_type = 'agent'` 的记录，结果可在 Hub 连接生命周期内缓存，无需每次消息都查库。
-> - **指令消息以 `command` 类型广播后立即返回**，避免同时触发 Eino 编排导致 Agent 重复响应。CommandHandler 内部根据 `HasAgentMember()` 决定 `/backlog` 和 `/todo` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
+> - **指令消息以 `command` 类型广播后立即返回**，避免同时触发 anserAgent 编排导致 Agent 重复响应。CommandHandler 内部根据 `HasAgentMember()` 决定 `/backlog` 和 `/todo` 是否可用，但 `/new` 在所有模式下均可用（会话上下文隔离对所有场景都有意义）。
 > - `seq` 由服务端统一分配（Redis INCR `ws:seq:global`），客户端不参与序号生成，避免多客户端 seq 冲突。
 
 ```go
@@ -525,7 +525,7 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
             h.ws.Reply(msg, "需要 Agent 参与才能使用 /todo 功能")
             return
         }
-        h.HandleBacklog(msg, "todo")       // 复用 Eino 编排，Issue 状态直接为 todo
+        h.HandleBacklog(msg, "todo")       // 复用 anserAgent 编排，Issue 状态直接为 todo
         return
     }
     if strings.HasPrefix(msg.Content.Text, "/backlog") {
@@ -533,7 +533,7 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
             h.ws.Reply(msg, "需要 Agent 参与才能使用 /backlog 功能")
             return
         }
-        h.HandleBacklog(msg, "backlog")    // Eino 编排，Issue 状态为 backlog
+        h.HandleBacklog(msg, "backlog")    // anserAgent 编排，Issue 状态为 backlog
         return
     }
 }
@@ -541,15 +541,15 @@ func (h *CommandHandler) OnMessage(msg *Message, group *Group) {
 
 **Agent 编排判断规则**：
 
-`HasAgentMember()` 是决定是否触发 Eino 编排的唯一条件，与 `group.type` 无关：
+`HasAgentMember()` 是决定是否触发 anserAgent 编排的唯一条件，与 `group.type` 无关：
 
 | 约束 | 说明 |
 |------|------|
-| `HasAgentMember()` 决定 Eino 编排和 /backlog、/todo | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
+| `HasAgentMember()` 决定 anserAgent 编排和 /backlog、/todo | 群聊和双人聊共享同一套逻辑，不按 type 分支 |
 | `/new` 全模式可用 | CommandHandler 独立于 HasAgentMember()，在 Hub 层直接调用 |
-| `/todo` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态直接为 todo，跳过人工确认 |
-| `/backlog` 仅含 Agent 时可用 | 需要 Agent 参与 Eino 编排产出方案，Issue 状态为 backlog，需人工确认 |
-| 指令消息不触发 Eino 编排 | Hub 检测到指令后 `return`，避免 CommandHandler 内部编排和 Orchestrator 双重触发 |
+| `/todo` 仅含 Agent 时可用 | 需要 anserAgent 编排产出方案，Issue 状态直接为 todo，跳过人工确认 |
+| `/backlog` 仅含 Agent 时可用 | 需要 anserAgent 编排产出方案，Issue 状态为 backlog，需人工确认 |
+| 指令消息不触发 anserAgent 编排 | Hub 检测到指令后 `return`，避免 CommandHandler 内部编排和 anserAgent 双重触发 |
 | 无 Agent 时不触发 `MentionResolver` | 群聊无 Agent 时同样跳过，双人聊天然无 @场景 |
 | direct 成员不可变更 | Handler 层对 direct 类型返回 400（group 类型不受此限制） |
 
@@ -1994,7 +1994,7 @@ func (s *Sender) SendAgentNotification(
 │
 ├── /admin                                 系统管理（🔒 🔐 super_admin only）
 │   ├── /settings                           GET/PUT → 全局系统配置（按 section 读写）
-│   ├── /settings/{section}                 GET/PUT → section = eino/auth/smtp/sandbox/queue/upgrade
+│   ├── /settings/{section}                 GET/PUT → section = agent/auth/smtp/sandbox/queue/upgrade
 │   ├── /runtimes                           GET/POST → 运行时列表 / 注册新运行时
 │   │   └── /:runtime_id                    GET/PUT/DELETE → 运行时详情/更新/删除（内置不可删）
 │   │       └── /skills                     GET/PUT → 该运行时的默认 Skills 绑定
@@ -2555,7 +2555,7 @@ sequenceDiagram
 | 修改负责人 | 重新分配 Agent 或自然人 |
 | 删除 Issue | 仅 backlog 状态可删除 |
 | 批量转 todo | Shift/Ctrl 多选 backlog Issue（来自多次 /backlog 调用）→ 一键全部转为 todo 列入执行队列 |
-| @关联 Issue | 描述中通过 `@Issue #N` 引用其他 Issue，Eino Agent 自动读取被引用 Issue 的内容注入到 opencode 执行提示词 |
+| @关联 Issue | 描述中通过 `@Issue #N` 引用其他 Issue，anserAgent 自动读取被引用 Issue 的内容注入到 opencode 执行提示词 |
 
 ### 10.1.1 @Agent 任务布置（Agent 间协作）
 

@@ -117,9 +117,9 @@ sandbox:                         # Docker 沙箱默认值
 # ═══════════════════════════════════════════════════════════════
 # 🟢 纯后台管理（config.yaml 仅存默认值，运行时从 DB 读取）
 # ═══════════════════════════════════════════════════════════════
-eino:                            # 后台 /admin/settings#eino 配置
+agent:                           # 后台 /admin/settings#agent 配置
   provider: openai
-  api_key: ${EINO_LLM_API_KEY}
+  api_key: ${AGENT_LLM_API_KEY}
   model: gpt-4o
   temperature: 0.7
   max_tokens: 4096
@@ -138,7 +138,7 @@ eino:                            # 后台 /admin/settings#eino 配置
     refill_rate: 1.67
 ```
 
-> **环境变量覆盖规则**：Viper 以 `EINO_LLM_API_KEY` 覆盖 `eino.api_key`，`DB_PASSWORD` 覆盖 `database.password`。所有 `${VAR}` 占位符必须通过环境变量注入。
+> **环境变量覆盖规则**：Viper 以 `AGENT_LLM_API_KEY` 覆盖 `agent.api_key`，`DB_PASSWORD` 覆盖 `database.password`。所有 `${VAR}` 占位符必须通过环境变量注入。
 
 ### 全部配置归属总览
 
@@ -155,7 +155,7 @@ eino:                            # 后台 /admin/settings#eino 配置
 | **upgrade** | 🟡 服务级 | `/admin/settings` → 更新 | ✅ | ❌ 即时 |
 | **asynq** (并发/重试) | 🟡 服务级 | `/admin/settings` → 任务队列 | ✅ | ❌ 即时 |
 | **sandbox** (资源限制) | 🟡 服务级 | `/admin/settings` → 沙箱 | ✅ | ❌ 即时 |
-| **eino** (LLM/讨论/backlog/优化) | 🟢 全局 | `/admin/settings` → Eino | ✅ | ❌ 即时 |
+| **agent** (LLM/讨论/backlog/记忆/自改进) | 🟢 全局 | `/admin/settings` → anserAgent | ✅ | ❌ 即时 |
 | **运行时配置** (provider/model/APIKey) | 🟢 Agent 级 | `/admin/agents/{id}/edit`（根据 config_schema 动态渲染） | ✅ | ❌ 即时 |
 | **沙箱并发上限** | 🟢 组织级 | `/admin/organizations/{id}/settings` | ✅ | ❌ 即时 |
 | **Runtime 默认 Skills** | 🟢 Runtime 级 | `/admin/settings#runtimes/{id}/skills` | ✅ | ❌ 即时 |
@@ -172,7 +172,7 @@ eino:                            # 后台 /admin/settings#eino 配置
 -- 全局配置存储表（替代 config.yaml 中 🟡🟢 配置项）
 CREATE TABLE system_settings (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    section VARCHAR(64) NOT NULL,       -- 配置段: eino / smtp / sandbox / asynq / ...
+    section VARCHAR(64) NOT NULL,       -- 配置段: agent / smtp / sandbox / asynq / ...
     key VARCHAR(128) NOT NULL,          -- 配置键: provider / model / host / port / ...
     value TEXT NOT NULL,                -- 配置值
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -282,7 +282,7 @@ func (h *HotConfig) StartWatch(ctx context.Context) {
 
 ```
 /admin/settings                         # 系统设置（super_admin only）
-├── #eino         Eino 调度引擎（LLM / 讨论控制 / backlog 参数 / 优化器 / 限流）
+├── #agent        anserAgent 调度引擎（LLM / 讨论控制 / backlog 参数 / 记忆 / Skill 自改进 / 限流）
 ├── #auth         认证（JWT 过期 / OAuth2 GitHub / CORS）
 ├── #smtp         邮件（SMTP 服务器 / 发件人）
 ├── #invite       邀请默认值（过期时间 / 使用次数）
@@ -467,7 +467,7 @@ function apiFetch(path: string, init?: RequestInit) {
 ├── /groups                   群组管理（仅 group 类型 CRUD，不含聊天）
 └── /settings                 全局系统设置
     ├── #general               基本信息（JWT过期/邀请默认值）
-    ├── #eino                  Eino 调度引擎
+    ├── #agent                 anserAgent 调度引擎
     ├── #auth                  OAuth / CORS
     ├── #smtp                  邮件服务
     ├── #sandbox               Docker 沙箱
