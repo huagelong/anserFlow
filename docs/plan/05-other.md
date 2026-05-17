@@ -721,8 +721,33 @@ anserflow/
 │       ├── package.json        #     公共组件 / 类型 / lib
 │       ├── src/
 │       │   ├── components/     #     公共 UI 组件
-│       │   ├── lib/            #     公共工具函数
-│       │   └── types/          #     公共 TypeScript 类型
+│       │   │   ├── status-badge.tsx     #   Issue/Agent 状态标签
+│       │   │   ├── priority-badge.tsx   #   优先级标签（P0~P3）
+│       │   │   ├── agent-avatar.tsx     #   Agent 头像 + 角色标签
+│       │   │   ├── user-avatar.tsx      #   用户头像 + 在线状态
+│       │   │   ├── markdown-renderer.tsx #   Markdown 渲染
+│       │   │   ├── code-block.tsx       #   代码块（高亮 + 复制）
+│       │   │   ├── empty-state.tsx      #   空状态占位
+│       │   │   ├── confirm-dialog.tsx   #   确认弹窗（危险操作）
+│       │   │   ├── loading-state.tsx    #   加载态（Skeleton/Spinner）
+│       │   │   └── search-input.tsx     #   搜索输入（防抖 + 快捷键）
+│       │   ├── hooks/            #     公共 Hooks
+│       │   │   ├── use-websocket.ts     #   WebSocket 连接/重连/频道订阅
+│       │   │   ├── use-debounce.ts      #   防抖 Hook
+│       │   │   ├── use-copy-clipboard.ts #  复制到剪贴板 + Toast
+│       │   │   └── use-keyboard.ts      #   键盘快捷键
+│       │   ├── lib/              #     公共工具函数
+│       │   │   ├── api-client.ts        #   统一 fetch 封装（Auth/错误处理）
+│       │   │   ├── ws-client.ts         #   WebSocket 客户端
+│       │   │   ├── format.ts            #   formatDate / formatRelativeTime
+│       │   │   └── cn.ts                #   className 合并（clsx + tw-merge）
+│       │   ├── types/            #     公共 TypeScript 类型
+│       │   │   ├── api.ts               #   PaginatedResponse / ApiError
+│       │   │   ├── issue.ts             #   Issue / IssueStatus / Priority
+│       │   │   ├── agent.ts             #   Agent / Runtime
+│       │   │   ├── message.ts           #   Message / WSMessage
+│       │   │   └── project.ts           #   Project / Group
+│       │   └── index.ts          #     统一导出
 │       └── tsconfig.json
 ├── embed.go                    # //go:embed admin/dist/* client/dist/*
 ├── main.go                     # Go 入口
@@ -755,6 +780,34 @@ anserflow/
 ```
 
 > 所有前端依赖统一提升到根 `node_modules/`，React / Next.js / shadcn/ui 只安装一份。
+
+**@anserflow/shared-ui 公共组件使用对照**：
+
+| 组件 | 用途 | admin | client |
+|------|------|:-----:|:------:|
+| `<StatusBadge />` | Issue/Agent 状态标签（backlog/todo/in_progress/done） | ✅ | ✅ |
+| `<PriorityBadge />` | 优先级标签（P0~P3 颜色区分） | ✅ | ✅ |
+| `<AgentAvatar />` | Agent 头像 + 角色标签 | ✅ | ✅ |
+| `<UserAvatar />` | 用户头像 + 在线状态 | ✅ | ✅ |
+| `<MarkdownRenderer />` | Markdown 渲染（消息/Issue正文） | ❌ | ✅ |
+| `<CodeBlock />` | 代码块（语法高亮 + 复制） | ❌ | ✅ |
+| `<EmptyState />` | 空状态占位（图标+提示+操作） | ✅ | ✅ |
+| `<ConfirmDialog />` | 确认弹窗（删除/暂停等危险操作） | ✅ | ✅ |
+| `<LoadingState />` | 加载态（Skeleton/Spinner 两种） | ✅ | ✅ |
+| `<SearchInput />` | 搜索输入（防抖+清除+快捷键 `/`） | ✅ | ✅ |
+
+**公共 Hooks 与工具**：
+
+| 名称 | 用途 | admin | client |
+|------|------|:-----:|:------:|
+| `useWebSocket()` | WS 连接/重连/频道订阅/心跳 | ✅ | ✅ |
+| `useDebounce()` | 防抖（搜索/自动保存） | ✅ | ✅ |
+| `useCopyToClipboard()` | 复制 + Toast 反馈 | ✅ | ✅ |
+| `useKeyboardShortcut()` | 键盘快捷键（`/`搜索/`Ctrl+K`） | ✅ | ✅ |
+| `apiClient` | 统一 fetch（baseURL/Auth/错误处理） | ✅ | ✅ |
+| `wsClient` | WebSocket 客户端 | ✅ | ✅ |
+| `formatDate()` / `formatRelativeTime()` | 日期格式化 | ✅ | ✅ |
+| `cn()` | className 合并 | ✅ | ✅ |
 
 **两种产物、两个前端入口**：
 

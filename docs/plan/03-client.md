@@ -252,6 +252,16 @@ src/
 | **Prettier** + `prettier-plugin-tailwindcss` | 代码格式化 + Tailwind 类名排序 |
 | **TypeScript strict** | `tsconfig.json` 启用 `strict: true` |
 
+#### @anserflow/shared-ui 公共组件
+
+admin 和 client 共享的公共组件、Hooks、工具函数、类型定义统一放在 `packages/shared-ui/`，通过 npm workspace 引用。详细目录结构和使用对照表见 [05-other.md 第十节](05-other.md)。
+
+```tsx
+// 引用示例
+import { StatusBadge, AgentAvatar, useWebSocket, apiClient } from '@anserflow/shared-ui'
+import type { Issue, WSMessage, PaginatedResponse } from '@anserflow/shared-ui'
+```
+
 ---
 
 ### 国际化（i18n）
