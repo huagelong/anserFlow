@@ -137,21 +137,11 @@ func GetChatModel() model.ChatModel { return chatModel }
 }
 ```
 
-**自定义运行时配置示例**（如 claude-code）：
-
-```json
-{
-  "api_key_encrypted": "aes256:xxx",
-  "model": "claude-sonnet-4-20250514",
-  "permission_mode": "acceptEdits"
-}
-```
-
 **配置流转**：
 
 ```
 Admin UI (Agent 编辑页)
-│  ① 下拉选择运行时（opencode / hermes / claude-code / ...）
+│  ① 下拉选择运行时（opencode / hermes / ...）
 │  ② 前端根据 runtimes.config_schema 动态渲染配置表单
 │  ③ 保存 → agents.runtime_config JSON
 │
@@ -695,13 +685,11 @@ type RuntimeAdapter interface {
     // HomeDir 运行时在容器内的主目录（bind mount 目标）
     // 项目级 runtime 目录会整体 bind mount 到此路径（读写）
     // opencode → /home/sandbox/.opencode
-    // claude-code → /home/sandbox/.claude
     // hermes → /home/sandbox/.hermes
     HomeDir() string
 
     // ConfigPath 配置文件写入路径（容器内，HomeDir 的子路径）
     // opencode → /home/sandbox/.opencode/config.json
-    // claude-code → /home/sandbox/.claude/settings.json
     // hermes → /home/sandbox/.hermes/config.yaml
     ConfigPath() string
 
@@ -711,13 +699,11 @@ type RuntimeAdapter interface {
 
     // EnvMapping API Key → 环境变量映射
     // opencode + openai → OPENAI_API_KEY
-    // claude-code → ANTHROPIC_API_KEY
     // hermes + openrouter → OPENROUTER_API_KEY
     EnvMapping(config map[string]interface{}, decryptedKey string) map[string]string
 
     // SkillsMountPath Skills 目录在容器内的路径（HomeDir 子路径）
     // opencode → /home/sandbox/.opencode/skills
-    // claude-code → /home/sandbox/.claude/skills
     // hermes → /home/sandbox/.hermes/skills
     SkillsMountPath() string
 
@@ -875,53 +861,6 @@ func (p *OpenCodeParser) ParseSessionFile(content []byte) (*TokenSummary, error)
         }
     }
     return &TokenSummary{TotalInput: totalInput, TotalOutput: totalOutput}, nil
-}
-```
-
-**内置实现 — claude-code 适配器（示例骨架）**：
-
-```go
-// internal/runtime/adapters/claude_code.go
-package adapters
-
-type ClaudeCodeAdapter struct{}
-
-func (a *ClaudeCodeAdapter) Name() string { return "claude-code" }
-func (a *ClaudeCodeAdapter) HomeDir() string  { return "/home/sandbox/.claude" }
-func (a *ClaudeCodeAdapter) ConfigPath() string {
-    return "/home/sandbox/.claude/settings.json"
-}
-func (a *ClaudeCodeAdapter) SkillsMountPath() string {
-    return "/home/sandbox/.claude/skills"
-}
-func (a *ClaudeCodeAdapter) SessionPath() string {
-    return "" // claude-code 不支持 session 文件
-}
-
-func (a *ClaudeCodeAdapter) RenderConfig(config map[string]interface{}) (string, error) {
-    cfg := map[string]interface{}{
-        "model":            config["model"],
-        "permission_mode":  config["permission_mode"],
-    }
-    return toJSON(cfg), nil
-}
-
-func (a *ClaudeCodeAdapter) EnvMapping(config map[string]interface{}, key string) map[string]string {
-    return map[string]string{
-        "ANTHROPIC_API_KEY": key,
-    }
-}
-
-type ClaudeCodeParser struct{}
-
-func (p *ClaudeCodeParser) ParseLine(line []byte) *ParsedEvent {
-    // claude-code 输出格式不同，按实际格式解析
-    // 如不支持 --format json 则走纯文本解析
-    return nil
-}
-
-func (p *ClaudeCodeParser) ParseSessionFile(content []byte) (*TokenSummary, error) {
-    return nil, nil // 不支持 session 文件
 }
 ```
 

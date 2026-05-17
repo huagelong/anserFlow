@@ -1385,8 +1385,8 @@ CREATE TABLE members (
 -- 运行时注册表（Agent 执行引擎配置）
 CREATE TABLE runtimes (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(32) NOT NULL UNIQUE,     -- 标识: opencode / claude-code / custom
-    display_name VARCHAR(64) NOT NULL,    -- 显示名: OpenCode / Claude Code
+    name VARCHAR(32) NOT NULL UNIQUE,     -- 标识: opencode / hermes / custom
+    display_name VARCHAR(64) NOT NULL,    -- 显示名: OpenCode / Hermes Agent
     description TEXT,                     -- 描述
     docker_image VARCHAR(256) NOT NULL,   -- Docker 镜像
     install_cmd VARCHAR(512),             -- Dockerfile 中安装命令（空=预装在镜像中）

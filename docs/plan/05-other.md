@@ -105,7 +105,7 @@
 
 ---
 
-> **opencode**：AnserFlow 内置默认运行时，基于开源 AI 编码代理 [anomalyco/opencode](https://github.com/anomalyco/opencode)（TypeScript，160k+ Stars）。在 Docker 沙箱中通过非交互 CLI 模式（`opencode run`）执行编码任务。支持多 LLM 提供商、Plan/Build 双模式。后台可注册其他运行时（如 Claude Code），Agent 绑定任意运行时。
+> **opencode**：AnserFlow 内置默认运行时，基于开源 AI 编码代理 [anomalyco/opencode](https://github.com/anomalyco/opencode)（TypeScript，160k+ Stars）。在 Docker 沙箱中通过非交互 CLI 模式（`opencode run`）执行编码任务。支持多 LLM 提供商、Plan/Build 双模式。**hermes**：Nous Research 开源 AI Agent，支持 20+ Provider、持久记忆、Skills 系统。Agent 可绑定任意运行时。
 
 ### 系统功能模块总览
 

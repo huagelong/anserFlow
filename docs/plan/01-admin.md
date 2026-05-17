@@ -300,7 +300,7 @@ func (h *HotConfig) StartWatch(ctx context.Context) {
 │   ├── 选择后根据 config_schema 动态渲染配置表单
 │   ├── API Key 加密字段（前端显示 ****，后端 AES 加解密）
 │   └── 不同运行时字段不同（opencode: provider/model/agent/thinking）
-│                          （claude-code: model/permission_mode）
+│                          （hermes: provider/model/personality）
 └── Skills 绑定管理（继承运行时默认 + Agent 级覆盖）
 ```
 
