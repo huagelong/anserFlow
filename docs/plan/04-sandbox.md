@@ -46,8 +46,8 @@
 │  anserflow/internal/notification/ (通知)   │
 │  └── channel_manager.go 多渠道路由分发      │
 ├──────────────────────────────────────────┤
-│  anserflow/internal/git/  (Git 平台抽象)   │
-│  └── provider_manager.go GitProvider 路由  │
+│  anserflow/internal/git/  (Git 管理)       │
+│  └── manager.go        GitManager 统一入口 │
 ├──────────────────────────────────────────┤
 │  anserflow/internal/token/  (Token 配额)   │
 │  └── token_manager.go   用量追踪/配额/归档  │
@@ -1095,20 +1095,26 @@ chMgr.Register(&BrowserChannel{hub: wsHub})
 // 群聊系统消息通过 NotifyGroup 独立发送
 ```
 
-### GitProviderManager — Git 平台管理器
+### GitManager — Git 管理器
 
-当前只有 GitHub 集成，`git_platform` 字段保留了扩展位，通过 `GitProviderManager` 做平台路由。
+统一管理 Git 平台 API 和仓库操作，分为两个子接口：
+
+| 子接口 | 职责 | 运行位置 | 平台相关性 |
+|--------|------|----------|-----------|
+| **GitPlatform** | 平台 REST API（Issue/PR/Repo） | Go 后端 Service 层 | 平台相关 |
+| **GitOps** | 仓库操作（Clone/Fetch/Push/Commit） | Worker 沙箱内 | 平台无关 |
 
 **设计原则**：
 
-- `manager.GetProvider(platform)` → 返回对应实现
-- 业务代码不感知具体平台
-- Phase 2 接入 Gitea/GitLab 时零侵入
+- `manager.Platform(platform)` → 返回对应平台 API 实现
+- `manager.NewOps(containerID, workdir)` → 返回仓库操作实例（绑定容器）
+- 业务代码不感知具体平台和底层 Git 实现
+- Phase 2 可替换为 go-git 库实现，上层无感知
 
-**实现**：
+**接口定义**：
 
 ```go
-// internal/git/provider_manager.go
+// internal/git/manager.go
 package git
 
 import (
@@ -1116,52 +1122,140 @@ import (
     "fmt"
 )
 
-// GitProvider 平台无关接口
-// （已在架构文档中定义，此处由 Manager 持有路由）
-type GitProvider interface {
+// GitPlatform 平台 REST API 接口（平台相关，运行在 Go 后端 Service 层）
+type GitPlatform interface {
     CreateIssue(ctx context.Context, repo, title, body string, labels []string) (issueID string, err error)
     CreatePR(ctx context.Context, repo, title, head, base, body string) (prURL string, err error)
     GetRepoInfo(ctx context.Context, repo string) (*RepoInfo, error)
     ListBranches(ctx context.Context, repo string) ([]string, error)
 }
 
-type GitProviderManager struct {
-    providers map[string]GitProvider
-    defaultID string
+// GitOps 仓库操作接口（平台无关，运行在 Worker 沙箱内）
+type GitOps interface {
+    IsRepo(ctx context.Context) bool
+    Clone(ctx context.Context, repoURL, branch, dest string) error
+    FetchAll(ctx context.Context) error
+    Checkout(ctx context.Context, branch string) error
+    Pull(ctx context.Context, branch string) error
+    Commit(ctx context.Context, message string, author Author) (string, error)
+    Push(ctx context.Context) error
 }
 
-func NewGitProviderManager() *GitProviderManager {
-    return &GitProviderManager{
-        providers: make(map[string]GitProvider),
-        defaultID: "github",
+// Author 提交者信息
+type Author struct {
+    Name  string
+    Email string
+}
+
+// GitManager Git 管理器（统一入口）
+type GitManager struct {
+    platforms       map[string]GitPlatform
+    defaultPlatform string
+}
+
+func NewGitManager() *GitManager {
+    return &GitManager{
+        platforms:       make(map[string]GitPlatform),
+        defaultPlatform: "github",
     }
 }
 
-// Register 注册平台实现
-func (m *GitProviderManager) Register(platform string, provider GitProvider) {
-    m.providers[platform] = provider
+// Register 注册平台 API 实现
+func (m *GitManager) Register(platform string, p GitPlatform) {
+    m.platforms[platform] = p
 }
 
-// GetProvider 获取平台实现（默认返回 github）
-func (m *GitProviderManager) GetProvider(platform string) (GitProvider, error) {
+// Platform 获取平台 API 实现（默认返回 github）
+func (m *GitManager) Platform(platform string) (GitPlatform, error) {
     if platform == "" {
-        platform = m.defaultID
+        platform = m.defaultPlatform
     }
-    p, ok := m.providers[platform]
+    p, ok := m.platforms[platform]
     if !ok {
         return nil, fmt.Errorf("unsupported git platform: %s", platform)
     }
     return p, nil
+}
+
+// NewOps 为指定容器创建仓库操作实例
+func (m *GitManager) NewOps(containerID, workdir string) GitOps {
+    return NewContainerGitOps(containerID, workdir)
+}
+```
+
+**ContainerGitOps — 容器内 Shell 实现**：
+
+```go
+// internal/git/container_ops.go
+package git
+
+import (
+    "context"
+    "fmt"
+)
+
+// ExecFunc 在容器内执行命令的函数签名
+type ExecFunc func(ctx context.Context, containerID, cmd string) error
+
+// ContainerGitOps 基于 execInContainer 的仓库操作实现
+type ContainerGitOps struct {
+    containerID string
+    workdir     string
+    exec        ExecFunc
+}
+
+func NewContainerGitOps(containerID, workdir string) *ContainerGitOps {
+    return &ContainerGitOps{
+        containerID: containerID,
+        workdir:     workdir,
+        exec:        execInContainer, // 注入 Worker 的容器执行函数
+    }
+}
+
+func (g *ContainerGitOps) run(ctx context.Context, cmd string) error {
+    return g.exec(ctx, g.containerID, fmt.Sprintf("cd %s && %s", g.workdir, cmd))
+}
+
+func (g *ContainerGitOps) IsRepo(ctx context.Context) bool {
+    return g.exec(ctx, g.containerID, "test -d "+g.workdir+"/.git") == nil
+}
+
+func (g *ContainerGitOps) Clone(ctx context.Context, repoURL, branch, dest string) error {
+    return g.exec(ctx, g.containerID,
+        fmt.Sprintf("git clone --branch %s %s %s", branch, repoURL, dest))
+}
+
+func (g *ContainerGitOps) FetchAll(ctx context.Context) error {
+    return g.run(ctx, "git fetch --all")
+}
+
+func (g *ContainerGitOps) Checkout(ctx context.Context, branch string) error {
+    return g.run(ctx, "git checkout "+branch)
+}
+
+func (g *ContainerGitOps) Pull(ctx context.Context, branch string) error {
+    return g.run(ctx, fmt.Sprintf("git checkout %s && git pull", branch))
+}
+
+func (g *ContainerGitOps) Commit(ctx context.Context, message string, author Author) (string, error) {
+    err := g.run(ctx, fmt.Sprintf(
+        `git add . && git commit -m "%s" --author=\"%s <%s>\"`,
+        message, author.Name, author.Email))
+    return "", err
+}
+
+func (g *ContainerGitOps) Push(ctx context.Context) error {
+    return g.run(ctx, "git push")
 }
 ```
 
 **初始化**：
 
 ```go
-gitMgr := git.NewGitProviderManager()
-gitMgr.Register("github", &GitHubProvider{token: cfg.GitHubToken})
-// Phase 2: gitMgr.Register("gitea", &GiteaProvider{...})
-// Phase 2: gitMgr.Register("gitlab", &GitLabProvider{...})
+gitMgr := git.NewGitManager()
+gitMgr.Register("github", &GitHubPlatform{token: cfg.GitHubToken})
+// Phase 2: gitMgr.Register("gitea", &GiteaPlatform{...})
+// Phase 2: gitMgr.Register("gitlab", &GitLabPlatform{...})
 ```
 
 ### TokenManager — Token 配额管理器
@@ -2647,17 +2741,15 @@ func createSandbox(ctx context.Context, cfg SandboxConfig) (string, error) {
     return resp.ID, nil
 }
 
-// prepareRepo 首次 clone 或增量 fetch
+// prepareRepo 首次 clone 或增量 fetch（通过 GitOps 抽象）
 func prepareRepo(ctx context.Context, containerID string, cfg SandboxConfig) {
-    check := execInContainer(ctx, containerID, "test -d /workspace/repo/.git")
-    if check == nil {
-        // 增量更新
-        execInContainer(ctx, containerID,
-            "cd /workspace/repo && git fetch --all && git checkout "+cfg.Branch+" && git pull")
+    ops := gitMgr.NewOps(containerID, "/workspace/repo")
+    if ops.IsRepo(ctx) {
+        ops.FetchAll(ctx)
+        ops.Checkout(ctx, cfg.Branch)
+        ops.Pull(ctx, cfg.Branch)
     } else {
-        // 首次 clone
-        execInContainer(ctx, containerID,
-            "git clone --branch "+cfg.Branch+" "+cfg.RepoURL+" /workspace/repo")
+        ops.Clone(ctx, cfg.RepoURL, cfg.Branch, "/workspace/repo")
     }
 }
 
@@ -2892,21 +2984,25 @@ github.com/go-git/go-git/v5 v5.15.0
 
 #### 多平台扩展设计
 
-后期支持 Gitea / GitLab / Gitee 等平台，通过接口抽象实现：
+后期支持 Gitea / GitLab / Gitee 等平台，通过 `GitPlatform` + `GitOps` 双接口抽象：
 
 ```
-┌──────────────────────────────────────────────┐
-│  internal/git/                                │
-│  ├── provider.go        GitProvider 接口定义  │
-│  ├── github.go          GitHub 实现           │
-│  ├── gitea.go           Gitea 实现            │
-│  └── gitlab.go          GitLab 实现           │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  internal/git/                                            │
+│  ├── manager.go           GitManager 统一入口             │
+│  ├── platform.go          GitPlatform 接口定义             │
+│  ├── ops.go               GitOps 接口 + Author 定义       │
+│  ├── container_ops.go     容器 Shell 实现（当前）          │
+│  ├── gogit_ops.go         go-git 库实现（Phase 2 可选）    │
+│  ├── github.go            GitHub GitPlatform 实现          │
+│  ├── gitea.go             Gitea 实现（Phase 2）            │
+│  └── gitlab.go            GitLab 实现（Phase 2）           │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ```go
-// internal/git/provider.go — 平台无关接口
-type GitProvider interface {
+// internal/git/platform.go — 平台无关接口
+type GitPlatform interface {
     CreateIssue(ctx, repo, title, body string, labels []string) (issueID string, err error)
     CreatePR(ctx, repo, title, head, base, body string) (prURL string, err error)
     GetRepoInfo(ctx, repo string) (*RepoInfo, error)
@@ -2914,7 +3010,12 @@ type GitProvider interface {
 }
 ```
 
-`go-git` 层无需任何改动 — 它只做 `clone/commit/push`，协议层（HTTP/SSH）与平台无关。只有 REST API 层需要为每个平台实现 `GitProvider` 接口。
+扩展策略：
+
+| 层 | 扩展方式 | 说明 |
+|----|---------|------|
+| **GitPlatform** | 新增平台实现 | 每个 REST API SDK 封装为一个 `GitPlatform` 实现 |
+| **GitOps** | 替换底层实现 | `ContainerGitOps`（Shell）→ `GoGitOps`（go-git 库），上层无需改动 |
 
 | 平台 | Go SDK | 备注 |
 |------|--------|------|
@@ -2923,7 +3024,7 @@ type GitProvider interface {
 | **GitLab** | `github.com/xanzy/go-gitlab` | API 结构不同，独立实现 |
 | **Gitee** | REST API（无官方 Go SDK） | 可基于 `net/http` 封装 |
 
-> 当前阶段只闭环 GitHub 集成：`git_platform` 字段保留，但本轮验收默认取值为 `github`。Gitea / GitLab / Gitee Provider 进入后续独立任务，不作为当前计划阻塞项。
+> 当前阶段只闭环 GitHub 集成：`git_platform` 字段保留，但本轮验收默认取值为 `github`。Gitea / GitLab / Gitea Platform 进入后续独立任务，不作为当前计划阻塞项。仓库操作当前使用 `ContainerGitOps`（Shell），Phase 2 可选替换为 `GoGitOps`（go-git 库直接操作）。
 
 
 ---

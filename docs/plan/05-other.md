@@ -687,7 +687,7 @@ anserflow/
 │   ├── sandbox/                #   Docker 沙箱（含 SandboxManager）
 │   ├── runtime/                #   运行时管理器（配置构建/命令渲染）
 │   ├── notification/           #   通知渠道路由管理器
-│   ├── git/                    #   Git 平台抽象（含 GitProviderManager）
+│   ├── git/                    #   Git 管理（含 GitManager + GitOps）
 │   └── token/                  #   Token 配额管理器（用量追踪/归档）
 ├── config/                     # Go 配置加载（Viper）
 ├── admin/                      # ① npm workspace: @anserflow/admin
