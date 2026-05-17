@@ -58,6 +58,10 @@ RUN apk add --no-cache \
 # ── 从 builder 复制 opencode CLI ──
 COPY --from=builder /opencode /usr/local/bin/opencode
 
+# ── 安装 Hermes Agent（Python） ──
+# Hermes 是 Nous Research 开源 AI Agent，支持 20+ Provider、持久记忆、Skills 系统
+RUN pip install --no-cache-dir "hermes-agent[all]" && pip cache purge
+
 # ── 预装常用 Python 包（可选，按需添加）──
 # 如果 Agent 常用这些库，预装可减少首次执行等待时间
 RUN pip install --no-cache-dir \
@@ -103,6 +107,7 @@ RUN git config --global --add safe.directory /workspace && \
 HEALTHCHECK --interval=30s --timeout=3s --retries=1 CMD node -e "1+1" || exit 1
 
 # ── 入口：由 Go Docker SDK 动态指定 ──
-# 示例: ["opencode", "run", "--task", "{...}"]
-ENTRYPOINT ["/usr/local/bin/opencode"]
+# opencode: ["opencode", "run", "--task", "{...}"]
+# hermes:   ["hermes", "chat", "-q", "...", "-m", "openrouter/...", "--yolo", "-Q"]
+ENTRYPOINT []
 CMD ["--help"]

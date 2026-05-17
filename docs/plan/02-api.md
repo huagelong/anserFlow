@@ -1409,6 +1409,16 @@ INSERT INTO runtimes (name, display_name, description, docker_image, install_cmd
  '{"provider":"openai","model":"gpt-4o","agent":"build","max_iterations":20,"thinking":true}',
  1);
 
+-- 预置运行时: hermes
+INSERT INTO runtimes (name, display_name, description, docker_image, install_cmd, execute_template, config_schema, default_config, is_builtin) VALUES
+('hermes', 'Hermes Agent', 'Nous Research 开源 AI Agent，Python，支持 20+ Provider、持久记忆、Skills 系统',
+ 'ghcr.io/anserflow/sandbox:latest',
+ 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash',
+ 'hermes chat -q "{prompt}" -m {provider}/{model} --yolo -Q',
+ '{"type":"object","properties":{"provider":{"type":"string","enum":["openrouter","openai","anthropic","deepseek","nous","google"]},"model":{"type":"string"},"api_key_encrypted":{"type":"string"},"max_iterations":{"type":"number","default":20},"personality":{"type":"string","description":"Agent 人设名"}}}',
+ '{"provider":"openrouter","model":"anthropic/claude-sonnet-4","max_iterations":20}',
+ 1);
+
 -- Agent 定义
 CREATE TABLE agents (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

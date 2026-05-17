@@ -64,7 +64,7 @@
 │             /backlog 方案拆解             │
 │             人工提示词优化                  │
 │  Eino 不负责：代码生成 / 编码执行          │
-│              └→ 由 opencode 在 Docker 沙箱完成│
+│              └→ 由运行时（opencode/hermes）在 Docker 沙箱完成│
 │                                           │
 │  调度行为由 Eino Skill 定义               │
 │  (eino-discuss/eino-backlog/eino-optimizer)│
@@ -151,7 +151,7 @@ func GetChatModel() model.ChatModel { return chatModel }
 
 ```
 Admin UI (Agent 编辑页)
-│  ① 下拉选择运行时（opencode / claude-code / ...）
+│  ① 下拉选择运行时（opencode / hermes / claude-code / ...）
 │  ② 前端根据 runtimes.config_schema 动态渲染配置表单
 │  ③ 保存 → agents.runtime_config JSON
 │
@@ -696,11 +696,13 @@ type RuntimeAdapter interface {
     // 项目级 runtime 目录会整体 bind mount 到此路径（读写）
     // opencode → /home/sandbox/.opencode
     // claude-code → /home/sandbox/.claude
+    // hermes → /home/sandbox/.hermes
     HomeDir() string
 
     // ConfigPath 配置文件写入路径（容器内，HomeDir 的子路径）
     // opencode → /home/sandbox/.opencode/config.json
     // claude-code → /home/sandbox/.claude/settings.json
+    // hermes → /home/sandbox/.hermes/config.yaml
     ConfigPath() string
 
     // RenderConfig 将通用配置渲染为该工具特有的配置 JSON
@@ -710,15 +712,18 @@ type RuntimeAdapter interface {
     // EnvMapping API Key → 环境变量映射
     // opencode + openai → OPENAI_API_KEY
     // claude-code → ANTHROPIC_API_KEY
+    // hermes + openrouter → OPENROUTER_API_KEY
     EnvMapping(config map[string]interface{}, decryptedKey string) map[string]string
 
     // SkillsMountPath Skills 目录在容器内的路径（HomeDir 子路径）
     // opencode → /home/sandbox/.opencode/skills
     // claude-code → /home/sandbox/.claude/skills
+    // hermes → /home/sandbox/.hermes/skills
     SkillsMountPath() string
 
     // SessionPath 会话文件路径（用于事后 Token 汇总），空字符串表示不支持
     // opencode → /home/sandbox/.local/share/opencode/sessions/*.jsonl
+    // hermes → /home/sandbox/.hermes/sessions/*.jsonl
     SessionPath() string
 }
 
@@ -774,6 +779,7 @@ func NewRegistry() *Registry {
     }
     // 注册内置运行时
     r.Register(&OpenCodeAdapter{}, &OpenCodeParser{})
+    r.Register(&HermesAdapter{}, &HermesParser{})
     return r
 }
 
@@ -916,6 +922,92 @@ func (p *ClaudeCodeParser) ParseLine(line []byte) *ParsedEvent {
 
 func (p *ClaudeCodeParser) ParseSessionFile(content []byte) (*TokenSummary, error) {
     return nil, nil // 不支持 session 文件
+}
+```
+
+**内置实现 — hermes 适配器**：
+
+Hermes Agent（by Nous Research）是开源 AI Agent，Python 编写，支持 20+ Provider、持久记忆、Skills 系统、MCP 集成。配置目录 `~/.hermes/`，配置文件 `config.yaml`（非机密）+ `.env`（API Key），Skills 路径 `~/.hermes/skills/`，Session 路径 `~/.hermes/sessions/`。
+
+```go
+// internal/runtime/adapters/hermes.go
+package adapters
+
+type HermesAdapter struct{}
+
+func (a *HermesAdapter) Name() string        { return "hermes" }
+func (a *HermesAdapter) HomeDir() string     { return "/home/sandbox/.hermes" }
+func (a *HermesAdapter) ConfigPath() string  { return "/home/sandbox/.hermes/config.yaml" }
+func (a *HermesAdapter) SkillsMountPath() string {
+    return "/home/sandbox/.hermes/skills"
+}
+func (a *HermesAdapter) SessionPath() string {
+    return "/home/sandbox/.hermes/sessions/*.jsonl"
+}
+
+func (a *HermesAdapter) RenderConfig(config map[string]interface{}) (string, error) {
+    provider := config["provider"].(string)
+    model := config["model"].(string)
+    yaml := fmt.Sprintf("model: %s/%s\n", provider, model)
+    if personality, ok := config["personality"]; ok {
+        yaml += fmt.Sprintf("personality: %s\n", personality)
+    }
+    if maxTurns, ok := config["max_iterations"]; ok {
+        yaml += fmt.Sprintf("max_turns: %v\n", maxTurns)
+    }
+    yaml += "terminal:\n  backend: local\n"
+    return yaml, nil
+}
+
+func (a *HermesAdapter) EnvMapping(config map[string]interface{}, key string) map[string]string {
+    provider := config["provider"].(string)
+    envKey := strings.ToUpper(provider) + "_API_KEY"
+    // OpenRouter 使用 OPENROUTER_API_KEY
+    if provider == "openrouter" {
+        envKey = "OPENROUTER_API_KEY"
+    }
+    return map[string]string{envKey: key}
+}
+
+type HermesParser struct{}
+
+func (p *HermesParser) ParseLine(line []byte) *ParsedEvent {
+    var event map[string]interface{}
+    if json.Unmarshal(line, &event) != nil {
+        return nil
+    }
+    result := &ParsedEvent{}
+    if usage, ok := event["token_usage"]; ok {
+        m := usage.(map[string]interface{})
+        result.TokenUsage = &TokenUsageDetail{
+            InputTokens:  toInt64(m["input_tokens"]),
+            OutputTokens: toInt64(m["output_tokens"]),
+        }
+    }
+    if content, ok := event["content"]; ok {
+        result.Type = "agent_log"
+        result.Content = fmt.Sprintf("%v", content)
+    }
+    return result
+}
+
+func (p *HermesParser) ParseSessionFile(content []byte) (*TokenSummary, error) {
+    // Hermes session 文件格式待确认，暂按 JSONL 解析
+    var totalInput, totalOutput int64
+    scanner := bufio.NewScanner(bytes.NewReader(content))
+    for scanner.Scan() {
+        var msg struct {
+            TokenUsage *struct {
+                InputTokens  int64 `json:"input_tokens"`
+                OutputTokens int64 `json:"output_tokens"`
+            } `json:"token_usage"`
+        }
+        if json.Unmarshal(scanner.Bytes(), &msg) == nil && msg.TokenUsage != nil {
+            totalInput += msg.TokenUsage.InputTokens
+            totalOutput += msg.TokenUsage.OutputTokens
+        }
+    }
+    return &TokenSummary{TotalInput: totalInput, TotalOutput: totalOutput}, nil
 }
 ```
 
