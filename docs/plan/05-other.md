@@ -510,19 +510,32 @@ anserflow init
   --output  配置文件输出路径（默认 ./config.yaml）
   # 自动生成 config.yaml + 数据库表结构
 
-# 启动服务
+# 启动所有服务
 anserflow server
   --config  config.yaml 路径（默认 ./config.yaml）
   --port    监听端口（默认 8080）
-  # 启动 Gin HTTP 服务 + Asynq Worker
+  # 同时启动 Gateway（HTTP 服务）和 Worker（任务队列消费者）
+
+# 仅启动 API 网关
+anserflow gateway
+  --config  config.yaml 路径（默认 ./config.yaml）
+  --port    监听端口（默认 8080）
+  # 启动 Gin HTTP 服务 + API 路由 + Admin SPA
+
+# 仅启动 Worker
+anserflow worker
+  --config     config.yaml 路径
+  --mode       执行模式（local | sandbox | auto，默认 auto）
+  --concurrency 并发数（默认 10）
+  # 仅启动 Asynq Worker，不启动 HTTP 服务
+  # Worker 通过统一 RuntimeClient 接口与工具（opencode/hermes）双向通讯：
+  #   local:   启动本地 opencode/hermes 子进程，通过 stdin/stdout 双向流通讯
+  #   sandbox: 启动 Docker 容器，通过 ContainerAttach 双向流通讯
+  #   auto:    优先沙箱（检测 Docker 可用），不可用时回退本地
+  # 本地和沙箱使用同一套通讯协议，方便本地开发调试
 
 # 查看版本
 anserflow version
-
-# 仅启动 Worker（分布式部署时）
-anserflow worker
-  --config  config.yaml 路径
-  # 仅启动 Asynq Worker，不启动 HTTP 服务
 
 # 数据库迁移
 anserflow migrate
@@ -550,9 +563,18 @@ var rootCmd = &cobra.Command{
 // cmd/server.go
 var serverCmd = &cobra.Command{
     Use:   "server",
-    Short: "启动 AnserFlow 服务",
+    Short: "启动所有服务（Gateway + Worker）",
     Run: func(cmd *cobra.Command, args []string) {
-        startServer(cfg)
+        startGatewayAndWorker(cfg)
+    },
+}
+
+// cmd/gateway.go
+var gatewayCmd = &cobra.Command{
+    Use:   "gateway",
+    Short: "仅启动 API 网关（HTTP + WebSocket）",
+    Run: func(cmd *cobra.Command, args []string) {
+        startGateway(cfg)
     },
 }
 
@@ -568,11 +590,39 @@ var initCmd = &cobra.Command{
 // cmd/worker.go
 var workerCmd = &cobra.Command{
     Use:   "worker",
-    Short: "仅启动 Asynq Worker（分布式部署）",
+    Short: "仅启动 Worker（通过 RuntimeClient 与 opencode/hermes 双向通讯）",
     Run: func(cmd *cobra.Command, args []string) {
-        startWorker(cfg)
+        mode, _ := cmd.Flags().GetString("mode")
+        startWorker(cfg, mode)
     },
 }
+
+// ─── Worker 与 Runtime 通讯模型 ───
+//
+// Worker 通过统一的 RuntimeClient 接口与工具（opencode/hermes）通讯，
+// 本地和沙箱模式共用同一套接口和协议，仅在底层实现不同：
+//
+//   RuntimeClient (interface)
+//     ├── Connect(ctx) → (stream, error)      // 建立双向流连接
+//     ├── SendTask(ctx, task) → stream         // 发送任务，接收流式响应
+//     └── Close() error                        // 关闭连接
+//
+//   LocalClient (实现 RuntimeClient)
+//     └── exec.Command("opencode", "run")
+//         └── cmd.Stdin  → 写入任务 JSON
+//         └── cmd.Stdout → 读取流式事件 (JSON Lines)
+//
+//   SandboxClient (实现 RuntimeClient)
+//     └── docker ContainerAttach
+//         └── 容器内 opencode/hermes 作为常驻服务
+//         └── 通过 Attach 的 stdin/stdout 双向通讯
+//
+// 通讯协议：新行分隔的 JSON 消息 (JSON Lines)
+//   请求: {"type":"task","id":"...","command":"...","context":{...}}
+//   事件: {"type":"log"|"status"|"result"|"error","data":{...}}
+//
+// 本地模式的好处：开发调试时可直接观察 opencode 子进程输出，
+// 无需依赖 Docker，启动快，日志清晰。
 
 // cmd/migrate.go
 var migrateCmd = &cobra.Command{
@@ -668,12 +718,20 @@ anserflow/
 ├── package-lock.json
 ├── cmd/                        # Go CLI 入口（Cobra）
 │   ├── root.go                 #   根命令注册
-│   ├── server.go               #   anserflow server
-│   ├── worker.go               #   anserflow worker
+│   ├── server.go               #   anserflow server（Gateway + Worker）
+│   ├── gateway.go              #   anserflow gateway（仅 HTTP 服务）
+│   ├── worker.go               #   anserflow worker（本地/沙箱执行）
 │   ├── init.go                 #   anserflow init
 │   ├── migrate.go              #   anserflow migrate
 │   └── upgrade.go              #   anserflow upgrade
 ├── internal/                   # Go 业务逻辑
+│   ├── config/                 #   配置加载（Viper，热配置管理）
+│   ├── gateway/                #   API 网关（Gin HTTP 服务）
+│   ├── worker/                 #   任务消费者（Asynq + Docker 沙箱）
+│   │   ├── worker.go           #     Worker 服务（Asynq Server 启动）
+│   │   ├── handlers.go         #     任务处理器（issue:execute 等）
+│   │   ├── client.go           #     RuntimeClient 接口 + LocalClient 实现
+│   │   └── sandbox.go          #     SandboxClient 实现（Docker ContainerAttach）
 │   ├── handler/                #   Gin Handler（API 路由）
 │   ├── service/                #   业务服务层
 │   ├── model/                  #   GORM Model
@@ -756,6 +814,105 @@ anserflow/
 ├── config.yaml                 # 运行配置
 └── Makefile                    # 构建脚本
 ```
+
+### 4.6 Worker-Runtime 通讯架构
+
+Worker 通过统一 `RuntimeClient` 接口与运行时工具（opencode、hermes）双向通讯，本地模式和沙箱模式共用同一套接口和通讯协议。
+
+**设计目标**：
+
+| 目标 | 说明 |
+|------|------|
+| 接口统一 | Worker 不感知底层是本地进程还是 Docker 容器，一律通过 RuntimeClient 交互 |
+| 双向流 | 发送任务 → 接收流式事件（日志、状态变更、结果），不是 fire-and-forget |
+| 本地可调试 | local 模式下直接启动 opencode 子进程，stdout 可见，无需 Docker 依赖 |
+| 协议一致 | 同一种 JSON Lines 协议，本地和沙箱完全一致 |
+
+**架构图**：
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Worker (Asynq Consumer)                                  │
+│                                                           │
+│  handleIssueExecute(task)                                 │
+│       │                                                   │
+│       ▼                                                   │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │  RuntimeClient (interface)                          │ │
+│  │                                                     │ │
+│  │  Connect(ctx, runtime) → (ClientStream, error)      │ │
+│  │  SendTask(ctx, stream, task) → chan Event           │ │
+│  │  Close(stream) error                                │ │
+│  └──────────────┬──────────────────────────────────────┘ │
+│                 │                                         │
+│     ┌───────────┴───────────┐                             │
+│     │                       │                             │
+│     ▼                       ▼                             │
+│  ┌──────────────┐    ┌──────────────────┐                │
+│  │ LocalClient   │    │ SandboxClient    │                │
+│  │               │    │                  │                │
+│  │ exec.Command  │    │ docker           │                │
+│  │  ("opencode") │    │  ContainerAttach │                │
+│  │               │    │                  │                │
+│  │ stdin ────────│─── │ ──► 容器 stdin   │                │
+│  │       ◄───────│─── │ ──  容器 stdout  │                │
+│  │        stdout │    │                  │                │
+│  └──────────────┘    └──────────────────┘                │
+│        │                      │                           │
+│        ▼                      ▼                           │
+│  ┌──────────────┐    ┌──────────────────┐                │
+│  │ 本地 opencode │    │ Docker 沙箱       │                │
+│  │ / hermes     │    │ ┌──────────────┐ │                │
+│  │ 子进程       │    │ │ opencode run │ │                │
+│  │              │    │ │ / hermes     │ │                │
+│  └──────────────┘    │ └──────────────┘ │                │
+│                      └──────────────────┘                │
+└──────────────────────────────────────────────────────────┘
+```
+
+**通讯协议（JSON Lines）**：
+
+```json
+// → 请求 | ← 事件
+→ {"type":"task","id":"t-abc123","command":"实现登录页","context":{"project":"...","skills":["react-auth"]}}
+
+← {"type":"log","ts":1716000000,"text":"正在读取项目文件..."}
+← {"type":"status","ts":1716000002,"phase":"plan","text":"已生成实施计划"}
+← {"type":"file","ts":1716000010,"path":"src/login.tsx","op":"create"}
+← {"type":"result","ts":1716000030,"exitCode":0,"summary":"登录页组件已完成"}
+← {"type":"error","ts":1716000030,"code":"BUILD_FAILED","detail":"tsc 编译错误"}
+```
+
+**本地模式 vs 沙箱模式**：
+
+| | LocalClient | SandboxClient |
+|------|-------------|-------------|
+| 启动方式 | `exec.Command("opencode", "run")` | Docker ContainerCreate + Start |
+| 通讯方式 | 子进程 stdin/stdout pipe | ContainerAttach stdin/stdout |
+| 隔离性 | 无（共享宿主机文件系统） | 强隔离（容器沙箱） |
+| 启动速度 | 毫秒级 | 秒级（容器启动） |
+| 依赖 | 本地需安装 opencode/hermes CLI | 仅需 Docker |
+| 适用场景 | 本地开发调试 | 生产环境 |
+| 调试便利 | 可直接查看子进程输出、attach 调试器 | 需 docker logs / exec 进入 |
+
+**本地模式开发调试流程**：
+
+```bash
+# 1. 本地安装 opencode（通过 npm / go install）
+npm install -g @anthropic/opencode
+
+# 2. 启动 Worker（local 模式，无需 Docker）
+anserflow worker --mode local --config config.yaml
+
+# 3. Worker 接收到任务后，自动启动 opencode 子进程
+#    opencode 的 stdout 直接流式推送给 Worker，可实时观察
+
+# 4. Ctrl+C 关闭 Worker 时，自动终止所有 opencode 子进程
+```
+
+> **协议扩展**：RuntimeClient 接口设计为可扩展，后续接入新的运行时工具（如 devika、aider）只需实现 RuntimeClient 接口即可，Worker 和上层业务逻辑无需修改。
+
+---
 
 **npm workspace 配置**：
 
@@ -942,8 +1099,8 @@ vim config.yaml
 
 # 5. 启动（HTTP + Worker 一体）
 ./anserflow server --config ./config.yaml
-# 访问 http://your-server:8080/admin     → 后台管理
-# 访问 http://your-server:8080/client    → 客户端 IM
+# 等价于同时执行 gateway + worker，访问 http://your-server:8080/admin     → 后台管理
+#                                      http://your-server:8080/client    → 客户端 IM
 ```
 
 #### 模式 B：分布式部署
@@ -951,11 +1108,11 @@ vim config.yaml
 适合大规模（50+ 并发 Issue），Worker 可水平扩展：
 
 ```bash
-# 节点 1: API 服务（可多实例 + 负载均衡）
-anserflow server --config config.yaml
+# 节点 1: API 网关（可多实例 + 负载均衡）
+anserflow gateway --config config.yaml
 
 # 节点 2~N: Worker（仅处理沙箱任务）
-anserflow worker --config config.yaml
+anserflow worker --config config.yaml --mode sandbox
 
 # 数据库/Redis: 独立部署或托管服务
 ```

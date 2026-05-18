@@ -403,8 +403,13 @@ npm run build -w @anserflow/admin    # → admin/dist/
 go build -o anserflow                 # admin/dist/ 被 go:embed 打入二进制
 
 # 3. 部署：单个文件即可
-./anserflow init    # 首次运行初始化
-./anserflow server  # 启动，访问 http://localhost:8080/admin/dashboard
+./anserflow init      # 首次运行初始化
+./anserflow server    # 启动所有服务（Gateway + Worker），访问 http://localhost:8080/admin/dashboard
+
+# 或按需单独启动
+./anserflow gateway   # 仅启动 API 网关（HTTP + WebSocket + Admin SPA）
+./anserflow worker    # 仅启动 Worker（任务队列消费者，支持 local/sandbox/auto 模式）
+./anserflow worker --mode sandbox  # 沙箱模式，在 Docker 容器中隔离执行
 ```
 
 ---

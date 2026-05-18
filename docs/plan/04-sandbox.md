@@ -147,9 +147,16 @@ Admin UI (Agent 编辑页)
 │
 ▼
 Worker (沙箱启动时)
-│  ① 读取 agents.runtime_id → runtimes.execute_template
+│  ① 读取 agents.runtime_id → 确定运行时（opencode / hermes）
 │  ② 读取 agents.runtime_config → 填充模板变量
-│  ③ 执行: opencode run "{prompt}" --model openai/gpt-4o --agent build
+│  ③ 通过 RuntimeClient 接口与沙箱内 opencode/hermes 建立双向流连接：
+│     - SandboxClient: 启动 Docker 容器，通过 ContainerAttach 双向通讯
+│     - LocalClient:   启动本地子进程，通过 stdin/stdout 双向通讯
+│     - 两种模式使用同一套 JSON Lines 通讯协议
+│  ④ 发送任务 → 流式接收日志、状态、结果事件
+│  ⑤ 任务结束 → 关闭连接，销毁容器/终止子进程
+│
+│ 详见 05-other.md §4.6 Worker-Runtime 通讯架构
 ```
 
 ### ChatModel 调用示例
@@ -213,7 +220,7 @@ func (sl *SkillLoader) LoadAsTools(
 
 ### Skill 两层继承（沙箱执行时）
 
-Worker 注入 Skills 到沙箱时，合并 Runtime 默认 + Agent 独立绑定，Agent 可覆盖关闭 Runtime 继承的 Skill：
+Worker 通过 RuntimeClient 向沙箱注入 Skills 配置时，合并 Runtime 默认 + Agent 独立绑定，Agent 可覆盖关闭 Runtime 继承的 Skill。Skills 以 JSON Lines 消息随任务一并发送给沙箱内运行的工具：
 
 ```go
 // internal/agent/skill_loader.go
